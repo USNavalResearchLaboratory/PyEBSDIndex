@@ -9,8 +9,8 @@ RADDEG = 180.0/pi
 # I had some issues with the periodic boundaries in cubochoric/homochoric/quaternion spaces, so I am using
 # quaternion misorientation to evaluate the error.
 
-def testrotlib(float32=False, return_quat=False, seed = 1):
-  n = np.int(1e6)
+def testrotlib(float32=False, return_quat=False, seed = 1, n = 1000000):
+  n = np.int(n)
   np.random.seed(seed)
   qu = (np.random.random((n,4))*2.0-1)
   if float32 is True:
