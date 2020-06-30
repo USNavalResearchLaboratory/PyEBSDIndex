@@ -675,6 +675,13 @@ def om2qu(om,p=P):
 
 @numba.jit(nopython=True,fastmath=nbFastmath, cache=nbcache, parallel=nbParallel)
 def om2quL(om, p=P):
+  """
+      Thanks to Martin-Diehl using the same formulation as his rotations.py package.
+      This fixes the ambiguity of the axis direction when the angle = pi.
+      This also means that om2ax is now qu2ax(om2qu())
+      This formulation is from  www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion.
+      The original formulation had issues.
+  """
   pf = numba.float32(p > 0) * 2.0 - 1.0
   intype = om.dtype
   n = np.int64(om.size / 9)
