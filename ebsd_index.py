@@ -1,32 +1,164 @@
 import numpy as np
 from pathlib import Path
-from multiprocessing import Process, Queue
+#from multiprocessing import Process, Queue
 import ebsd_pattern
 import band_detect
 import band_vote
 import rotlib
 import tripletlib
+import ray
+ray.services.get_node_ip_address = lambda: '127.0.0.1'
 from timeit import default_timer as timer
 
 RADEG = 180.0/np.pi
 
+
+
 def index_pats(pats = None, filename=None, filenameout=None, phaselist=['FCC'], \
                vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
-               peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9,
-               patStart = 0, patEnd = -1, chunksize = 5000, nthread=1,
+               peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9,\
+               patStart = 0, patEnd = -1,\
                return_indexer_obj = False, ebsd_indexer_obj = None):
 
+  if pats is None:
+    pdim = None
+  else:
+    pdim = pats.shape[-2:]
   if ebsd_indexer_obj == None:
     indexer = EBSDIndexer(filename=filename, phaselist=phaselist, \
                vendor=None, PC = PC, sampleTilt=sampleTilt, camElev = camElev,\
                peakDetectPlan = peakDetectPlan, \
-               nRho=nRho, nTheta=nTheta, tSigma= tSigma, rSigma=rSigma, rhoMaskFrac=rhoMaskFrac, nBands=nBands)
+               nRho=nRho, nTheta=nTheta, tSigma= tSigma, rSigma=rSigma, rhoMaskFrac=rhoMaskFrac, nBands=nBands, patDim = pdim)
   else:
     indexer = ebsd_indexer_obj
 
 
-  dataout = indexer.index_pats(patsin=pats, patStart=patStart, patEnd=patEnd)
+  dataout, indxstart, indxend = indexer.index_pats(patsin=pats, patStart=patStart, patEnd=patEnd)
 
+  if return_indexer_obj == False:
+    return dataout
+  else:
+    return dataout, indexer
+
+
+@ray.remote(num_cpus=2)
+def index_chunk(pats = None, indexer = None, patStart = 0, patEnd = -1 ):
+  dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd)
+  return dataout, indxstart,indxend
+
+def index_pats_distributed(pats = None, filename=None, filenameout=None, phaselist=['FCC'], \
+               vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
+               peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9,
+               patStart = 0, patEnd = -1, chunksize = 1000, ncpu=-1,
+               return_indexer_obj = False, ebsd_indexer_obj = None):
+
+  tic = timer()
+  ray.init()
+
+  n_cpu_nodes = int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
+  if ncpu != -1:
+    n_cpu_nodes = ncpu
+
+  if pats is None:
+    pdim = None
+  else:
+    pdim = pats.shape[-2:]
+  if ebsd_indexer_obj == None:
+    indexer = EBSDIndexer(filename=filename, phaselist=phaselist, \
+               vendor=None, PC = PC, sampleTilt=sampleTilt, camElev = camElev,\
+               peakDetectPlan = peakDetectPlan, \
+               nRho=nRho, nTheta=nTheta, tSigma= tSigma, rSigma=rSigma, rhoMaskFrac=rhoMaskFrac, nBands=nBands, patDim = pdim)
+  else:
+    indexer = ebsd_indexer_obj
+
+
+
+  # differentiate between getting a file to index or an array
+  # Need to index one pattern to make sure the indexer object is fully initiated before
+  #   placing in shared memory store.
+  mode = 'memorymode'
+  if pats is None:
+    mode = 'filemode'
+    temp, indexer = index_pats(patStart = 0, patEnd = 1,return_indexer_obj = True, ebsd_indexer_obj = indexer)
+
+  if mode == 'filemode':
+    npats = indexer.fID.nPatterns
+  else:
+    pshape = pats.shape
+    if len(pshape) == 2:
+      npats = 1
+      pats = pats.reshape([1,pshape[0],pshape[1]])
+    else:
+      npats = pshape[0]
+    temp,indexer = index_pats(pats[0,:,:], patStart=0,patEnd=1,return_indexer_obj=True,ebsd_indexer_obj=indexer)
+
+  if patEnd == 0:
+    patEnd = 1
+  if (patStart !=0) or (patEnd > 0):
+    npats = patEnd - patStart
+
+  #place indexer obj in shared memory store so all workers can use it.
+  remote_indexer = ray.put(indexer)
+  # set up the jobs
+  njobs = (np.ceil(npats/chunksize)).astype(np.long)
+  p_indx_start = [i*chunksize+patStart for i in range(njobs)]
+  p_indx_end = [(i+1)*chunksize+patStart for i in range(njobs)]
+  p_indx_end[-1] = npats+patStart
+  if njobs < n_cpu_nodes:
+    n_cpu_nodes = njobs
+
+
+  dataout = np.zeros((npats),dtype=indexer.dataTemplate)
+  ndone = 0
+  nsubmit = 0
+  #ray.shutdown()
+  #return
+  if mode == 'filemode':
+    # send out the first batch
+    #workers = []
+    #for i in range(n_cpu_nodes):
+    #  pats = indexer.fID.read_data(convertToFloat=True, patStartEnd=[p_indx_start[i],p_indx_end[i]],returnArrayOnly=True)
+    #  workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]))
+    #  nsubmit += 1
+    workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
+    nsubmit += n_cpu_nodes
+
+    while ndone < njobs:
+      wrker,busy = ray.wait(workers, num_returns=1, timeout=None)
+      wrkdataout,indxstr,indxend = ray.get(wrker[0])
+      dataout[indxstr:indxend] = wrkdataout
+      print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', str(indxend/(timer()-tic)))
+      workers.remove(wrker[0])
+      ndone += 1
+
+      if nsubmit < njobs:
+        #pats = indexer.fID.read_data(convertToFloat=True,patStartEnd=[p_indx_start[nsubmit],p_indx_end[nsubmit]],
+        #                             returnArrayOnly=True)
+        #workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart = p_indx_start[nsubmit], patEnd = p_indx_end[nsubmit]))
+        workers.append(index_chunk.remote(pats=None,indexer=remote_indexer,patStart=p_indx_start[nsubmit],
+                                          patEnd=p_indx_end[nsubmit]))
+        nsubmit += 1
+
+  if mode == 'memorymode':
+    # send out the first batch
+    workers = [index_chunk.remote(pats=pats[p_indx_start[i]:p_indx_end[i],:,:],indexer=remote_indexer,patStart=p_indx_start[i],patEnd=p_indx_end[i]) for i
+               in range(n_cpu_nodes)]
+    nsubmit += n_cpu_nodes
+
+    while ndone < njobs:
+      wrker,busy = ray.wait(workers,num_returns=1,timeout=None)
+      wrkdataout,indxstr,indxend = ray.get(wrker[0])
+      dataout[indxstr:indxend] = wrkdataout
+      print('Completed: ',str(indxstr),' -- ',str(indxend))
+      workers.remove(wrker[0])
+      ndone += 1
+
+      if nsubmit < njobs:
+        workers.append(index_chunk.remote(pats=pats[p_indx_start[nsubmit]:p_indx_end[nsubmit],:,:],indexer=remote_indexer,patStart=p_indx_start[nsubmit],
+                                          patEnd=p_indx_end[nsubmit]))
+        nsubmit += 1
+
+  ray.shutdown()
   if return_indexer_obj:
     return dataout, indexer
   else:
@@ -34,18 +166,19 @@ def index_pats(pats = None, filename=None, filenameout=None, phaselist=['FCC'], 
 
 
 
+
 class EBSDIndexer():
-  def __init__(self, filename=None, filenameout=None, phaselist=['FCC'], \
+  def __init__(self, filename=None, phaselist=['FCC'], \
                vendor=None, PC =None, sampleTilt=70.0, camElev = 5.3,\
-               peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9):
+               peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9, patDim=None):
     self.filein = filename
     if self.filein is not None:
       self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
     else:
       self.fID = None
-    self.fileout = filenameout
-    if self.fileout is None:
-      self.fileout = str.lower(Path(self.filein).stem)+'.ang'
+    # self.fileout = filenameout
+    # if self.fileout is None:
+    #   self.fileout = str.lower(Path(self.filein).stem)+'.ang'
     self.phaselist = phaselist
 
     if vendor is None:
@@ -55,7 +188,7 @@ class EBSDIndexer():
       if vendor is not None:
         self.vendor = vendor
       else:
-        vendor = 'EDAX'
+        self.vendor = 'EDAX'
 
     if PC is None:
       self.PC = np.array([0.471659,0.675044,0.630139])
@@ -76,17 +209,21 @@ class EBSDIndexer():
 
     if self.fID is not None:
       self.peakDetectPlan.band_detect_setup(patDim=[self.fID.patternW,self.fID.patternH ])
+    else:
+      if patDim is not None:
+        self.peakDetectPlan.band_detect_setup(patDim=patDim)
     self.phaseLib =[]
     for ph in self.phaselist:
-      self.phaseLib.append(tripletlib.triplib(libType=ph))
+      self.phaseLib.append(band_vote.BandVote(tripletlib.triplib(libType=ph)))
+
     self.dataTemplate = np.dtype([('quat',np.float32, (4)),('iq',np.float32), \
                              ('pq',np.float32),('cm',np.float32),('phase',np.int32), \
                              ('fit',np.float32),('nmatch', np.int32)])
 
 
-
   def index_pats(self, patsin=None, patStart = 0, patEnd = -1):
     tic = timer()
+
     if patsin is None:
       pats = self.fID.read_data(returnArrayOnly=True,patStartEnd=[patStart,patEnd], convertToFloat=True)
     else:
@@ -94,7 +231,7 @@ class EBSDIndexer():
       if len(pshape) == 2:
         pats = np.reshape(patsin, (1,pshape[0], pshape[1]))
       else:
-        pats = patsin[patStart:patEnd, :,:]
+        pats = patsin#[patStart:patEnd, :,:]
       pshape = pats.shape
 
       if self.peakDetectPlan.patDim is None:
@@ -111,36 +248,43 @@ class EBSDIndexer():
       patEnd = npoints+1
 
     indxData = np.zeros((npoints),dtype=self.dataTemplate)
+
+
     q = np.zeros((npoints, 4))
     #print(timer() - tic)
     tic = timer()
     bandData = self.peakDetectPlan.find_bands(pats)
 
+    pats = None # potentially clear some memory
     indxData['pq'] = np.sum(bandData['max'], axis = 1)
     indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
     bandNorm = self.peakDetectPlan.radon2pole(bandData,PC=self.PC,vendor=self.vendor)
-    print('Radon: ', timer() - tic)
+    #print('Radon: ', timer() - tic)
 
     tic = timer()
-    bv = []
-    for tl in self.phaseLib:
-      bv.append(band_vote.BandVote(tl))
+    #bv = []
+    #for tl in self.phaseLib:
+    #  bv.append(band_vote.BandVote(tl))
+
 
 
     for i in range(npoints):
+    #for i in range(10):
       phase = 0
       fitmetric = 1e6
 
-      avequat, fit, cm, bandmatch, nMatch = bv[0].tripvote(bandNorm[i,:,:], goNumba = True)
+      #avequat, fit, cm, bandmatch, nMatch = bv[0].tripvote(bandNorm[i,:,:], goNumba = True)
+      avequat,fit,cm,bandmatch,nMatch = self.phaseLib[0].tripvote(bandNorm[i,:,:],goNumba=True)
 
       if nMatch > 0:
         phase = 1
         fitmetric = fit/nMatch * (np.max([cm, 0.001]))
 
       fitmetric1 = 1e6
-      for j in range(1, len(bv)):
+      for j in range(1, len(self.phaseLib)):
 
-        avequat1,fit1,cm1,bandmatch1,nMatch1 = bv[j].tripvote(bandNorm[i,:,:], goNumba = True)
+        #avequat1,fit1,cm1,bandmatch1,nMatch1 = bv[j].tripvote(bandNorm[i,:,:], goNumba = True)
+        avequat1,fit1,cm1,bandmatch1,nMatch1 = self.phaseLib[j].tripvote(bandNorm[i,:,:],goNumba=True)
         if nMatch1 > 0:
           fitmetric1 = fit1/nMatch1 * (np.max([cm1, 0.001]))
         if fitmetric1 < fitmetric:
@@ -162,7 +306,7 @@ class EBSDIndexer():
     qref2detect = self.refframe2detector()
     q = rotlib.quat_multiply(q,qref2detect)
     indxData['quat'] = q
-    print('bandvote: ', timer() - tic)
+    #print('bandvote: ', timer() - tic)
     return indxData, patStart, patEnd
 
   def refframe2detector(self):

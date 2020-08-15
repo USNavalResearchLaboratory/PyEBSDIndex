@@ -55,8 +55,8 @@ P = 1
 eps = 1.0e-12 # used for "closeto" approximations in Numba code
 PI = np.pi
 PI2 = 2.0 * np.pi
-nbcache = False # switch to false for debugging.
-nbParallel = True # decide if parallelism is desired.
+nbcache = True # switch to false for debugging.
+nbParallel = False # decide if parallelism is desired.
 # Once the JIT compiler runs over the code, changing this will not change the parallelism.  
 # The package will need to be reimported
 nbFastmath = True
@@ -1564,7 +1564,7 @@ def quat_vectorL(qIn,vIn,p=P):
     vout = quat_vectorLN1(q,v0,n,intype,p=p)
   return vout
 
-@numba.jit(nopython=True,fastmath=nbFastmath,cache=nbcache,parallel=True)
+@numba.jit(nopython=True,fastmath=nbFastmath,cache=nbcache,parallel=False)
 def quat_vectorLNN(q,v,n,intype,p=P):
   pf = numba.float32(p > 0) * 2.0 - 1.0
   vout = np.zeros((n,3),dtype=intype)
@@ -1600,7 +1600,7 @@ def quat_vectorLNN(q,v,n,intype,p=P):
 
   return vout
 
-@numba.jit(nopython=True,fastmath=nbFastmath,cache=nbcache,parallel=True)
+@numba.jit(nopython=True,fastmath=nbFastmath,cache=nbcache,parallel=False)
 def quat_vectorL1N(q,v,n,intype,p=P):
   pf = numba.float32(p > 0) * 2.0 - 1.0
   vout = np.zeros((n,3),dtype=intype)
@@ -1636,7 +1636,7 @@ def quat_vectorL1N(q,v,n,intype,p=P):
 
   return vout
 
-@numba.jit(nopython=True,fastmath=nbFastmath,cache=nbcache,parallel=True)
+@numba.jit(nopython=True,fastmath=nbFastmath,cache=nbcache,parallel=False)
 def quat_vectorLN1(q,v,n,intype,p=P):
   pf = numba.float32(p > 0) * 2.0 - 1.0
   vout = np.zeros((n,3),dtype=intype)

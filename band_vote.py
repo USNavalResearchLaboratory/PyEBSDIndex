@@ -68,28 +68,31 @@ class BandVote():
     #print(tvotes, band_cm, mxvote)
     #print('vote loops: ', timer() - tic)
     tic = timer()
-    avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam,self.tripLib.completelib,self.angTol)
+
+    #avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam,self.tripLib.completelib,self.angTol)
+    avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam, angTol = self.angTol)
     if nMatch == 0:
       srt = np.argsort(bandRank)
       for i in range(np.min([5, n_bands])):
         bandRank2 = bandRank
         bandRank2[srt[i]] = -1.0
-        avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam,self.tripLib.completelib,self.angTol)
+        #avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam,self.tripLib.completelib,self.angTol)
+        avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam)
         if nMatch > 2:
           break
     #print('refinement: ', timer() - tic)
     #print('tripvote: ',timer() - tic0)
-    return (avequat, fit, np.mean(band_cm), bandmatch, nMatch)
+    return avequat, fit, np.mean(band_cm), bandmatch, nMatch
 
-  def band_vote_refine(self,bandnorms,bandRank,familyLabel,completelib,angTol=3.0):
-    tic = timer()
+  def band_vote_refine(self,bandnorms,bandRank,familyLabel,angTol=3.0):
+
     nBands = np.int(bandnorms.size/3)
-    angTable = completelib['angTable']
+    angTable = self.tripLib.completelib['angTable']
     sztable = angTable.shape
 
-    famIndx = completelib['famIndex']
-    nFam = completelib['nFamily']
-    poles = completelib['polesCart']
+    famIndx = self.tripLib.completelib['famIndex']
+    nFam = self.tripLib.completelib['nFamily']
+    poles = self.tripLib.completelib['polesCart']
     nPoles = np.int(poles.size / 3)
     srt = np.flip(np.argsort(bandRank))
     v0indx = -1
@@ -133,9 +136,11 @@ class BandVote():
 
     for i in range(n01):
       p1 = poles[wh01[i], :]
-      p1 /= np.linalg.norm(p1)+1.0e-35
+      ntemp = np.linalg.norm(p1)+1.0e-35
+      p1 = p1/ntemp
       p0p1c = np.cross(p0, p1)
-      p0p1c /= np.linalg.norm(p0p1c)+1.0e-35
+      ntemp = np.linalg.norm(p0p1c)+1.0e-35
+      p0p1c = p0p1c/ntemp
       A[:,1] = p0p1c
       A[:,2] = np.cross(p0, p0p1c)
       Rtry[i, :,:] = A.dot(B)
@@ -205,6 +210,7 @@ class BandVote():
 
     #print('looping: ',timer() - tic)
     quats = rotlib.om2qu(AB)
+
     sign0 = np.sum(quats[0,:] * quats, axis = 1)
     sign = (sign0 >= 0).astype(np.float32) - (sign0 < 0).astype(np.float32)
     sign = sign.reshape(n2Fit,1)
@@ -219,8 +225,8 @@ class BandVote():
 
     return (avequat, fit, polematch, nGood )
 
-#@numba.jit(nopython=True, cache=False)
-@numba.jit(nopython=True, cache=True)
+
+@numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
 def tripvote_numba( bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
     LUTTemp = np.asarray(LUT).copy()
     accumulator = np.zeros((nfam, n_bands), dtype=np.int32)
@@ -271,7 +277,7 @@ def tripvote_numba( bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
 
     return accumulator, bandFam, bandRank, band_cm
 
-@numba.jit(nopython=True, cache=True)
+@numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
 def vectnorm(v):
   sum = numba.float32(0.0)
   for i in range(3):
@@ -281,7 +287,7 @@ def vectnorm(v):
     v[i] = v[i]/sum
   return v
 
-@numba.jit(nopython=True, cache=False)
+@numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
 def band_vote_refine_loops(nGood, whGood, poles, bandnorms, polematch, n2Fit):
   quats = np.zeros((n2Fit,4),dtype=np.float32)
   counter = 0
@@ -298,10 +304,24 @@ def band_vote_refine_loops(nGood, whGood, poles, bandnorms, polematch, n2Fit):
       p1 = poles[polematch[whGood[j]],:]
       v0v1c = np.cross(v0,v1)
       # v0v1c /= np.linalg.norm(v0v1c)+1.0e-35
-      v0v1c = vectnorm(v0v1c)
+      # v0v1c = vectnorm(v0v1c) # faster to inline these functions
+      norm = numba.float32(0.0)
+      for ii in range(3):
+        norm += v0v1c[ii] * v0v1c[ii]
+      norm = np.sqrt(norm) + 1.0e-35
+      for ii in range(3):
+        v0v1c[ii] = v0v1c[ii] / norm
+
       p0p1c = np.cross(p0,p1)
       # p0p1c /= (np.linalg.norm(p0p1c))+1.0e-35
-      p0p1c = vectnorm(p0p1c)
+      #p0p1c = vectnorm(p0p1c) # faster to inline these functions
+      norm = numba.float32(0.0)
+      for ii in range(3):
+        norm += p0p1c[ii] * p0p1c[ii]
+      norm = np.sqrt(norm) + 1.0e-35
+      for ii in range(3):
+        p0p1c[ii] = p0p1c[ii] / norm
+
       A[:,1] = p0p1c
       B[1,:] = v0v1c
       A[:,2] = np.cross(p0,p0p1c)
