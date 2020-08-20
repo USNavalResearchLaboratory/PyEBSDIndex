@@ -1,9 +1,11 @@
 import numpy as np
+import numba
 from scipy.ndimage import gaussian_filter
 from radon_fast import Radon
 from timeit import default_timer as timer
+import time
 import matplotlib.pyplot as plt
-#from numba import jit
+
 RADEG = 180.0/np.pi
 
 
@@ -125,13 +127,9 @@ class BandDetect():
 
     shape = patterns.shape
     nPats = shape[0]
-    peakmask_offset = np.array(-1 * np.floor(self.peakPad * 0.5), dtype=np.int)
-    peakmask_offset = np.broadcast_to(peakmask_offset, (nPats, 2))
 
-    peakloc = np.zeros((nPats,self.nRho+2*self.peakPad[0], self.nTheta+2*self.peakPad[1]), dtype=np.int)
-    peaklocmask = np.ones((nPats,self.nRho+2*self.peakPad[0], self.nTheta+2*self.peakPad[1]), dtype=np.int)
-    peaklocmask[:,:,0:self.peakPad[1]] = 0
-    peaklocmask[:,:,-self.peakPad[1]:] = 0
+
+
     #plt.imshow(peaklocmask[0,:,:], origin='lower')
 
     bandDataType = np.dtype([('id', np.int32), ('max', np.float32), \
@@ -152,7 +150,8 @@ class BandDetect():
     rdnNormP[:, :,-self.peakPad[1]:] = np.flip(rdnNormP[:, :, self.peakPad[1]:2*self.peakPad[1]], axis = 1)
     rdnConv = np.zeros_like(rdnNormP)
     mns = np.zeros(nPats, dtype=np.float32)
-
+    #print("Radon:",timer() - tic)
+    tic = timer()
     for i in range(nPats):
       rdnConv[i,:,:] = -1.0*gaussian_filter(rdnNormP[i,:,:].reshape(self.nRho,self.nTheta+2*self.peakPad[1]), \
                                        [self.rSigma, self.tSigma], order=[2,0])
@@ -164,44 +163,66 @@ class BandDetect():
     rdnConv *= (rdnNormP > 0).astype(np.float32) / (rdnNormP+1e-12)
     rdnPad = np.array(rdnConv)
     rdnPad *= self.rhoMask
-    rdnPad = np.pad(rdnPad, ((0,),(self.peakPad[1],),(0,)), mode ='constant',constant_values=0.0 )
+
+    rdnPad = np.pad(rdnPad, ((0,),(self.peakPad[0],),(0,)), mode ='constant',constant_values=0.0 )
 
     nnmask = np.array([-2,-1,0, 1,2, self.nTheta+2*self.peakPad[1],-1*(self.nTheta+2*self.peakPad[1]) ])
-    nn = 7
+    nn = nnmask.size
     nlayer = rdnPad.shape[-2] * rdnPad.shape[-1]
-    mskSz = self.peakMask.shape
+    mskSz = np.array(self.peakMask.shape)
 
-    for i in range(self.nBands):
-      mxloc = (rdnPad*(peakloc == 0)*peaklocmask).reshape((nPats, nlayer)).argmax(axis=1)
-      #plt.imshow( (rdnPad*(peakloc == 0)*peaklocmask)[13,:,:])
-      bandData['max'][ :, i] = (rdnPad.reshape((nPats, nlayer)))[np.arange(nPats), mxloc]
-      nnindx = mxloc.reshape((nPats,1)) + nnmask.reshape((1,nn))
-      rdnNNv = np.take(rdnPad.reshape((nPats, nlayer)), nnindx)
-      bandData['avemax'][:,i] = np.mean(rdnNNv, axis =1)
-      mxloc2 = np.array(np.unravel_index(mxloc, rdnPad.shape[-2:])).T
-      bandData['maxloc'][:,i,:] = mxloc2
-      nnloc = np.array(np.unravel_index(nnindx, rdnPad.shape[-2:]), dtype=np.float32).transpose([1,2,0])
-      nnloc *= rdnNNv.reshape(nPats,nn,1)
-      nnloc = np.sum(nnloc, axis = 1)
-      nnloc /= np.sum(rdnNNv, axis=1).reshape(nPats,1)
-      bandData['aveloc'][:, i, :] = nnloc.reshape(nPats, 2)
-      mxloc2 += peakmask_offset
-      tempmask = np.array(self.peakMask*(i+1))
+    tic = timer()
 
-      for j in range(nPats):
-        #print(mxloc2[j,:])
-        peakloc[j,mxloc2[j,0]:mxloc2[j,0]+mskSz[0], mxloc2[j,1]:mxloc2[j,1]+mskSz[1]] = np.array(tempmask)
-      #plt.imshow(peakloc[-1,:,:])
-      flipl = np.flip(peakloc[:,:,-2*self.peakPad[1]:], axis=1)
-      rnflip = peakloc[:,:, 0: 2*self.peakPad[0]]
-      rnflip = np.where(rnflip >= flipl,rnflip, flipl)
-      peakloc[:, :, 0: 2 * self.peakPad[0]] = rnflip
+    bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnPad,self.peakPad,self.peakMask)
+    #print('bandlabel: ', timer()-tic)
+    # tic = timer()
+    # peakloc = np.zeros((nPats,self.nRho + 2 * self.peakPad[0],self.nTheta + 2 * self.peakPad[1]),dtype=np.int)
+    # peaklocmask = np.ones((nPats,self.nRho + 2 * self.peakPad[0],self.nTheta + 2 * self.peakPad[1]),dtype=np.int)
+    # peaklocmask[:,:,0:self.peakPad[1]] = 0
+    # peaklocmask[:,:,-self.peakPad[1]:] = 0
+    # peakmask_offset = np.array(-1 * np.floor(self.peakPad * 0.5),dtype=np.int)
+    # peakmask_offset = np.broadcast_to(peakmask_offset,(nPats,2))
+    #
+    # for i in range(self.nBands):
+    #
+    #   mxloc = (rdnPad*(peakloc == 0)*peaklocmask).reshape((nPats, nlayer)).argmax(axis=1)
+    #   #plt.imshow( (rdnPad*(peakloc == 0)*peaklocmask)[13,:,:])
+    #   bandData['max'][ :, i] = (rdnPad.reshape((nPats, nlayer)))[np.arange(nPats), mxloc]
+    #   nnindx = mxloc.reshape((nPats,1)) + nnmask.reshape((1,nn))
+    #   rdnNNv = np.take(rdnPad.reshape((nPats, nlayer)), nnindx)
+    #   bandData['avemax'][:,i] = np.mean(rdnNNv, axis =1)
+    #   mxloc2 = np.array(np.unravel_index(mxloc, rdnPad.shape[-2:])).T
+    #   bandData['maxloc'][:,i,:] = mxloc2
+    #   nnloc = np.array(np.unravel_index(nnindx, rdnPad.shape[-2:]), dtype=np.float32).transpose([1,2,0])
+    #   nnloc *= rdnNNv.reshape(nPats,nn,1)
+    #   nnloc = np.sum(nnloc, axis = 1)
+    #   nnloc /= np.sum(rdnNNv, axis=1).reshape(nPats,1)
+    #   bandData['aveloc'][:, i, :] = nnloc.reshape(nPats, 2)
+    #   mxloc2 += peakmask_offset
+    #   tempmask = np.array(self.peakMask*(i+1))
+    #
+    #   for j in range(nPats):
+    #     #print(mxloc2[j,:])
+    #     peakloc[j,mxloc2[j,0]:mxloc2[j,0]+mskSz[0], mxloc2[j,1]:mxloc2[j,1]+mskSz[1]] = np.array(tempmask)
+    #
+    #   #plt.imshow(peakloc[-1,:,:])
+    #   flipl = np.flip(peakloc[:,:,-2*self.peakPad[1]:], axis=1)
+    #   rnflip = peakloc[:,:, 0: 2*self.peakPad[1]]
+    #   rnflip = np.where(rnflip >= flipl,rnflip, flipl)
+    #   peakloc[:, :, 0: 2 * self.peakPad[1]] = rnflip
+    #
+    #   flipr = np.flip(peakloc[:, :,0:2 * self.peakPad[1]], axis=1)
+    #   lnflip = peakloc[:, :, -2 * self.peakPad[1]:]
+    #   lnflip = np.where(lnflip >= flipr, lnflip,flipr)
+    #   peakloc[:, :, -2 * self.peakPad[1]:] = lnflip
 
-      flipr = np.flip(peakloc[:, :,0:2 * self.peakPad[1]], axis=1)
-      lnflip = peakloc[:, :, -2 * self.peakPad[0]:]
-      lnflip = np.where(lnflip >= flipr, lnflip,flipr)
-      peakloc[:, :, -2 * self.peakPad[0]:] = lnflip
-
+    bandData['max']  = bdat[0]
+    bandData['avemax'] = bdat[1]
+    bandData['maxloc'] = bdat[2]
+    bandData['aveloc'] = bdat[3]
+    #print('loop: ',timer() - tic)
+    #print(np.max(np.abs(bandData['max']-dave[0])), np.max(np.abs(bandData['avemax']-dave[1])),
+    #      np.max(np.abs(bandData['maxloc']-dave[2])), np.max(np.abs(bandData['aveloc']-dave[3])) )
     #rdnConv = rdnConv[:, :, self.peakPad[1]: -self.peakPad[1]]
     bandData['maxloc'] -= self.peakPad.reshape(1,1,2)
     bandData['aveloc'] -= self.peakPad.reshape(1, 1, 2)
@@ -258,3 +279,64 @@ class BandDetect():
     n /= norm.reshape(nPats*nBands, 1)
     n = n.reshape(nPats, nBands, 3)
     return n
+
+  @staticmethod
+  @numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
+  def band_label(nBands, nPats, nRho, nTheta, rdnPad,  peakPad, peakMask ):
+    nB = np.int(nBands)
+    nP = np.int(nPats)
+    nR = np.int(nRho)
+    nT = np.int(nTheta)
+    pPad = np.asarray(peakPad)
+    nnmask = np.array([0,-2,-1,1,2,nT + 2 * pPad[1],-1 * (nT + 2 * pPad[1])], dtype = numba.int64)
+    nn = numba.int32(nnmask.size)
+    mskSz = np.array(peakMask.shape, dtype=numba.int64)
+    bandData_max = np.zeros((nP,nB), dtype = np.float32)
+    bandData_avemax = np.zeros((nP,nB), dtype = np.float32)
+    bandData_maxloc = np.zeros((nP,nB,2), dtype = np.float32)
+    bandData_aveloc = np.zeros((nP,nB,2), dtype = np.float32)
+
+    #peakloc = np.zeros((nPats,nRho + 2 * peakPad[0],nTheta + 2 * peakPad[1]),dtype=np.int)
+
+    peakmask_offset = -1 * np.floor_divide(pPad, 2).astype(numba.int32)
+    peakmask_offset = peakmask_offset.reshape(2,1)
+    #peakmask_offset = np.array(-1 * np.floor(pPad * 0.5),dtype=np.int).reshape(2,1)
+    #peakmask_offset = np.broadcast_to(peakmask_offset,(nPats,2))
+    peaklocmask = np.ones((nR + 2 * pPad[0],nT + 2 * pPad[1]),dtype=numba.int32)
+    peaklocmask[:,0:pPad[1]] = 0
+    peaklocmask[:,-pPad[1]:] = 0
+
+    for j in range(nPats):
+      rdnPad1 = rdnPad[j,:,:]
+      peakloc = np.zeros((nR + 2 * pPad[0],nT + 2 * pPad[1]),dtype=numba.int32)
+      for i in range(nBands):
+        mxloc = (rdnPad1*(peakloc == 0)*peaklocmask).argmax()
+        #plt.imshow( (rdnPad1*(peakloc == 0)*peaklocmask))
+        bandData_max[j, i] = rdnPad1.flat[mxloc]
+        nnindx = numba.int64(mxloc) + nnmask
+        rdnNNv = np.zeros(nn, dtype = numba.float32)
+        for q in range(nn):
+          rdnNNv[q] = (rdnPad1.flat)[nnindx[q]]
+        bandData_avemax[j,i] = np.mean(rdnNNv)
+        mxloc2 = np.zeros((2,nn), dtype=numba.int32)
+        for q in range(nn):
+          mxloc2[0,q] = np.floor_divide(nnindx[q], rdnPad1.shape[-1])
+          mxloc2[1,q] = nnindx[q] % rdnPad1.shape[-1]
+        #mxloc2 = np.array((np.floor_divide(nnindx , rdnPad1.shape[-1]), nnindx % rdnPad1.shape[-1] )).astype(numba.int64)
+        bandData_maxloc[j,i,:] = mxloc2[:,0].astype(np.float32)
+        bandData_aveloc[j,i,:] = np.sum(mxloc2.astype(np.float32) * rdnNNv.reshape(1,nn), axis = 1)/np.sum(rdnNNv)
+        mxloc2 += peakmask_offset
+        tempmask = peakMask*(i+1)
+
+        peakloc[mxloc2[0,0]:mxloc2[0,0]+mskSz[0], mxloc2[1,0]:mxloc2[1,0]+mskSz[1]] = tempmask#, dtype=numba.int32)
+        flipl = np.flipud(peakloc[:,-2*pPad[1]:])
+        rnflip = peakloc[:, 0: 2*pPad[1]]
+        rnflip = np.where(rnflip >= flipl,rnflip, flipl)
+        peakloc[:, 0: 2 * pPad[1]] = rnflip
+
+        flipr = np.flipud(peakloc[:,0:2 * pPad[1]])
+        lnflip = peakloc[:, -2 * pPad[1]:]
+        lnflip = np.where(lnflip >= flipr, lnflip,flipr)
+        peakloc[:, -2 * pPad[1]:] = lnflip
+
+    return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc

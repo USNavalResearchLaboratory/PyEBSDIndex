@@ -9,7 +9,7 @@ import tripletlib
 import ray
 ray.services.get_node_ip_address = lambda: '127.0.0.1'
 from timeit import default_timer as timer
-
+import time
 RADEG = 180.0/np.pi
 
 
@@ -41,10 +41,12 @@ def index_pats(pats = None, filename=None, filenameout=None, phaselist=['FCC'], 
     return dataout, indexer
 
 
-@ray.remote(num_cpus=2)
+@ray.remote
 def index_chunk(pats = None, indexer = None, patStart = 0, patEnd = -1 ):
+  tic = timer()
   dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd)
-  return dataout, indxstart,indxend
+  rate = np.array([timer()-tic, indxend-indxstart])
+  return dataout, indxstart,indxend, rate
 
 def index_pats_distributed(pats = None, filename=None, filenameout=None, phaselist=['FCC'], \
                vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
@@ -52,7 +54,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
                patStart = 0, patEnd = -1, chunksize = 1000, ncpu=-1,
                return_indexer_obj = False, ebsd_indexer_obj = None):
 
-  tic = timer()
+  ray.shutdown()
   ray.init()
 
   n_cpu_nodes = int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
@@ -111,33 +113,45 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
   dataout = np.zeros((npats),dtype=indexer.dataTemplate)
   ndone = 0
   nsubmit = 0
+  nread = 0
   #ray.shutdown()
   #return
+  tic = timer()
+  npatsdone = 0.0
+  toc = 0.0
   if mode == 'filemode':
     # send out the first batch
-    #workers = []
-    #for i in range(n_cpu_nodes):
-    #  pats = indexer.fID.read_data(convertToFloat=True, patStartEnd=[p_indx_start[i],p_indx_end[i]],returnArrayOnly=True)
-    #  workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]))
-    #  nsubmit += 1
-    workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
-    nsubmit += n_cpu_nodes
+    workers = []
+    for i in range(n_cpu_nodes):
+      pats = indexer.fID.read_data(convertToFloat=True, patStartEnd=[p_indx_start[i],p_indx_end[i]],returnArrayOnly=True)
+      #pats = None
+      workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart=p_indx_start[nsubmit],
+                                        patEnd=p_indx_end[nsubmit]))
+      #workers.append(index_chunk.remote(patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
+      nsubmit += 1
 
+    #workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
+    #nsubmit += n_cpu_nodes
     while ndone < njobs:
+
       wrker,busy = ray.wait(workers, num_returns=1, timeout=None)
-      wrkdataout,indxstr,indxend = ray.get(wrker[0])
+      wrkdataout,indxstr,indxend, rate = ray.get(wrker[0])
       dataout[indxstr:indxend] = wrkdataout
-      print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', str(indxend/(timer()-tic)))
+      npatsdone += rate[1]
+
+      print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
       workers.remove(wrker[0])
       ndone += 1
-
       if nsubmit < njobs:
-        #pats = indexer.fID.read_data(convertToFloat=True,patStartEnd=[p_indx_start[nsubmit],p_indx_end[nsubmit]],
-        #                             returnArrayOnly=True)
-        #workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart = p_indx_start[nsubmit], patEnd = p_indx_end[nsubmit]))
-        workers.append(index_chunk.remote(pats=None,indexer=remote_indexer,patStart=p_indx_start[nsubmit],
-                                          patEnd=p_indx_end[nsubmit]))
+        pats = indexer.fID.read_data(convertToFloat=True,patStartEnd=[p_indx_start[nsubmit],p_indx_end[nsubmit]],
+                                     returnArrayOnly=True)
+
+        workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart = p_indx_start[nsubmit],
+                                          patEnd = p_indx_end[nsubmit]))
+        #workers.append(index_chunk.remote(pats=None,indexer=remote_indexer,patStart=p_indx_start[nsubmit],
+        #                                  patEnd=p_indx_end[nsubmit]))
         nsubmit += 1
+
 
   if mode == 'memorymode':
     # send out the first batch
@@ -147,7 +161,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
 
     while ndone < njobs:
       wrker,busy = ray.wait(workers,num_returns=1,timeout=None)
-      wrkdataout,indxstr,indxend = ray.get(wrker[0])
+      wrkdataout,indxstr,indxend, rate = ray.get(wrker[0])
       dataout[indxstr:indxend] = wrkdataout
       print('Completed: ',str(indxstr),' -- ',str(indxend))
       workers.remove(wrker[0])
@@ -248,14 +262,15 @@ class EBSDIndexer():
       patEnd = npoints+1
 
     indxData = np.zeros((npoints),dtype=self.dataTemplate)
-
+    #time.sleep(10.0)
+    #return indxData, patStart, patEnd
 
     q = np.zeros((npoints, 4))
     #print(timer() - tic)
     tic = timer()
     bandData = self.peakDetectPlan.find_bands(pats)
 
-    pats = None # potentially clear some memory
+
     indxData['pq'] = np.sum(bandData['max'], axis = 1)
     indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
     bandNorm = self.peakDetectPlan.radon2pole(bandData,PC=self.PC,vendor=self.vendor)
