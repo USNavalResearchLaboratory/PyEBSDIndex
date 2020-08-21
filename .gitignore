@@ -2,4 +2,4 @@
 *.o
 **/.idea
 rotlibcheck.h5
-EBSDIndexingScaling.dgraph
+EBSDIndexingScaling.dgraph**
