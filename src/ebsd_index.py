@@ -10,6 +10,7 @@ import ray
 ray.services.get_node_ip_address = lambda: '127.0.0.1'
 from timeit import default_timer as timer
 import time
+import multiprocessing
 RADEG = 180.0/np.pi
 
 
@@ -54,12 +55,15 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
                patStart = 0, patEnd = -1, chunksize = 1000, ncpu=-1,
                return_indexer_obj = False, ebsd_indexer_obj = None):
 
-  ray.shutdown()
-  ray.init()
 
-  n_cpu_nodes = int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
+
+  n_cpu_nodes = int(multiprocessing.cpu_count()) #int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
   if ncpu != -1:
     n_cpu_nodes = ncpu
+
+  ray.shutdown()
+
+  ray.init(num_cpus=n_cpu_nodes, dashboard_host='0.0.0.0')
 
   if pats is None:
     pdim = None

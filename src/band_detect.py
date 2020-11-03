@@ -137,9 +137,9 @@ class BandDetect():
                              ('pqmax', np.float32)])
     bandData = np.zeros((nPats, self.nBands), dtype=bandDataType)
     eps = 1.e-6
-
-    rdn = self.radonPlan.radon_faster(patterns,fixArtifacts=True)
-
+    tic1 = timer()
+    rdn = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
+    #print(timer()-tic1)
     rdnNorm = rdn*self.rdnNorm
 
 
@@ -320,7 +320,7 @@ class BandDetect():
         bandData_avemax[j,i] = np.mean(rdnNNv)
         mxloc2 = np.zeros((2,nn), dtype=numba.int32)
         for q in range(nn):
-          mxloc2[0,q] = np.floor_divide(nnindx[q], rdnPad1.shape[-1])
+          mxloc2[0,q] = nnindx[q] // rdnPad1.shape[-1] #np.floor_divide(nnindx[q], rdnPad1.shape[-1])
           mxloc2[1,q] = nnindx[q] % rdnPad1.shape[-1]
         #mxloc2 = np.array((np.floor_divide(nnindx , rdnPad1.shape[-1]), nnindx % rdnPad1.shape[-1] )).astype(numba.int64)
         bandData_maxloc[j,i,:] = mxloc2[:,0].astype(np.float32)

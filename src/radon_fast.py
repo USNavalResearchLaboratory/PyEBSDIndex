@@ -1,6 +1,8 @@
 import numpy as np
 from timeit import default_timer as timer
 from numba import jit, prange
+import pyopencl as cl
+import pyopencl.array as cl_array
 
 RADDEG = 180.0/np.pi
 DEGRAD = np.pi/180.0
@@ -54,7 +56,7 @@ class Radon():
     a /= np.where(thetatest == 1, sTheta, cTheta)
     b = xmin*cTheta + ymin*sTheta
 
-    self.indexPlan = np.zeros([self.nRho, self.nTheta, self.imDim.max()], dtype=np.int64)
+    self.indexPlan = np.zeros([self.nRho, self.nTheta, self.imDim.max()], dtype=np.uint64)
     outofbounds = self.imDim[0]*self.imDim[1]
     for i in np.arange(self.nTheta):
       b1 = self.rho - b[i]
@@ -135,7 +137,7 @@ class Radon():
     return radon
 
   @staticmethod
-  @jit(nopython=True, fastmath=True, cache=True, parallel=True)
+  @jit(nopython=True, fastmath=True, cache=True, parallel=False)
   def rdn_loops(images,index,nIm,nPx,indxdim,radon):
     nRho = indxdim[0]
     nTheta = indxdim[1]
@@ -150,13 +152,88 @@ class Radon():
               break
             radon[q, i, j] += images[imstart+indx1]
 
+  def radon_fasterCL(self,image,fixArtifacts = False):
+    tic = timer()
+    plat = cl.get_platforms()
+    gpu = plat[0].get_devices(device_type=cl.device_type.GPU)
+    ctx = cl.Context(devices = gpu)
+    queue = cl.CommandQueue(ctx)
+    mf = cl.mem_flags
 
+    shapeIm = np.shape(image)
+    if image.ndim == 2:
+      nIm = 1
+      #image = image[np.newaxis, : ,:]
+      #reform = True
+    else:
+      nIm = shapeIm[0]
+    #  reform = False
+
+    image = image.reshape(-1).astype(np.float32)
+    imstep = np.uint64(np.product(shapeIm[-2:]))
+    indxstep = np.uint64(self.indexPlan.shape[-1])
+    rdnstep = np.uint64(self.nRho * self.nTheta)
+
+
+    steps = np.asarray((imstep, indxstep, rdnstep), dtype = np.uint64)
+
+    radon = np.zeros([nIm,self.nRho,self.nTheta],dtype=np.float32)
+    #image_gpu = cl_array.to_device(ctx, queue, image.astype(np.float32))
+    #rdnIndx_gpu = cl_array.to_device(ctx, queue, self.indexPlan.astype(np.uint32).reshape[-1])
+    #radon_gpu = cl_array.to_device(ctx, queue, radon.astype(np.float32).reshape[-1])
+    image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image)
+    rdnIndx_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=self.indexPlan)
+    radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
+    steps_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=steps)
+
+    prg = cl.Program(ctx,"""
+    __kernel void radonSum(
+        __global const unsigned long int *rdnIndx, __global const float *images, __global float *radon, 
+        const unsigned long int imstep, const unsigned long int indxstep, const unsigned long int rdnstep )
+    {
+      int gid_im = get_global_id(0);
+      int gid_rdn = get_global_id(1);
+      unsigned long int i, k, j, idx;
+      float sum, count;
+      
+      k = gid_rdn+gid_im*rdnstep;
+      sum = 0.0;
+      count = 0.0;
+      j = gid_im*imstep;
+      for (i=0; i<indxstep; i++){  
+        idx = rdnIndx[gid_rdn*indxstep+i];
+        if (idx < imstep) {
+          sum += images[j + idx];
+          count += 1.0;
+        } 
+      }      
+      radon[k] = sum/(count + 1.0e-12);
+    }
+    """).build()
+
+    #prg.radonSum(queue, (nIm, rdnstep), None,rdnIndx_gpu, image_gpu, radon_gpu, steps_gpu)
+    prg.radonSum(queue,(nIm,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,imstep, indxstep, rdnstep)
+
+    cl.enqueue_copy(queue, radon, radon_gpu)
+
+
+
+    if (fixArtifacts == True):
+      radon[:,:,0] = radon[:,:,1]
+      radon[:,:,-1] = radon[:,:,-2]
+
+
+    image = image.reshape(shapeIm)
+
+    print(timer()-tic)
+    return radon
 
 
 
 
 # if __name__ == "__main__":
 #   file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1'
-#   f = EBSDPattern.upFile(file)
 #   pat = f.ReadData(patStartEnd=[0,0],convertToFloat=True,returnArrayOnly=True )
-#   RadonPlan(pat)
+#   dat, indxer = ebsd_index.index_pats(filename = file, patStart = 0, patEnd = 1,return_indexer_obj = True)
+#   dat = ebsd_index.index_pats_distributed(filename = file,patStart = 0, patEnd = -1, chunksize = 1000, ncpu = 34, ebsd_indexer_obj = indxer )
+#

@@ -1,4 +1,5 @@
 import ray
+ray.services.get_node_ip_address = lambda: '127.0.0.1'
 import numpy as np
 import numba
 import time
@@ -33,7 +34,7 @@ def testqueue(ncpu):
   chunksize = 1000
   p_indx_start = [i * chunksize for i in range(njobs)]
   p_indx_end = [(i + 1) * chunksize for i in range(njobs)]
-
+  ray.shutdown()
   ray.init()
   ndone = 0
   nsubmit = 0
