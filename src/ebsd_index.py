@@ -325,7 +325,7 @@ class EBSDIndexer():
     qref2detect = self.refframe2detector()
     q = rotlib.quat_multiply(q,qref2detect)
     indxData['quat'] = q
-    #print('bandvote: ', timer() - tic)
+    print('bandvote: ', timer() - tic)
     return indxData, patStart, patEnd
 
   def refframe2detector(self):

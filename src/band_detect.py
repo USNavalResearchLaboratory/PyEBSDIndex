@@ -3,8 +3,8 @@ import numba
 from scipy.ndimage import gaussian_filter
 from radon_fast import Radon
 from timeit import default_timer as timer
-import time
 import matplotlib.pyplot as plt
+import gputools
 
 RADEG = 180.0/np.pi
 
@@ -28,6 +28,9 @@ class BandDetect():
     self.peakPad = None
     self.peakMask = None
     self.nBands = nBands
+    self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
+                    ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
+                    ('pqmax', np.float32)])
     if (patterns is None) and (patDim is None):
       pass
     else:
@@ -107,6 +110,11 @@ class BandDetect():
 
     if recalc_masks == True:
       ksz = np.array([np.max([np.int(4*self.rSigma), 5]), np.max([np.int(4*self.tSigma), 5])])
+      ksz = ksz + ((ksz %2) == 0)
+      kernel = np.zeros(ksz, dtype=np.float32)
+      kernel[(ksz[0]/2).astype(int),(ksz[1]/2).astype(int) ] = 1
+      kernel = -1.0*gaussian_filter(kernel, [self.rSigma, self.tSigma], order=[2,0])
+      self.kernel = kernel.reshape((1,ksz[0], ksz[1]))
       self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int)
       self.peakMask = np.ones(self.peakPad, dtype=np.int32)
       self.rhoMask = np.ones([1,self.nRho,self.nTheta+2*self.peakPad[1] ], dtype=np.float32)
@@ -118,6 +126,7 @@ class BandDetect():
       self.nBands = nBands
 
   def find_bands(self, patternsIn, faster=False, verbose=False):
+    tic0 = timer()
     tic = timer()
     ndim = patternsIn.ndim
     if ndim == 2:
@@ -128,19 +137,11 @@ class BandDetect():
     shape = patterns.shape
     nPats = shape[0]
 
-
-
-    #plt.imshow(peaklocmask[0,:,:], origin='lower')
-
-    bandDataType = np.dtype([('id', np.int32), ('max', np.float32), \
-                             ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
-                             ('pqmax', np.float32)])
-    bandData = np.zeros((nPats, self.nBands), dtype=bandDataType)
     eps = 1.e-6
     tic1 = timer()
-    rdn = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
-    #print(timer()-tic1)
-    rdnNorm = rdn*self.rdnNorm
+    rdnNorm = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
+
+    #rdnNorm = rdn*self.rdnNorm
 
 
     rdnNormP = np.zeros((nPats,self.nRho,self.nTheta+2*self.peakPad[1]), dtype=np.float32)
@@ -148,13 +149,23 @@ class BandDetect():
 
     rdnNormP[:, :, 0:self.peakPad[1]] = np.flip(rdnNormP[:, :, -2*self.peakPad[1]:-self.peakPad[1]], axis=1)
     rdnNormP[:, :,-self.peakPad[1]:] = np.flip(rdnNormP[:, :, self.peakPad[1]:2*self.peakPad[1]], axis = 1)
-    rdnConv = np.zeros_like(rdnNormP)
+
+    rdnNormP = np.pad(rdnNormP, ((0,),(self.peakPad[0],),(self.peakPad[0],)), mode ='edge' )
+    #rdnConv = np.zeros_like(rdnNormP)
     mns = np.zeros(nPats, dtype=np.float32)
-    #print("Radon:",timer() - tic)
+    print("Radon:",timer() - tic)
     tic = timer()
-    for i in range(nPats):
-      rdnConv[i,:,:] = -1.0*gaussian_filter(rdnNormP[i,:,:].reshape(self.nRho,self.nTheta+2*self.peakPad[1]), \
-                                       [self.rSigma, self.tSigma], order=[2,0])
+    #for i in range(nPats):
+    #  rdnConv[i,:,:] = -1.0*gaussian_filter(rdnNormP[i,:,:].reshape(self.nRho,self.nTheta+2*self.peakPad[1]), \
+    #                                   [self.rSigma, self.tSigma], order=[2,0])
+    rdnConv = gputools.convolve(rdnNormP, self.kernel)
+
+    rdnConv = rdnConv[:, self.peakPad[0]: -self.peakPad[0], self.peakPad[1]: -self.peakPad[1]]
+    rdnNormP = rdnNormP[:, self.peakPad[0]: -self.peakPad[0], self.peakPad[1]: -self.peakPad[1]]
+
+    #rdnConv[:,:,0:self.peakPad[1]] = np.flip(rdnConv[:,:,-2 * self.peakPad[1]:-self.peakPad[1]],axis=1)
+    #rdnConv[:,:,-self.peakPad[1]:] = np.flip(rdnConv[:,:,self.peakPad[1]:2 * self.peakPad[1]],axis=1)
+    #plt.imshow((rdnConv[-1,:,:]),origin='lower')
       #mns[i] = rdnConv[i,:,:].min()
       #rdnConv[i,:,:] -= mns[i]
     mns = rdnConv.min(axis=1).min(axis=1)
@@ -170,12 +181,15 @@ class BandDetect():
     nn = nnmask.size
     nlayer = rdnPad.shape[-2] * rdnPad.shape[-1]
     mskSz = np.array(self.peakMask.shape)
-
+    print("Conv:",timer() - tic)
     tic = timer()
-
+    bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
     bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnPad,self.peakPad,self.peakMask)
-    #print('bandlabel: ', timer()-tic)
-    # tic = timer()
+    bandData['max'] = bdat[0]
+    bandData['avemax'] = bdat[1]
+    bandData['maxloc'] = bdat[2]
+    bandData['aveloc'] = bdat[3]
+
     # peakloc = np.zeros((nPats,self.nRho + 2 * self.peakPad[0],self.nTheta + 2 * self.peakPad[1]),dtype=np.int)
     # peaklocmask = np.ones((nPats,self.nRho + 2 * self.peakPad[0],self.nTheta + 2 * self.peakPad[1]),dtype=np.int)
     # peaklocmask[:,:,0:self.peakPad[1]] = 0
@@ -216,10 +230,8 @@ class BandDetect():
     #   lnflip = np.where(lnflip >= flipr, lnflip,flipr)
     #   peakloc[:, :, -2 * self.peakPad[1]:] = lnflip
 
-    bandData['max']  = bdat[0]
-    bandData['avemax'] = bdat[1]
-    bandData['maxloc'] = bdat[2]
-    bandData['aveloc'] = bdat[3]
+
+
     #print('loop: ',timer() - tic)
     #print(np.max(np.abs(bandData['max']-dave[0])), np.max(np.abs(bandData['avemax']-dave[1])),
     #      np.max(np.abs(bandData['maxloc']-dave[2])), np.max(np.abs(bandData['aveloc']-dave[3])) )
@@ -230,10 +242,10 @@ class BandDetect():
       bandData['pqmax'][j,:] = \
         rdnNorm[j, (bandData['aveloc'][j,:,0]).astype(int),(bandData['aveloc'][j,:,1]).astype(int)]
     #bandData['max'] += mns.reshape(nPats,1)
-
+    print("BandLabel:",timer() - tic)
 
     if verbose == True:
-      print(timer() - tic)
+      print('Total Band Find Time:',timer() - tic0)
       plt.clf()
       plt.imshow(rdnConv[-1,:,:], origin='lower')
       plt.scatter(y = bandData['aveloc'][-1,:,0], x = bandData['aveloc'][-1,:,1]+self.peakPad[1], c ='r', s=5)
@@ -257,8 +269,10 @@ class BandDetect():
     nPats = bandData.shape[0]
     nBands = bandData.shape[1]
 
-    theta = self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1], dtype=np.int)]/RADEG
-    rho = self.radonPlan.rho[np.array(bandData['aveloc'][:, :, 0], dtype=np.int)]
+    #theta = self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1], dtype=np.int)]/RADEG
+    #rho = self.radonPlan.rho[np.array(bandData['aveloc'][:, :, 0], dtype=np.int)]
+    theta = self.radonPlan.theta[np.array(bandData['maxloc'][:,:,1], dtype=np.int)]/RADEG
+    rho = self.radonPlan.rho[np.array(bandData['maxloc'][:, :, 0], dtype=np.int)]
 
     stheta = np.sin(theta)
     ctheta = np.cos(theta)

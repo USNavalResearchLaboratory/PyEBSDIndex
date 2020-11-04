@@ -94,9 +94,10 @@ class Radon():
     nPx = shapeIm[-1]*shapeIm[-2]
     im = np.zeros(nPx+1, dtype=np.float32)
     radon = np.zeros([nIm, self.nRho, self.nTheta], dtype=np.float32)
+    norm = np.sum(self.indexPlan < nPx, axis = 2 ) + 1.0e-12
     for i in np.arange(nIm):
       im[:-1] = image[i,:,:].flatten()
-      radon[i, :, :] = np.sum(im.take(self.indexPlan), axis=2)
+      radon[i, :, :] = np.sum(im.take(self.indexPlan.astype(np.int64)), axis=2) / norm
 
     if (fixArtifacts == True):
       radon[:,:,0] = radon[:,:,1]
@@ -142,21 +143,32 @@ class Radon():
     nRho = indxdim[0]
     nTheta = indxdim[1]
     nIndex = indxdim[2]
+    count = 0.0
+    sum = 0.0
     for q in prange(nIm):
       imstart = q*nPx
       for i in range(nRho):
         for j in range(nTheta):
+          count = 0.0
+          sum = 0.0
           for k in range(nIndex):
             indx1 = index[i,j,k]
             if (indx1 >= nPx):
               break
-            radon[q, i, j] += images[imstart+indx1]
+            #radon[q, i, j] += images[imstart+indx1]
+            sum += images[imstart + indx1]
+            count += 1.0
+          radon[q,i,j] = sum/(count+1e-12)
 
   def radon_fasterCL(self,image,fixArtifacts = False):
     tic = timer()
-    plat = cl.get_platforms()
-    gpu = plat[0].get_devices(device_type=cl.device_type.GPU)
-    ctx = cl.Context(devices = gpu)
+    gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
+    if len(gpu) == 0: # fall back to the numba implementation
+      return self.radon_faster(image,fixArtifacts = fixArtifacts)
+    # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
+    # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
+    gpuIdx = np.random.choice(len(gpu))
+    ctx = cl.Context(devices = {gpu[gpuIdx]})
     queue = cl.CommandQueue(ctx)
     mf = cl.mem_flags
 
@@ -184,15 +196,15 @@ class Radon():
     image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image)
     rdnIndx_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=self.indexPlan)
     radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
-    steps_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=steps)
+    #steps_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=steps)
 
     prg = cl.Program(ctx,"""
     __kernel void radonSum(
         __global const unsigned long int *rdnIndx, __global const float *images, __global float *radon, 
         const unsigned long int imstep, const unsigned long int indxstep, const unsigned long int rdnstep )
     {
-      int gid_im = get_global_id(0);
-      int gid_rdn = get_global_id(1);
+      unsigned long int gid_im = get_global_id(0);
+      unsigned long int gid_rdn = get_global_id(1);
       unsigned long int i, k, j, idx;
       float sum, count;
       
@@ -211,10 +223,9 @@ class Radon():
     }
     """).build()
 
-    #prg.radonSum(queue, (nIm, rdnstep), None,rdnIndx_gpu, image_gpu, radon_gpu, steps_gpu)
     prg.radonSum(queue,(nIm,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,imstep, indxstep, rdnstep)
-
-    cl.enqueue_copy(queue, radon, radon_gpu)
+    queue.finish()
+    cl.enqueue_copy(queue, radon, radon_gpu, is_blocking=True).wait()
 
 
 
@@ -225,14 +236,16 @@ class Radon():
 
     image = image.reshape(shapeIm)
 
-    print(timer()-tic)
+    #print(timer()-tic)
     return radon
 
 
 
 
 # if __name__ == "__main__":
+#   import ebsd_pattern, ebsd_index
 #   file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1'
+#   f = ebsd_pattern.EBSDPatternFile(file)
 #   pat = f.ReadData(patStartEnd=[0,0],convertToFloat=True,returnArrayOnly=True )
 #   dat, indxer = ebsd_index.index_pats(filename = file, patStart = 0, patEnd = 1,return_indexer_obj = True)
 #   dat = ebsd_index.index_pats_distributed(filename = file,patStart = 0, patEnd = -1, chunksize = 1000, ncpu = 34, ebsd_indexer_obj = indxer )
