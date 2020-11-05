@@ -110,12 +110,13 @@ class BandDetect():
 
     if recalc_masks == True:
       ksz = np.array([np.max([np.int(4*self.rSigma), 5]), np.max([np.int(4*self.tSigma), 5])])
-      ksz = ksz + ((ksz %2) == 0)
+      ksz = ksz + ((ksz % 2) == 0)
       kernel = np.zeros(ksz, dtype=np.float32)
       kernel[(ksz[0]/2).astype(int),(ksz[1]/2).astype(int) ] = 1
       kernel = -1.0*gaussian_filter(kernel, [self.rSigma, self.tSigma], order=[2,0])
       self.kernel = kernel.reshape((1,ksz[0], ksz[1]))
-      self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int)
+      #self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int)
+      self.peakPad = np.array(np.around([4 * ksz[0], 4 * ksz[1]]), dtype=np.int)
       self.peakMask = np.ones(self.peakPad, dtype=np.int32)
       self.rhoMask = np.ones([1,self.nRho,self.nTheta+2*self.peakPad[1] ], dtype=np.float32)
       if self.rhoMaskFrac > 0:

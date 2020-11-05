@@ -132,6 +132,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
       workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart=p_indx_start[nsubmit],
                                         patEnd=p_indx_end[nsubmit]))
       #workers.append(index_chunk.remote(patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
+      time.sleep(1)
       nsubmit += 1
 
     #workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
