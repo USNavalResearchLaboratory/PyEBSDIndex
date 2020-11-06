@@ -245,8 +245,8 @@ class Radon():
 # if __name__ == "__main__":
 #   import ebsd_pattern, ebsd_index
 #   file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1'
-#   f = ebsd_pattern.EBSDPatternFile(file)
-#   pat = f.ReadData(patStartEnd=[0,0],convertToFloat=True,returnArrayOnly=True )
+#   f = ebsd_pattern.UPFile(file)
+#   pat = f.read_data(patStartEnd=[0,1],convertToFloat=True,returnArrayOnly=True )
 #   dat, indxer = ebsd_index.index_pats(filename = file, patStart = 0, patEnd = 1,return_indexer_obj = True)
 #   dat = ebsd_index.index_pats_distributed(filename = file,patStart = 0, patEnd = -1, chunksize = 1000, ncpu = 34, ebsd_indexer_obj = indxer )
 #
