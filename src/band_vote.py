@@ -216,8 +216,9 @@ class BandVote():
     sign = sign.reshape(n2Fit,1)
     quats *= sign
     avequat = np.mean(quats, axis = 0)
-    if avequat[0] < 0:
-      avequat *= -1.0
+    avequat = rotlib.quatnorm(avequat)
+    #if avequat[0] < 0:
+    #  avequat *= -1.0
     test = rotlib.quat_vector(avequat,bandnorms[whGood,:])
     test = np.sum(test * poles[polematch[whGood], :], axis = 1)
     test = np.arccos(np.clip(test, -1.0, 1.0))*RADEG
@@ -240,11 +241,13 @@ def tripvote_numba( bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
           angtri = np.array([bandangs[i,j],bandangs[i,k],bandangs[j,k]], dtype=numba.float32)
           srt = angtri.argsort(kind='quicksort') #np.array(np.argsort(angtri), dtype=numba.int64)
           srt2 = np.asarray(LUTTemp[:,srt[0],srt[1],srt[2]], dtype=numba.int64).copy()
-          unsrtFID = np.argsort(srt2).astype(np.int64)
+          unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
           angtriSRT = np.asarray(angtri[srt])
           angTest = (np.abs(tripAngles - angtriSRT)) <= angTol
           for q in range(ntrip):
-            angTest2[q] = np.all(angTest[q,:])
+            #angTest2[q] = np.all(angTest[q,:])
+            angTest2[q] = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
+
           wh = angTest2.nonzero()[0]
 
           for q in wh:
