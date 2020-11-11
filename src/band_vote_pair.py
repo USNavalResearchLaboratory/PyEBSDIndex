@@ -5,97 +5,108 @@ from timeit import default_timer as timer
 RADEG = 180.0/np.pi
 
 
-class BandVote():
-  def __init__(self, tripLib, angTol = 3.0):
-    self.tripLib = tripLib
+class BandVotePair():
+  def __init__(self, pairLib, angTol = 3.0):
+    self.pairLib = pairLib
     self.angTol = angTol
     # same sorting used in building the triplet library
-    LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]], dtype=np.int64)
-    LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]], dtype=np.int64)
+    #LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]], dtype=np.int64)
+    #LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]], dtype=np.int64)
 
-    LUT = np.zeros((3,3,3,3),dtype=np.int64)
-    for i in range(6):
-      LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
-    self.LUT = np.asarray(LUT).copy()
+    #LUT = np.zeros((3,3,3,3),dtype=np.int64)
+    #for i in range(6):
+    #  LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
+    #self.LUT = np.asarray(LUT).copy()
 
 
-  def tripvote(self, bandnormsIN, goNumba = False):
+  def pairvote(self, bandnormsIN, goNumba = False):
     tic0 = timer()
-    nfam = self.tripLib.family.shape[0]
-    bandnorms = np.squeeze(bandnormsIN)
-    n_bands = np.int(bandnorms.size/3)
-
-    bandangs = np.abs(bandnorms.dot(bandnorms.T))
-    bandangs = np.clip(bandangs, -1.0, 1.0)
-    bandangs  = np.arccos(bandangs)*RADEG
+    nfam = self.pairLib.family.shape[0]
+    nPairs = self.pairLib.angLib.shape[0]
+    tolRad = self.angTol/RADEG
 
 
-    tic = timer()
-    if goNumba == True:
-      accumulator, bandFam, bandRank, band_cm = tripvote_numba(bandangs, self.LUT, self.angTol, self.tripLib.tripAngles, self.tripLib.tripID, nfam, n_bands)
+    shp = bandnormsIN.shape
+    if bandnormsIN.ndim == 2:
+      bandnorms = bandnormsIN.reshape((1,shp[0], shp[1]))
     else:
-      accumulator = np.zeros((nfam,n_bands),dtype=np.int32)
-      for i in range(n_bands):
-        for j in range(i+1,n_bands):
-          for k in range(j+1, n_bands):
-            angtri = np.array([bandangs[i,j], bandangs[i,k], bandangs[j,k]])
-            srt = np.argsort(angtri)
-            srt2 = np.array(self.LUT[:, srt[0], srt[1], srt[2]])
-            unsrtFID = np.argsort(srt2)
-            angtriSRT = np.array(angtri[srt])
-            angTest = (np.abs(self.tripLib.tripAngles - angtriSRT)) <= self.angTol
-            angTest = np.all(angTest, axis = 1)
-            wh = angTest.nonzero()[0]
+      bandnorms = bandnormsIN
 
-            for q in wh:
-              f = self.tripLib.tripID[q,:]
-              f = f[unsrtFID]
-              accumulator[f, [i,j,k]] += 1
-      mxvote = np.amax(accumulator, axis = 0)
-      tvotes = np.sum(accumulator, axis = 0)
-      band_cm = np.zeros(n_bands)
+    shp = bandnorms.shape
+
+    nPats = shp[0]
+    nBands = shp[1]
+    accumulator = np.zeros((nPats,nfam,nBands), dtype = np.int32)
+
+    angTable = np.arccos(np.abs(np.einsum('ijk,ilk->ijl', bandnorms, bandnorms).clip(-1.0,1.0)))
+
+    for dtest in range(nPairs):
+      wh = np.nonzero( np.abs( angTable - self.pairLib.angLib['ang'][dtest])  <= tolRad)
+      if len(wh) > 0:
+        f1 = self.pairLib.angLib['f1'][dtest]
+        f2 = self.pairLib.angLib['f2'][dtest]
+        np.add.at(accumulator, (wh[0], f1, wh[1]),1)
+        np.add.at(accumulator, (wh[0], f2, wh[1]),1)
 
 
-      for i in range(n_bands):
-        if tvotes[i] < 1:
-          band_cm[i] = 0.0
-        else:
-          srt = np.argsort(accumulator[:,i])
-          band_cm[i] = (accumulator[srt[-1], i] - accumulator[srt[-2], i])/tvotes[i]
+    mxvote = np.amax(accumulator, axis = 1)
+    tvotes = np.sum(accumulator, axis = 1)
+    band_cm = np.zeros((nPats, nBands)) #confidence metric
 
-      bandFam = np.argmax(accumulator, axis=0)
-      bandRank = (n_bands - np.arange(n_bands))/n_bands * band_cm * mxvote
+
+    # for i in range(nBands):
+    #   if tvotes[i] < 1:
+    #     band_cm[i] = 0.0
+    #   else:
+    #     srt = np.argsort(accumulator[:,i])
+    #     band_cm[i] = (accumulator[srt[-1], i] - accumulator[srt[-2], i])/tvotes[i]
+
+    srt = np.argsort(accumulator, axis = 1)
+    srtA = np.take_along_axis(accumulator, srt, axis = 1)
+    band_cm = (srtA[:,-1,:] - srtA[:,-2,:])/(tvotes.clip(min=1))
+
+    bandFam = np.argmax(accumulator, axis=1)
+    bandRank = (nBands - np.arange(nBands))/nBands * band_cm * mxvote
 
     #print(accumulator)
     #print(tvotes, band_cm, mxvote)
     print('vote loops: ', timer() - tic0)
     tic = timer()
+    avequatN = np.zeros((nPats, 4), dtype = np.float32)
+    fitN = np.zeros((nPats,1), dtype = np.float32)
+    bandmatchN = np.zeros((nPats,nBands), dtype = np.int32)
+    nMatchN = np.zeros((nPats),dtype=np.int32)
+    print(accumulator)
+    for q in range(nPats):
 
-    #avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam,self.tripLib.completelib,self.angTol)
-    avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam, angTol = self.angTol)
-    if nMatch == 0:
-      srt = np.argsort(bandRank)
-      for i in range(np.min([5, n_bands])):
-        bandRank2 = bandRank
-        bandRank2[srt[i]] = -1.0
-        #avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam,self.tripLib.completelib,self.angTol)
-        avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam)
-        if nMatch > 2:
-          break
+      avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms[q,:,:],bandRank[q,:],bandFam[q,:], angTol = self.angTol)
+      if nMatch == 0:
+        srt = np.argsort(bandRank[q,:])
+        for i in range(np.min([5, nBands])):
+          bandRank2 = bandRank[q,:]
+          bandRank2[srt[i]] = -1.0
+          #avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam,self.tripLib.completelib,self.angTol)
+          avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms[q,:,:],bandRank2,bandFam[q,:])
+          if nMatch > 2:
+            break
+      avequatN[q,:] = avequat
+      fitN[q,:] = fit
+      bandmatchN[q,:] = bandmatch
+      nMatchN[q] = nMatch
     print('refinement: ', timer() - tic)
-    print('tripvote: ',timer() - tic0)
-    return avequat, fit, np.mean(band_cm), bandmatch, nMatch
+    #print('tripvote: ',timer() - tic0)
+    return avequatN, fitN, np.mean(band_cm, axis = 1), bandmatchN, nMatchN
 
   def band_vote_refine(self,bandnorms,bandRank,familyLabel,angTol=3.0):
     tic0 = timer()
     tic = timer()
     nBands = np.int(bandnorms.size/3)
-    angTable = self.tripLib.completelib['angTable']
+    angTable = self.pairLib.completelib['angTable']
     sztable = angTable.shape
 
-    famIndx = self.tripLib.completelib['famIndex']
-    nFam = self.tripLib.completelib['nFamily']
-    poles = self.tripLib.completelib['polesCart']
+    famIndx = self.pairLib.completelib['famIndex']
+    nFam = self.pairLib.completelib['nFamily']
+    poles = self.pairLib.completelib['polesCart']
     nPoles = np.int(poles.size / 3)
     srt = np.flip(np.argsort(bandRank))
     v0indx = -1
@@ -175,7 +186,7 @@ class BandVote():
 
     if nNoGood > 0:
       polematch[whNoGood] = -1
-    print('Refine -- first find: ', timer() - tic)
+    #print('Refine -- first find: ', timer() - tic)
     tic = timer()
     # do a n choose 2 of the rest of the poles
     # n choose k combinations --> C = n! / (k!(n-k)! == product(lindgen(k)+(n-k+1)) / factorial(k)
@@ -212,7 +223,7 @@ class BandVote():
     #     counter += 1
 
 
-    print('Refine -- refine: ',timer() - tic)
+    #print('Refine -- refine: ',timer() - tic)
     tic = timer()
     quats = rotlib.om2qu(AB)
 
@@ -228,8 +239,8 @@ class BandVote():
     test = np.sum(test * poles[polematch[whGood], :], axis = 1)
     test = np.arccos(np.clip(test, -1.0, 1.0))*RADEG
     fit = np.mean(test)
-    print('Refine -- ave fit: ',timer() - tic)
-    print('Refine -- total: ',timer() - tic0)
+    #print('Refine -- ave fit: ',timer() - tic)
+    #print('Refine -- total: ',timer() - tic0)
     return (avequat, fit, polematch, nGood )
 
 

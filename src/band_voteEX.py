@@ -9,6 +9,15 @@ class BandVote():
   def __init__(self, tripLib, angTol = 3.0):
     self.tripLib = tripLib
     self.angTol = angTol
+    # same sorting used in building the triplet library
+    LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]], dtype=np.int64)
+    LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]], dtype=np.int64)
+
+    LUT = np.zeros((3,3,3,3),dtype=np.int64)
+    for i in range(6):
+      LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
+    self.LUT = np.asarray(LUT).copy()
+
 
   def tripvote(self, bandnormsIN, goNumba = False):
     tic0 = timer()
@@ -20,17 +29,10 @@ class BandVote():
     bandangs = np.clip(bandangs, -1.0, 1.0)
     bandangs  = np.arccos(bandangs)*RADEG
 
-    # same sorting used in building the triplet library
-    LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]], dtype=np.int64)
-    LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]], dtype=np.int64)
 
-    LUT = np.zeros((3,3,3,3),dtype=np.int64)
-    for i in range(6):
-      LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
-    LUT = np.asarray(LUT).copy()
     tic = timer()
     if goNumba == True:
-      accumulator, bandFam, bandRank, band_cm = tripvote_numba(bandangs, LUT, self.angTol, self.tripLib.tripAngles, self.tripLib.tripID, nfam, n_bands)
+      accumulator, bandFam, bandRank, band_cm = tripvote_numba(bandangs, self.LUT, self.angTol, self.tripLib.tripAngles, self.tripLib.tripID, nfam, n_bands)
     else:
       accumulator = np.zeros((nfam,n_bands),dtype=np.int32)
       for i in range(n_bands):
@@ -38,7 +40,7 @@ class BandVote():
           for k in range(j+1, n_bands):
             angtri = np.array([bandangs[i,j], bandangs[i,k], bandangs[j,k]])
             srt = np.argsort(angtri)
-            srt2 = np.array(LUT[:, srt[0], srt[1], srt[2]])
+            srt2 = np.array(self.LUT[:, srt[0], srt[1], srt[2]])
             unsrtFID = np.argsort(srt2)
             angtriSRT = np.array(angtri[srt])
             angTest = (np.abs(self.tripLib.tripAngles - angtriSRT)) <= self.angTol
@@ -66,7 +68,7 @@ class BandVote():
 
     #print(accumulator)
     #print(tvotes, band_cm, mxvote)
-    #print('vote loops: ', timer() - tic)
+    print('vote loops: ', timer() - tic0)
     tic = timer()
 
     #avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam,self.tripLib.completelib,self.angTol)
@@ -80,12 +82,13 @@ class BandVote():
         avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam)
         if nMatch > 2:
           break
-    #print('refinement: ', timer() - tic)
-    #print('tripvote: ',timer() - tic0)
+    print('refinement: ', timer() - tic)
+    print('tripvote: ',timer() - tic0)
     return avequat, fit, np.mean(band_cm), bandmatch, nMatch
 
   def band_vote_refine(self,bandnorms,bandRank,familyLabel,angTol=3.0):
-
+    tic0 = timer()
+    tic = timer()
     nBands = np.int(bandnorms.size/3)
     angTable = self.tripLib.completelib['angTable']
     sztable = angTable.shape
@@ -145,8 +148,8 @@ class BandVote():
       A[:,2] = np.cross(p0, p0p1c)
       Rtry[i, :,:] = A.dot(B)
 
-      testp = (Rtry[i, :, :].dot(bandnorms.T)).T
-      test = poles.dot(testp.T)
+      testp = (Rtry[i, :, :].dot(bandnorms.T))
+      test = poles.dot(testp)
 
       angfitTry = np.clip(np.amax(test, axis=0), -1.0, 1.0)
 
@@ -172,7 +175,8 @@ class BandVote():
 
     if nNoGood > 0:
       polematch[whNoGood] = -1
-
+    print('Refine -- first find: ', timer() - tic)
+    tic = timer()
     # do a n choose 2 of the rest of the poles
     # n choose k combinations --> C = n! / (k!(n-k)! == product(lindgen(k)+(n-k+1)) / factorial(k)
     # N Choose K with N = good band poles and K = 2
@@ -208,22 +212,24 @@ class BandVote():
     #     counter += 1
 
 
-    #print('looping: ',timer() - tic)
+    print('Refine -- refine: ',timer() - tic)
+    tic = timer()
     quats = rotlib.om2qu(AB)
 
     sign0 = np.sum(quats[0,:] * quats, axis = 1)
     sign = (sign0 >= 0).astype(np.float32) - (sign0 < 0).astype(np.float32)
-    sign = sign.reshape(n2Fit,1)
-    quats *= sign
+    quats *= sign.reshape(n2Fit,1)
     avequat = np.mean(quats, axis = 0)
     avequat = rotlib.quatnorm(avequat)
     #if avequat[0] < 0:
     #  avequat *= -1.0
+
     test = rotlib.quat_vector(avequat,bandnorms[whGood,:])
     test = np.sum(test * poles[polematch[whGood], :], axis = 1)
     test = np.arccos(np.clip(test, -1.0, 1.0))*RADEG
     fit = np.mean(test)
-
+    print('Refine -- ave fit: ',timer() - tic)
+    print('Refine -- total: ',timer() - tic0)
     return (avequat, fit, polematch, nGood )
 
 

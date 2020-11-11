@@ -9,6 +9,13 @@ class BandVote():
   def __init__(self, tripLib, angTol = 3.0):
     self.tripLib = tripLib
     self.angTol = angTol
+    LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]],dtype=np.int64)
+    LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]],dtype=np.int64)
+
+    LUT = np.zeros((3,3,3,3),dtype=np.int64)
+    for i in range(6):
+      LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
+    self.LUT = np.asarray(LUT).copy()
 
   def tripvote(self, bandnormsIN, goNumba = False):
     tic0 = timer()
@@ -21,24 +28,25 @@ class BandVote():
     bandangs  = np.arccos(bandangs)*RADEG
 
     # same sorting used in building the triplet library
-    LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]], dtype=np.int64)
-    LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]], dtype=np.int64)
-
-    LUT = np.zeros((3,3,3,3),dtype=np.int64)
-    for i in range(6):
-      LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
-    LUT = np.asarray(LUT).copy()
+    # LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]], dtype=np.int64)
+    # LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]], dtype=np.int64)
+    #
+    # LUT = np.zeros((3,3,3,3),dtype=np.int64)
+    # for i in range(6):
+    #   LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
+    # LUT = np.asarray(LUT).copy()
     tic = timer()
     if goNumba == True:
-      accumulator, bandFam, bandRank, band_cm = tripvote_numba(bandangs, LUT, self.angTol, self.tripLib.tripAngles, self.tripLib.tripID, nfam, n_bands)
+      accumulator, bandFam, bandRank, band_cm = tripvote_numba(bandangs, self.LUT, self.angTol, self.tripLib.tripAngles, self.tripLib.tripID, nfam, n_bands)
     else:
+      count = 0
       accumulator = np.zeros((nfam,n_bands),dtype=np.int32)
       for i in range(n_bands):
         for j in range(i+1,n_bands):
           for k in range(j+1, n_bands):
             angtri = np.array([bandangs[i,j], bandangs[i,k], bandangs[j,k]])
             srt = np.argsort(angtri)
-            srt2 = np.array(LUT[:, srt[0], srt[1], srt[2]])
+            srt2 = np.array(self.LUT[:, srt[0], srt[1], srt[2]])
             unsrtFID = np.argsort(srt2)
             angtriSRT = np.array(angtri[srt])
             angTest = (np.abs(self.tripLib.tripAngles - angtriSRT)) <= self.angTol
@@ -49,6 +57,8 @@ class BandVote():
               f = self.tripLib.tripID[q,:]
               f = f[unsrtFID]
               accumulator[f, [i,j,k]] += 1
+
+
       mxvote = np.amax(accumulator, axis = 0)
       tvotes = np.sum(accumulator, axis = 0)
       band_cm = np.zeros(n_bands)
@@ -63,7 +73,7 @@ class BandVote():
 
       bandFam = np.argmax(accumulator, axis=0)
       bandRank = (n_bands - np.arange(n_bands))/n_bands * band_cm * mxvote
-
+    #print(np.sum(accumulator))
     #print(accumulator)
     #print(tvotes, band_cm, mxvote)
     #print('vote loops: ', timer() - tic)
@@ -233,8 +243,8 @@ def tripvote_numba( bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
     accumulator = np.zeros((nfam, n_bands), dtype=np.int32)
     tshape = np.shape(tripAngles)
     ntrip = int(tshape[0])
-
-    angTest2 = np.zeros(ntrip, dtype=numba.boolean)
+    count  = 0.0
+    #angTest2 = np.zeros(ntrip, dtype=numba.boolean)
     for i in range(n_bands):
       for j in range(i + 1,n_bands):
         for k in range(j + 1,n_bands):
@@ -244,18 +254,21 @@ def tripvote_numba( bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
           unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
           angtriSRT = np.asarray(angtri[srt])
           angTest = (np.abs(tripAngles - angtriSRT)) <= angTol
+          angTest2 = np.zeros(ntrip, dtype=numba.boolean)
           for q in range(ntrip):
             #angTest2[q] = np.all(angTest[q,:])
             angTest2[q] = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
 
           wh = angTest2.nonzero()[0]
 
+
           for q in wh:
             f = tripID[q,:]
             f = f[unsrtFID]
-            accumulator[f,i] += 1
-            accumulator[f,j] += 1
-            accumulator[f,k] += 1
+            accumulator[f[0],i] += 1
+            accumulator[f[1],j] += 1
+            accumulator[f[2],k] += 1
+
     mxvote = np.zeros(n_bands, dtype = np.int32)
     tvotes = np.zeros(n_bands, dtype = np.int32)
     band_cm = np.zeros(n_bands,dtype=np.float32)

@@ -4,15 +4,16 @@ import numpy as np
 
 RADEG = 180.0/np.pi
 
-class triplib():
+class pairlib():
   def __init__(self, libType='FCC'):
     self.family = None
     self.nfamily = None
-    self.angles = None
-    self.polePairs = None
-    self.angleFamilyID = None
-    self.tripAngles = None
-    self.tripID = None
+    #self.angles = None
+    #self.polePairs = None
+    #self.angleFamilyID = None
+    #self.tripAngles = None
+    #self.tripID = None
+    self.angLib = None
     self.completelib = None
 
     if libType is None:
@@ -26,13 +27,13 @@ class triplib():
 
   def build_fcc(self):
     poles = np.array([[0,0,2], [1,1,1], [0,2,2], [1,1,3]])
-    self.build_trip_lib(poles,crystal_sym.cubicsym_q())
+    self.build_pair_lib(poles,crystal_sym.cubicsym_q())
 
   def build_bcc(self):
     poles = np.array([[0,1,1],[0,0,2],[1,1,2],[0,1,3]])
-    self.build_trip_lib(poles,crystal_sym.cubicsym_q())
+    self.build_pair_lib(poles,crystal_sym.cubicsym_q())
 
-  def build_trip_lib(self,poles,symmetry):
+  def build_pair_lib(self,poles,symmetry):
     nsym = symmetry.shape[0]
     npoles = poles.shape[0]
     sympoles = []
@@ -91,40 +92,50 @@ class triplib():
     nangs = angs.size
     familyID = np.array(familyID)
     polePairs = np.array(polePairs)
+    anglist = np.zeros((nangs), dtype=[('ang',np.float32),('f1',np.int32), ('f2',np.int32),\
+                             ('p1',np.int32, (3)),('p2',np.int32, (3))])
+
+    anglist['ang'] = np.asarray(angs/RADEG)
+    anglist['f1'] = np.asarray(familyID[:,0])
+    anglist['f2'] = np.asarray(familyID[:,1])
+    anglist['p1'] = polePairs[:,0]
+    anglist['p2'] = polePairs[:,1]
+
+
 
     stuff, nFamilyID = np.unique(familyID[:,0], return_counts=True)
     indx0FID = (np.concatenate( ([0],np.cumsum(nFamilyID)) ))[0:npoles]
     #print(indx0FID)
     #This completely over previsions the arrays, this is essentially 
     #N Choose K with N = number of angles and K = 3
-    nlib = npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))/np.long(np.math.factorial(3))
-    nlib = nlib.astype(np.int)
+    #nlib = npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))/np.long(np.math.factorial(3))
+    #nlib = nlib.astype(np.int)
 
-    libANG = np.zeros((nlib, 3))
-    libID = np.zeros((nlib, 3), dtype = np.int)
-    counter = 0
+    #libANG = np.zeros((nlib, 3))
+    #libID = np.zeros((nlib, 3), dtype = np.int)
+    #counter = 0
 
-    for i in range(npoles):
-      id0 = familyID[indx0FID[i], 0]
-      for j in range(0,nFamilyID[i]):
+    #for i in range(npoles):
+    #  id0 = familyID[indx0FID[i], 0]
+    #  for j in range(0,nFamilyID[i]):
 
-        ang0 = angs[j + indx0FID[i]]
-        id1 = familyID[j + indx0FID[i], 1]
-        for k in range(j, nFamilyID[i]):
-          ang1 = angs[k + indx0FID[i]]
-          id2 = familyID[k + indx0FID[i], 1]
+    #    ang0 = angs[j + indx0FID[i]]
+    #    id1 = familyID[j + indx0FID[i], 1]
+    #    for k in range(j, nFamilyID[i]):
+    #      ang1 = angs[k + indx0FID[i]]
+    #      id2 = familyID[k + indx0FID[i], 1]
 
-          whjk = np.nonzero( np.logical_and( familyID[:,0] == id1, familyID[:,1] == id2 ))[0]
-          for q in range(whjk.size):
-            ang2 = angs[whjk[q]]
-            libANG[counter, :] = np.array([ang0, ang1, ang2])
-            libID[counter, :] =  np.array([id0, id1, id2])
-            counter += 1
+    #      whjk = np.nonzero( np.logical_and( familyID[:,0] == id1, familyID[:,1] == id2 ))[0]
+    #      for q in range(whjk.size):
+    #        ang2 = angs[whjk[q]]
+    #        libANG[counter, :] = np.array([ang0, ang1, ang2])
+    #        libID[counter, :] =  np.array([id0, id1, id2])
+    #        counter += 1
 
-    libANG = libANG[0:counter, :]
-    libID = libID[0:counter, :]
+    #libANG = libANG[0:counter, :]
+    #libID = libID[0:counter, :]
 
-    libANG, libID = self.sortlib_id(libANG,libID,findDups = True)
+    #libANG, libID = self.sortlib_id(libANG,libID,findDups = True)
     #print(libANG)
     #print(libANG.shape)
     angTable = self.calc_pole_dot(sympolesComplete,sympolesComplete)
@@ -142,11 +153,12 @@ class triplib():
 
     self.family = poles
     self.nfamily = npoles
-    self.angles = angs
-    self.polePairs = polePairs
-    self.angleFamilyID = familyID
-    self.tripAngles = libANG
-    self.tripID = libID
+    #self.angles = angs
+    #self.polePairs = polePairs
+    #self.angleFamilyID = familyID
+    #self.tripAngles = libANG
+    self.angLib = anglist
+    #self.tripID = libID
 
 
 

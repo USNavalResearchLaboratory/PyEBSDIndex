@@ -154,7 +154,7 @@ class BandDetect():
     rdnNormP = np.pad(rdnNormP, ((0,),(self.peakPad[0],),(self.peakPad[1],)), mode ='edge' )
 
     mns = np.zeros(nPats, dtype=np.float32)
-    print("Radon:",timer() - tic)
+    #print("Radon:",timer() - tic)
     tic = timer()
     ## the code below was replaced by a gpu convolution routine.
     # rdnConv = np.zeros_like(rdnNormP)
@@ -180,7 +180,7 @@ class BandDetect():
     nn = nnmask.size
     nlayer = rdnPad.shape[-2] * rdnPad.shape[-1]
     mskSz = np.array(self.peakMask.shape)
-    print("Conv:",timer() - tic)
+    #print("Conv:",timer() - tic)
     tic = timer()
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
     bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnPad,self.peakPad,self.peakMask)
