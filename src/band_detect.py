@@ -162,7 +162,7 @@ class BandDetect():
     #  rdnConv[i,:,:] = -1.0*gaussian_filter(rdnNormP[i,:,:].reshape(self.nRho,self.nTheta+2*self.peakPad[1]), \
     #                                   [self.rSigma, self.tSigma], order=[2,0])
     rdnConv = gputools.convolve(rdnNormP, self.kernel)
-    # remove the convolution padding. 
+    # remove the convolution padding.
     rdnConv = rdnConv[:, self.peakPad[0]: -self.peakPad[0], self.peakPad[1]: -self.peakPad[1]]
     rdnNormP = rdnNormP[:, self.peakPad[0]: -self.peakPad[0], self.peakPad[1]: -self.peakPad[1]]
 
