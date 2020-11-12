@@ -70,7 +70,7 @@ class BandVotePair():
 
     #print(accumulator)
     #print(tvotes, band_cm, mxvote)
-    print('vote loops: ', timer() - tic0)
+    #print('vote loops: ', timer() - tic0)
     tic = timer()
     avequatN = np.zeros((nPats, 4), dtype = np.float32)
     fitN = np.zeros((nPats,1), dtype = np.float32)

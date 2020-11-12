@@ -155,7 +155,7 @@ class BandDetect():
     rdnNormP = np.pad(rdnNormP, ((0,),(self.peakPad[0],),(self.peakPad[1],)), mode ='edge' )
 
     mns = np.zeros(nPats, dtype=np.float32)
-    print("Radon:",timer() - tic)
+    #print("Radon:",timer() - tic)
     tic = timer()
     ## the code below was replaced by a gpu convolution routine.
     # rdnConv = np.zeros_like(rdnNormP)
@@ -181,10 +181,43 @@ class BandDetect():
     nn = nnmask.size
     nlayer = rdnPad.shape[-2] * rdnPad.shape[-1]
     mskSz = np.array(self.peakMask.shape)
-    print("Conv:",timer() - tic)
+    #print("Conv:",timer() - tic)
     tic = timer()
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
-    bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnPad,self.peakPad,self.peakMask)
+    lMaxK = (1,self.peakMask.shape[0],self.peakMask.shape[1] )
+
+    lMaxRdn = scipy_grey_dilation(rdnPad, size = lMaxK)
+    lMaxRdn[:,:,0:self.peakPad[1]] = 0
+    lMaxRdn[:,:,-self.peakPad[1]:] = 0
+    # print("lMax:",timer() - tic)
+    # plt.imshow(lMaxRdn[-1,:,:],origin='lower')
+    #
+    # nnx = np.array([-2,-1,0,1,2, -2,-1,0,1,2, -2,-1,0,1,2], dtype = np.float32)
+    # nny = np.array([-1,-1,-1,-1,-1, 0,0,0,0,0, 1,1,1,1,1], dtype = np.float32)
+    # shp = rdnPad.shape
+    # for q in range(nPats):
+    #   rdnPad_q = rdnPad[q,:,:]
+    #   lMaxRdn_q = lMaxRdn[q,:,:]
+    #   peakLoc = np.nonzero((lMaxRdn_q == rdnPad_q) & (rdnPad_q > 0.001))
+    #   #srt = np.argsort(rdnPad_q[peakLoc[0], peakLoc[1]])
+    #   indx1D = peakLoc[1] + peakLoc[0] * shp[2]
+    #   temp = (rdnPad_q.ravel())[indx1D]
+    #   srt = np.argsort(temp)
+    #   nBq = self.nBands if (len(srt) > self.nBands) else len(srt)
+    #   for i in range(nBq):
+    #     x = np.int32(peakLoc[0][srt[-1-i]])
+    #     y = np.int32(peakLoc[1][srt[-1-i]])
+    #     bandData['maxloc'][q,i,:] = np.array([x,y])
+    #     bandData['max'][q,i] = rdnPad_q[x,y]
+    #     nn = rdnPad_q[x-2:x+3,y-1:y+2].ravel()
+    #     bandData['avemax'][q,i] = np.mean(nn)
+    #     xnn = np.sum(nn*(np.float32(x)+nnx))/np.sum(nn)
+    #     ynn = np.sum(nn * (np.float32(y) + nny)) / np.sum(nn)
+    #     bandData['aveloc'][q,i,:] = np.array([xnn,ynn])
+
+
+    #bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnPad,self.peakPad,self.peakMask)
+    bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnPad,lMaxRdn)
     bandData['max'] = bdat[0]
     bandData['avemax'] = bdat[1]
     bandData['maxloc'] = bdat[2]
@@ -240,7 +273,7 @@ class BandDetect():
       bandData['pqmax'][j,:] = \
         rdnNorm[j, (bandData['aveloc'][j,:,0]).astype(int),(bandData['aveloc'][j,:,1]).astype(int)]
     #bandData['max'] += mns.reshape(nPats,1)
-    print("BandLabel:",timer() - tic)
+    #print("BandLabel:",timer() - tic)
 
     if verbose == True:
       print('Total Band Find Time:',timer() - tic0)
@@ -294,62 +327,37 @@ class BandDetect():
 
   @staticmethod
   @numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
-  def band_label(nBands, nPats, nRho, nTheta, rdnPad,  peakPad, peakMask ):
+  def band_label(nBands, nPats, nRho, nTheta, rdnPad,  lMaxRdn ):
     nB = np.int(nBands)
     nP = np.int(nPats)
     nR = np.int(nRho)
     nT = np.int(nTheta)
-    pPad = np.asarray(peakPad)
-    nnmask = np.array([0,-2,-1,1,2,nT + 2 * pPad[1],-1 * (nT + 2 * pPad[1])], dtype = numba.int64)
-    nn = numba.int32(nnmask.size)
-    mskSz = np.array(peakMask.shape, dtype=numba.int64)
+    shp  = rdnPad.shape
     bandData_max = np.zeros((nP,nB), dtype = np.float32) # max of the convolved peak value
     bandData_avemax = np.zeros((nP,nB), dtype = np.float32) # mean of the nearest neighborhood values around the max
-    bandData_maxloc = np.zeros((nP,nB,2), dtype = np.float32) # location of the max within the radon transform
-    bandData_aveloc = np.zeros((nP,nB,2), dtype = np.float32) # location of the max based on the nearest neighbor interpolation
+    bandData_maxloc = np.zeros((nP,nB,2), dtype = np.float32)-20.0 # location of the max within the radon transform
+    bandData_aveloc = np.zeros((nP,nB,2), dtype = np.float32)-20.0 # location of the max based on the nearest neighbor interpolation
 
-    #peakloc = np.zeros((nPats,nRho + 2 * peakPad[0],nTheta + 2 * peakPad[1]),dtype=np.int)
+    nnx = np.array([-2,-1,0,1,2,-2,-1,0,1,2,-2,-1,0,1,2],dtype=np.float32)
+    nny = np.array([-1,-1,-1,-1,-1,0,0,0,0,0,1,1,1,1,1],dtype=np.float32)
 
-    peakmask_offset = -1 * np.floor_divide(pPad, 2).astype(numba.int32)
-    peakmask_offset = peakmask_offset.reshape(2,1)
-    #peakmask_offset = np.array(-1 * np.floor(pPad * 0.5),dtype=np.int).reshape(2,1)
-    #peakmask_offset = np.broadcast_to(peakmask_offset,(nPats,2))
-    peaklocmask = np.ones((nR + 2 * pPad[0],nT + 2 * pPad[1]),dtype=numba.int32)
-    peaklocmask[:,0:pPad[1]] = 0
-    peaklocmask[:,-pPad[1]:] = 0
-
-    for j in range(nPats):
-      rdnPad1 = rdnPad[j,:,:]
-      peakloc = np.zeros((nR + 2 * pPad[0],nT + 2 * pPad[1]),dtype=numba.int32)
-      for i in range(nBands):
-        mxloc = (rdnPad1*(peakloc == 0)*peaklocmask).argmax()
-        #plt.imshow( (rdnPad1*(peakloc == 0)*peaklocmask))
-        bandData_max[j, i] = rdnPad1.flat[mxloc]
-        nnindx = numba.int64(mxloc) + nnmask
-        rdnNNv = np.zeros(nn, dtype = numba.float32)
-        for q in range(nn):
-          rdnNNv[q] = (rdnPad1.flat)[nnindx[q]]
-        bandData_avemax[j,i] = np.mean(rdnNNv)
-        mxloc2 = np.zeros((2,nn), dtype=numba.int32)
-        for q in range(nn):
-          mxloc2[0,q] = nnindx[q] // rdnPad1.shape[-1] #np.floor_divide(nnindx[q], rdnPad1.shape[-1])
-          mxloc2[1,q] = nnindx[q] % rdnPad1.shape[-1]
-        bandData_maxloc[j,i,:] = mxloc2[:,0].astype(np.float32)
-        bandData_aveloc[j,i,:] = np.sum(mxloc2.astype(np.float32) * rdnNNv.reshape(1,nn), axis = 1)/np.sum(rdnNNv)
-        mxloc2 += peakmask_offset
-        # now block out the peak so that the next lowest one can be found.
-        tempmask = peakMask*(i+1)
-        peakloc[mxloc2[0,0]:mxloc2[0,0]+mskSz[0], mxloc2[1,0]:mxloc2[1,0]+mskSz[1]] = tempmask#, dtype=numba.int32)
-
-        # mirror-flip the radon tranform -- catches peaks near radon theta-edges
-        flipl = np.flipud(peakloc[:,-2*pPad[1]:])
-        rnflip = peakloc[:, 0: 2*pPad[1]]
-        rnflip = np.where(rnflip >= flipl,rnflip, flipl)
-        peakloc[:, 0: 2 * pPad[1]] = rnflip
-
-        flipr = np.flipud(peakloc[:,0:2 * pPad[1]])
-        lnflip = peakloc[:, -2 * pPad[1]:]
-        lnflip = np.where(lnflip >= flipr, lnflip,flipr)
-        peakloc[:, -2 * pPad[1]:] = lnflip
+    for q in range(nPats):
+      rdnPad_q = rdnPad[q,:,:]
+      lMaxRdn_q = lMaxRdn[q,:,:]
+      peakLoc = np.nonzero((lMaxRdn_q == rdnPad_q) & (rdnPad_q > 1.0e-6))
+      indx1D = peakLoc[1] + peakLoc[0] * shp[2]
+      temp = (rdnPad_q.ravel())[indx1D]
+      srt = np.argsort(temp)
+      nBq = nB if (len(srt) > nB) else len(srt)
+      for i in range(nBq):
+        x = np.int32(peakLoc[0][srt[-1 - i]])
+        y = np.int32(peakLoc[1][srt[-1 - i]])
+        bandData_maxloc[q,i,:] = np.array([x,y])
+        bandData_max[q,i] = rdnPad_q[x,y]
+        nn = rdnPad_q[x - 2:x + 3,y - 1:y + 2].ravel()
+        bandData_avemax[q,i] = np.mean(nn)
+        xnn = np.sum(nn * (np.float32(x) + nnx)) / (np.sum(nn) + 1.0e-12)
+        ynn = np.sum(nn * (np.float32(y) + nny)) / (np.sum(nn) + 1.0e-12)
+        bandData_aveloc[q,i,:] = np.array([xnn,ynn])
 
     return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc

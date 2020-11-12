@@ -2,7 +2,7 @@ import numpy as np
 from pathlib import Path
 #from multiprocessing import Process, Queue
 import ebsd_pattern
-import band_detect
+import band_detect2
 import band_vote
 import band_voteEX
 import rotlib
@@ -224,7 +224,7 @@ class EBSDIndexer():
     # if (self.endPat == -1) and self.fID is not None:
     #   self.endPat = self.fID.nPatterns+1
     if peakDetectPlan is None:
-        self.peakDetectPlan = band_detect.BandDetect(nRho=nRho,nTheta=nTheta,\
+        self.peakDetectPlan = band_detect2.BandDetect(nRho=nRho,nTheta=nTheta,\
                                                      tSigma=tSigma, rSigma=rSigma,\
                                                      rhoMaskFrac=rhoMaskFrac,nBands=nBands)
     else:
@@ -283,8 +283,9 @@ class EBSDIndexer():
     indxData['pq'] = np.sum(bandData['max'], axis = 1)
     indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
     bandNorm = self.peakDetectPlan.radon2pole(bandData,PC=self.PC,vendor=self.vendor)
-    #print('Radon: ', timer() - tic)
-    return bandNorm,patStart,patEnd
+    print('Find Band: ', timer() - tic)
+
+    #return bandNorm,patStart,patEnd
     tic = timer()
     #bv = []
     #for tl in self.phaseLib:
@@ -330,7 +331,7 @@ class EBSDIndexer():
     qref2detect = self.refframe2detector()
     q = rotlib.quat_multiply(q,qref2detect)
     indxData['quat'] = q
-    #print('bandvote: ', timer() - tic)
+    print('bandvote: ', timer() - tic)
     return indxData, patStart, patEnd
 
   def refframe2detector(self):

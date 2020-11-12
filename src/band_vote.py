@@ -75,6 +75,7 @@ class BandVote():
       bandRank = (n_bands - np.arange(n_bands))/n_bands * band_cm * mxvote
     #print(np.sum(accumulator))
     #print(accumulator)
+    #print(bandRank)
     #print(tvotes, band_cm, mxvote)
     #print('vote loops: ', timer() - tic)
     tic = timer()
@@ -95,7 +96,7 @@ class BandVote():
     return avequat, fit, np.mean(band_cm), bandmatch, nMatch
 
   def band_vote_refine(self,bandnorms,bandRank,familyLabel,angTol=3.0):
-
+    tic = timer()
     nBands = np.int(bandnorms.size/3)
     angTable = self.tripLib.completelib['angTable']
     sztable = angTable.shape
@@ -219,21 +220,21 @@ class BandVote():
 
 
     #print('looping: ',timer() - tic)
+    tic = timer()
     quats = rotlib.om2qu(AB)
-
     sign0 = np.sum(quats[0,:] * quats, axis = 1)
-    sign = (sign0 >= 0).astype(np.float32) - (sign0 < 0).astype(np.float32)
-    sign = sign.reshape(n2Fit,1)
+    sign = ((sign0 >= 0).astype(np.float32) - (sign0 < 0).astype(np.float32)).reshape(n2Fit,1)
     quats *= sign
     avequat = np.mean(quats, axis = 0)
     avequat = rotlib.quatnorm(avequat)
     #if avequat[0] < 0:
     #  avequat *= -1.0
+
     test = rotlib.quat_vector(avequat,bandnorms[whGood,:])
     test = np.sum(test * poles[polematch[whGood], :], axis = 1)
     test = np.arccos(np.clip(test, -1.0, 1.0))*RADEG
     fit = np.mean(test)
-
+    #print('averaging: ',timer() - tic)
     return (avequat, fit, polematch, nGood )
 
 
