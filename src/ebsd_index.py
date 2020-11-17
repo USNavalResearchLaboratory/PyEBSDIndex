@@ -4,6 +4,7 @@ from pathlib import Path
 import ebsd_pattern
 import band_detect2
 import band_vote
+import band_vote_org
 import band_voteEX
 import rotlib
 import tripletlib
@@ -127,6 +128,8 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
   if mode == 'filemode':
     # send out the first batch
     workers = []
+    timers = []
+    rateave = 0.0
     for i in range(n_cpu_nodes):
       pats = indexer.fID.read_data(convertToFloat=True, patStartEnd=[p_indx_start[i],p_indx_end[i]],returnArrayOnly=True)
       #pats = None
@@ -134,6 +137,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
       #                                  patEnd=p_indx_end[nsubmit]))
       workers.append(index_chunk.remote(pats = None, indexer = remote_indexer, \
                                         patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
+      timers.append(timer())
       time.sleep(1)
       nsubmit += 1
 
@@ -142,15 +146,21 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
     while ndone < njobs:
       toc = timer()
       wrker,busy = ray.wait(workers, num_returns=1, timeout=None)
+      print("waittime: ",timer() - toc)
       wrkdataout,indxstr,indxend, rate = ray.get(wrker[0])
+      p = workers.index(wrker[0])
       workers.remove(wrker[0])
-      print("waittime: ", timer()-toc)
+      ticp = timers[p]
+      del timers[p]
+
       dataout[indxstr:indxend] = wrkdataout
       npatsdone += rate[1]
-
-      print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
-
+      ratetemp = n_cpu_nodes*(rate[1]) / (timer()-ticp)
+      rateave += ratetemp
+      #print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
       ndone += 1
+      print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp), '  ', np.int(rateave/ndone))
+
       if nsubmit < njobs:
         #pats = indexer.fID.read_data(convertToFloat=True,patStartEnd=[p_indx_start[nsubmit],p_indx_end[nsubmit]],
         #                             returnArrayOnly=True)
@@ -159,6 +169,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
         #                                  patEnd = p_indx_end[nsubmit]))
         workers.append(index_chunk.remote(pats=None,indexer=remote_indexer,patStart=p_indx_start[nsubmit],
                                           patEnd=p_indx_end[nsubmit]))
+        timers.append(timer())
         nsubmit += 1
 
 
@@ -283,7 +294,7 @@ class EBSDIndexer():
     indxData['pq'] = np.sum(bandData['max'], axis = 1)
     indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
     bandNorm = self.peakDetectPlan.radon2pole(bandData,PC=self.PC,vendor=self.vendor)
-    print('Find Band: ', timer() - tic)
+    #print('Find Band: ', timer() - tic)
 
     #return bandNorm,patStart,patEnd
     tic = timer()
@@ -331,7 +342,7 @@ class EBSDIndexer():
     qref2detect = self.refframe2detector()
     q = rotlib.quat_multiply(q,qref2detect)
     indxData['quat'] = q
-    print('bandvote: ', timer() - tic)
+    #print('bandvote: ', timer() - tic)
     return indxData, patStart, patEnd
 
   def refframe2detector(self):

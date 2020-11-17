@@ -10,6 +10,7 @@ import gputools
 RADEG = 180.0/np.pi
 
 
+
 class BandDetect():
   def __init__(self, patterns=None, patDim = None, nTheta = 180, nRho=90,\
       tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9):
