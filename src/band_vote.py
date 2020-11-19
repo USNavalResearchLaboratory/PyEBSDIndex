@@ -9,6 +9,8 @@ class BandVote():
   def __init__(self, tripLib, angTol = 3.0):
     self.tripLib = tripLib
     self.angTol = angTol
+    # these lookup tables are used to order the index for the pole-family when
+    # sorting triplet angles from low to high.
     LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]],dtype=np.int64)
     LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]],dtype=np.int64)
 
@@ -27,17 +29,9 @@ class BandVote():
     bandangs = np.clip(bandangs, -1.0, 1.0)
     bandangs  = np.arccos(bandangs)*RADEG
 
-    # same sorting used in building the triplet library
-    # LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]], dtype=np.int64)
-    # LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]], dtype=np.int64)
-    #
-    # LUT = np.zeros((3,3,3,3),dtype=np.int64)
-    # for i in range(6):
-    #   LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
-    # LUT = np.asarray(LUT).copy()
     tic = timer()
     if goNumba == True:
-      accumulator, bandFam, bandRank, band_cm = tripvote_numba(bandangs, self.LUT, self.angTol, self.tripLib.tripAngles, self.tripLib.tripID, nfam, n_bands)
+      accumulator, bandFam, bandRank, band_cm = self.tripvote_numba(bandangs, self.LUT, self.angTol, self.tripLib.tripAngles, self.tripLib.tripID, nfam, n_bands)
     else:
       count = 0
       accumulator = np.zeros((nfam,n_bands),dtype=np.int32)
@@ -134,53 +128,10 @@ class BandVote():
 
     wh01 += famIndx[f1]
     p0 = poles[famIndx[f0], :]
-
+    #print('pre first loop: ',timer() - tic)
+    tic = timer()
     # place numba code here ...
-    angFit, polematch, R = band_vote_refine_loops1(poles,v0,v1, p0, wh01, bandnorms, angTol)
-
-    # v0v1c = np.cross(v0,v1)
-    # v0v1c /= np.linalg.norm(v0v1c)
-    # # attempt to see which solution gives the best match to all the poles
-    # # best is measured as the number of poles that are within tolerance.
-    # # Use the TRIAD method for finding the rotation matrix
-    #
-    # Rtry = np.zeros((n01,3,3))
-    # score = np.zeros(n01)
-    # A = np.zeros((3,3))
-    # #B = np.zeros((3,3))
-    # b2 = np.cross(v0,v0v1c)
-    # B = np.squeeze([[v0],[v0v1c],[b2]])
-    # A[:,0] = p0
-    # score = -1
-    #
-    # for i in range(n01):
-    #   p1 = poles[wh01[i], :]
-    #   ntemp = np.linalg.norm(p1)+1.0e-35
-    #   p1 = p1/ntemp
-    #   p0p1c = np.cross(p0, p1)
-    #   ntemp = np.linalg.norm(p0p1c)+1.0e-35
-    #   p0p1c = p0p1c/ntemp
-    #   A[:,1] = p0p1c
-    #   A[:,2] = np.cross(p0, p0p1c)
-    #   Rtry[i, :,:] = A.dot(B)
-    #
-    #   testp = (Rtry[i, :, :].dot(bandnorms.T)).T
-    #   test = poles.dot(testp.T)
-    #
-    #   angfitTry = np.clip(np.amax(test, axis=0), -1.0, 1.0)
-    #
-    #   angfitTry = np.arccos(angfitTry)*RADEG
-    #   whMatch = np.nonzero(angfitTry < angTol)[0]
-    #
-    #   nmatch = whMatch.size
-    #   scoreTry = nmatch * np.mean(np.abs(angTol - angfitTry[whMatch]))
-    #
-    #   if scoreTry > score:
-    #     score = scoreTry
-    #     angFit = angfitTry
-    #     polematch = np.argmax(test, axis=0)
-    #     R = Rtry[i, :,:]
-
+    angFit, polematch, R = self.band_vote_refine_loops1(poles,v0,v1, p0, wh01, bandnorms, angTol)
 
     whGood = np.nonzero(angFit < angTol)[0]
     nGood = np.int64(whGood.size)
@@ -191,41 +142,15 @@ class BandVote():
 
     if nNoGood > 0:
       polematch[whNoGood] = -1
-
+    #print('first loop: ',timer() - tic)
     # do a n choose 2 of the rest of the poles
     # n choose k combinations --> C = n! / (k!(n-k)! == product(lindgen(k)+(n-k+1)) / factorial(k)
     # N Choose K with N = good band poles and K = 2
-    #print('first loop: ', timer() - tic)
     tic = timer()
     n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int(2))
     whGood = np.asarray(whGood,dtype=np.int64)
     #qweight = np.zeros(n2Fit)
-    AB = band_vote_refine_loops2(nGood,whGood,poles,bandnorms,polematch,n2Fit)
-
-    #quats = np.zeros((n2Fit, 4), dtype = np.float32)
-    # AB = np.zeros((n2Fit, 3,3), dtype = np.float32)
-    # counter = 0
-    # for i in range(nGood):
-    #   v0 = bandnorms[whGood[i], :]
-    #   p0 = poles[polematch[whGood[i]], :]
-    #   A[:,0] = p0
-    #   B[0,:] = v0
-    #   for j in range(i+1, nGood):
-    #     v1 = bandnorms[whGood[j], :]
-    #     p1 = poles[polematch[whGood[j]], :]
-    #     v0v1c = np.cross(v0, v1)
-    #     #v0v1c /= np.linalg.norm(v0v1c)+1.0e-35
-    #     v0v1c = vectnorm(v0v1c)
-    #     p0p1c = np.cross(p0, p1)
-    #     #p0p1c /= (np.linalg.norm(p0p1c))+1.0e-35
-    #     p0p1c = vectnorm(p0p1c)
-    #     A[:,1] = p0p1c
-    #     B[1,:] = v0v1c
-    #     A[:,2] = np.cross(p0, p0p1c)
-    #     B[2,:] = np.cross(v0, v0v1c)
-    #     AB[counter, :,:] = A.dot(B)
-    #     counter += 1
-
+    AB = self.band_vote_refine_loops2(nGood,whGood,poles,bandnorms,polematch,n2Fit)
 
     #print('looping: ',timer() - tic)
     tic = timer()
@@ -245,9 +170,9 @@ class BandVote():
     #print('averaging: ',timer() - tic)
     return (avequat, fit, polematch, nGood )
 
-
-@numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
-def tripvote_numba( bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
+  @staticmethod
+  @numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
+  def tripvote_numba( bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
     LUTTemp = np.asarray(LUT).copy()
     accumulator = np.zeros((nfam, n_bands), dtype=np.int32)
     tshape = np.shape(tripAngles)
@@ -302,121 +227,113 @@ def tripvote_numba( bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
 
     return accumulator, bandFam, bandRank, band_cm
 
-@numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
-def vectnorm(v):
-  sum = numba.float32(0.0)
-  for i in range(3):
-    sum += v[i]*v[i]
-  sum = np.sqrt(sum)+1.0e-35
-  for i in range(3):
-    v[i] = v[i]/sum
-  return v
-
-@numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
-def band_vote_refine_loops1(poles, v0, v1, p0, wh01, bandnorms, angTol):
-  nBnds = bandnorms.shape[0]
-  n01 = wh01.size
-  v0v1c = np.cross(v0,v1)
-  v0v1c /= np.linalg.norm(v0v1c)
-  # attempt to see which solution gives the best match to all the poles
-  # best is measured as the number of poles that are within tolerance.
-  # Use the TRIAD method for finding the rotation matrix
-  pflt = np.asarray(poles, dtype = np.float32)
-  Rtry = np.zeros((n01,3,3), dtype = np.float32)
-  bndnorm = np.transpose(np.asarray(bandnorms, dtype = np.float32))
-  #score = np.zeros((n01), dtype = np.float32)
-  A = np.zeros((3,3), dtype = np.float32)
-  B = np.zeros((3,3), dtype = np.float32)
-  AB = np.zeros((3,3),dtype=np.float32)
-  b2 = np.cross(v0,v0v1c)
-  B[0,:] = v0
-  B[1,:] = v0v1c
-  B[2,:] = b2
-  A[:,0] = p0
-  score = -1.0
-
-  for i in range(n01):
-    p1 = poles[wh01[i],:]
-    ntemp = np.linalg.norm(p1) + 1.0e-35
-    p1 = p1 / ntemp
-    p0p1c = np.cross(p0,p1)
-    ntemp = np.linalg.norm(p0p1c) + 1.0e-35
-    p0p1c = p0p1c / ntemp
-    A[:,1] = p0p1c
-    A[:,2] = np.cross(p0,p0p1c)
-    AB = A.dot(B)
-    Rtry[i,:,:] = AB
-
-    testp = (AB.dot(bndnorm))
-    test = pflt.dot(testp)
-    #print(test.shape)
-    angfitTry = np.zeros((nBnds), dtype = np.float32)
-    #angfitTry = np.max(test,axis=0)
-    for j in range(nBnds):
-      angfitTry[j] = np.max(test[:,j])
-      angfitTry[j] = -1.0 if angfitTry[j] < -1.0 else angfitTry[j]
-      angfitTry[j] =  1.0 if angfitTry[j] >  1.0 else angfitTry[j]
-
-    #angfitTry = np.clip(np.amax(test,axis=0),-1.0,1.0)
-
-    angfitTry = np.arccos(angfitTry) * RADEG
-    whMatch = np.nonzero(angfitTry < angTol)[0]
-
-    nmatch = whMatch.size
-    scoreTry = np.float32(nmatch) * np.mean(np.abs(angTol - angfitTry[whMatch]))
-
-    if scoreTry > score:
-      score = scoreTry
-      angFit = angfitTry
-      polematch = np.zeros((nBnds), dtype = np.int32)
-      for j in range(nBnds):
-        polematch[j] = np.argmax(test[:,j])
-      R = Rtry[i,:,:]
-
-  return angFit, polematch, R
-
-@numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
-def band_vote_refine_loops2(nGood, whGood, poles, bandnorms, polematch, n2Fit):
-  quats = np.zeros((n2Fit,4),dtype=np.float32)
-  counter = 0
-  A = np.zeros((3,3), dtype = np.float32)
-  B = np.zeros((3,3), dtype = np.float32)
-  AB = np.zeros((n2Fit, 3,3), dtype= np.float32)
-  for i in range(nGood):
-    v0 = bandnorms[whGood[i],:]
-    p0 = poles[polematch[whGood[i]],:]
-    A[:,0] = p0
+  @staticmethod
+  @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
+  def band_vote_refine_loops1(poles, v0, v1, p0, wh01, bandnorms, angTol):
+    nBnds = bandnorms.shape[0]
+    n01 = wh01.size
+    v0v1c = np.cross(v0,v1)
+    v0v1c /= np.linalg.norm(v0v1c)
+    # attempt to see which solution gives the best match to all the poles
+    # best is measured as the number of poles that are within tolerance.
+    # Use the TRIAD method for finding the rotation matrix
+    pflt = np.asarray(poles, dtype = np.float32)
+    Rtry = np.zeros((n01,3,3), dtype = np.float32)
+    bndnorm = np.transpose(np.asarray(bandnorms, dtype = np.float32))
+    #score = np.zeros((n01), dtype = np.float32)
+    A = np.zeros((3,3), dtype = np.float32)
+    B = np.zeros((3,3), dtype = np.float32)
+    AB = np.zeros((3,3),dtype=np.float32)
+    b2 = np.cross(v0,v0v1c)
     B[0,:] = v0
-    for j in range(i + 1,nGood):
-      v1 = bandnorms[whGood[j],:]
-      p1 = poles[polematch[whGood[j]],:]
-      v0v1c = np.cross(v0,v1)
-      # v0v1c /= np.linalg.norm(v0v1c)+1.0e-35
-      # v0v1c = vectnorm(v0v1c) # faster to inline these functions
-      norm = numba.float32(0.0)
-      for ii in range(3):
-        norm += v0v1c[ii] * v0v1c[ii]
-      norm = np.sqrt(norm) + 1.0e-35
-      for ii in range(3):
-        v0v1c[ii] = v0v1c[ii] / norm
+    B[1,:] = v0v1c
+    B[2,:] = b2
+    A[:,0] = p0
+    score = -1.0
 
+    for i in range(n01):
+      p1 = poles[wh01[i],:]
+      ntemp = np.linalg.norm(p1) + 1.0e-35
+      p1 = p1 / ntemp
       p0p1c = np.cross(p0,p1)
-      # p0p1c /= (np.linalg.norm(p0p1c))+1.0e-35
-      #p0p1c = vectnorm(p0p1c) # faster to inline these functions
-      norm = numba.float32(0.0)
-      for ii in range(3):
-        norm += p0p1c[ii] * p0p1c[ii]
-      norm = np.sqrt(norm) + 1.0e-35
-      for ii in range(3):
-        p0p1c[ii] = p0p1c[ii] / norm
-
+      ntemp = np.linalg.norm(p0p1c) + 1.0e-35
+      p0p1c = p0p1c / ntemp
       A[:,1] = p0p1c
-      B[1,:] = v0v1c
       A[:,2] = np.cross(p0,p0p1c)
-      B[2,:] = np.cross(v0,v0v1c)
-      AB[counter, :,:] = A.dot(B)
-      #AB = np.reshape(AB, (1,3,3))
-      #quats[counter,:] = rotlib.om2quL(AB)
-      counter += 1
+      AB = A.dot(B)
+      Rtry[i,:,:] = AB
 
-  return AB
+      testp = (AB.dot(bndnorm))
+      test = pflt.dot(testp)
+      #print(test.shape)
+      angfitTry = np.zeros((nBnds), dtype = np.float32)
+      #angfitTry = np.max(test,axis=0)
+      for j in range(nBnds):
+        angfitTry[j] = np.max(test[:,j])
+        angfitTry[j] = -1.0 if angfitTry[j] < -1.0 else angfitTry[j]
+        angfitTry[j] =  1.0 if angfitTry[j] >  1.0 else angfitTry[j]
+
+      #angfitTry = np.clip(np.amax(test,axis=0),-1.0,1.0)
+
+      angfitTry = np.arccos(angfitTry) * RADEG
+      whMatch = np.nonzero(angfitTry < angTol)[0]
+
+      nmatch = whMatch.size
+      scoreTry = np.float32(nmatch) * np.mean(np.abs(angTol - angfitTry[whMatch]))
+
+      if scoreTry > score:
+        score = scoreTry
+        angFit = angfitTry
+        polematch = np.zeros((nBnds), dtype = np.int32)
+        for j in range(nBnds):
+          polematch[j] = np.argmax(test[:,j])
+        R = Rtry[i,:,:]
+
+    return angFit, polematch, R
+
+  @staticmethod
+  @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
+  def band_vote_refine_loops2(nGood, whGood, poles, bandnorms, polematch, n2Fit):
+    quats = np.zeros((n2Fit,4),dtype=np.float32)
+    counter = 0
+    A = np.zeros((3,3), dtype = np.float32)
+    B = np.zeros((3,3), dtype = np.float32)
+    AB = np.zeros((n2Fit, 3,3), dtype= np.float32)
+    for i in range(nGood):
+      v0 = bandnorms[whGood[i],:]
+      p0 = poles[polematch[whGood[i]],:]
+      A[:,0] = p0
+      B[0,:] = v0
+      for j in range(i + 1,nGood):
+        v1 = bandnorms[whGood[j],:]
+        p1 = poles[polematch[whGood[j]],:]
+        v0v1c = np.cross(v0,v1)
+        # v0v1c /= np.linalg.norm(v0v1c)+1.0e-35
+        # v0v1c = vectnorm(v0v1c) # faster to inline these functions
+        norm = numba.float32(0.0)
+        for ii in range(3):
+          norm += v0v1c[ii] * v0v1c[ii]
+        norm = np.sqrt(norm) + 1.0e-35
+        for ii in range(3):
+          v0v1c[ii] = v0v1c[ii] / norm
+
+        p0p1c = np.cross(p0,p1)
+        # p0p1c /= (np.linalg.norm(p0p1c))+1.0e-35
+        #p0p1c = vectnorm(p0p1c) # faster to inline these functions
+        norm = numba.float32(0.0)
+        for ii in range(3):
+          norm += p0p1c[ii] * p0p1c[ii]
+        norm = np.sqrt(norm) + 1.0e-35
+        for ii in range(3):
+          p0p1c[ii] = p0p1c[ii] / norm
+
+        A[:,1] = p0p1c
+        B[1,:] = v0v1c
+        A[:,2] = np.cross(p0,p0p1c)
+        B[2,:] = np.cross(v0,v0v1c)
+        AB[counter, :,:] = A.dot(B)
+        #AB = np.reshape(AB, (1,3,3))
+        #quats[counter,:] = rotlib.om2quL(AB)
+        counter += 1
+
+    return AB

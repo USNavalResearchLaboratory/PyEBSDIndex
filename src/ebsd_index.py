@@ -4,8 +4,8 @@ from pathlib import Path
 import ebsd_pattern
 import band_detect2
 import band_vote
-import band_vote_org
-import band_voteEX
+#import band_vote_org
+#import band_voteEX
 import rotlib
 import tripletlib
 import ray
@@ -294,7 +294,7 @@ class EBSDIndexer():
     indxData['pq'] = np.sum(bandData['max'], axis = 1)
     indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
     bandNorm = self.peakDetectPlan.radon2pole(bandData,PC=self.PC,vendor=self.vendor)
-    #print('Find Band: ', timer() - tic)
+    print('Find Band: ', timer() - tic)
 
     #return bandNorm,patStart,patEnd
     tic = timer()
@@ -339,10 +339,11 @@ class EBSDIndexer():
       indxData['phase'][i] = phase
       indxData['nmatch'][i] = nMatch
 
+
     qref2detect = self.refframe2detector()
     q = rotlib.quat_multiply(q,qref2detect)
     indxData['quat'] = q
-    #print('bandvote: ', timer() - tic)
+    print('bandvote: ',timer() - tic)
     return indxData, patStart, patEnd
 
   def refframe2detector(self):
