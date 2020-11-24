@@ -3,7 +3,7 @@ from os import path#, environ
 import numba
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage.morphology import grey_dilation as scipy_grey_dilation
-from radon_fast import Radon
+import radon_fast
 from timeit import default_timer as timer
 import matplotlib.pyplot as plt
 import pyopencl as cl
@@ -84,7 +84,7 @@ class BandDetect():
     if recalc_radon == True:
       self.rhoMax = 0.5 * np.float32(self.patDim.min())
       self.dRho = self.rhoMax/np.float32(self.nRho)
-      self.radonPlan = Radon(imageDim=self.patDim, nTheta=self.nTheta, nRho=self.nRho, rhoMax=self.rhoMax)
+      self.radonPlan = radon_fast.Radon(imageDim=self.patDim, nTheta=self.nTheta, nRho=self.nRho, rhoMax=self.rhoMax)
       temp = np.ones(self.patDim[-2:], dtype=np.float32)
       back = self.radonPlan.radon_faster(temp,fixArtifacts=True)
       back = (back > 0).astype(np.float32) / (back + 1.0e-12)
@@ -144,14 +144,14 @@ class BandDetect():
 
     eps = 1.e-6
     tic1 = timer()
-    rdnNorm = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
+    rdnNorm = radon_fast.radon_fasterCL(self.radonPlan, patterns,fixArtifacts=True)
 
     #rdnNorm = rdn*self.rdnNorm
     #print("Radon:",timer() - tic)
     tic = timer()
-    #rdnConv, lMaxRdn = self.band_conv(rdnNorm)
+    rdnConv, lMaxRdn = self.band_conv(rdnNorm)
     tic = timer()
-    rdnConv,lMaxRdn = self.band_convCL(rdnNorm)
+    #rdnConv,lMaxRdn = self.band_convCL(rdnNorm)
     #return rdnConv, lMaxRdn, rdnConv2, lMaxRdn2
     #print(rdnPad.shape,rdnConv2.shape)
     #print(lMaxRdn.shape,lMaxRdn2.shape)
@@ -421,7 +421,7 @@ class BandDetect():
     lMaxRdn[:,:,0:self.peakPad[1]] = 0
     lMaxRdn[:,:,-self.peakPad[1]:] = 0
 
-    print("Traditional:",timer() - tic)
+    #print("Traditional:",timer() - tic)
     return rdnPad, lMaxRdn
 
 
@@ -480,7 +480,7 @@ class BandDetect():
     resultPeakLoc2_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=resultPeakLoc2)
     prg.morphDilateKernel(queue,(shp[2], shp[1], shp[0]),None,rdnConv_gpu,np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]),
                           np.int32(self.peakMask.shape[1]), np.int32(self.peakMask.shape[0]), rdn_gpu)
-
+    queue.finish()
     prg.im1NEim2(queue,(shp[2],shp[1],shp[0]),None,rdnConv_gpu,rdn_gpu,resultPeakLoc2_gpu,
                  np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]))
 

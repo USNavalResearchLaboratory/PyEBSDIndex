@@ -1,6 +1,8 @@
 import numpy as np
 from pathlib import Path
-#from multiprocessing import Process, Queue
+import sys
+import multiprocessing
+import queue
 import ebsd_pattern
 import band_detect2
 import band_vote
@@ -9,10 +11,9 @@ import band_vote
 import rotlib
 import tripletlib
 import ray
-ray.services.get_node_ip_address = lambda: '127.0.0.1'
+#ray.services.get_node_ip_address = lambda: '127.0.0.1'
 from timeit import default_timer as timer
 import time
-import multiprocessing
 RADEG = 180.0/np.pi
 
 
@@ -45,11 +46,50 @@ def index_pats(pats = None, filename=None, filenameout=None, phaselist=['FCC'], 
 
 
 @ray.remote
-def index_chunk(pats = None, indexer = None, patStart = 0, patEnd = -1 ):
+def index_chunk_ray(pats = None, indexer = None, patStart = 0, patEnd = -1 ):
   tic = timer()
   dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd)
   rate = np.array([timer()-tic, indxend-indxstart])
   return dataout, indxstart,indxend, rate
+
+def index_chunk_MP(pats = None, queues = None, id = None):
+  #queues[0]: messaging queue -- will initially get the indexer object, and the mode.  Will listen for a "Done" after that.
+  #queues[1]: job queue
+  #queues[2]: results queue
+  indexer, mode = queues[0].get()
+  workToDo = True
+  while workToDo:
+    tic = timer()
+
+    try:
+      if mode == 'filemode':
+        pats = None
+        patStart,patEnd, jid = queues[1].get(False)
+      elif mode == 'memory': # the patterns were stored in memory and sent within the job queue
+        pats, patStart,patEnd, jid = queues[1].get(False)
+    except queue.Empty: # apparently queue.Empty is really unreliable.
+      time.sleep(0.01)
+    else:
+      dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd)
+      rate = np.array([timer() - tic,indxend - indxstart])
+
+      try:
+        queues[2].put((dataout,indxstart,indxend,rate,id,jid))
+      except:
+        print("Unexpected error:",sys.exc_info()[0])
+
+
+   # We will wait until an explicit "Done" comes from the main thread.
+    try:
+      wait_for_quit = queues[0].get(False)
+      if wait_for_quit == 'Done':
+       workToDo = False
+    except queue.Empty:
+      time.sleep(0.01)
+
+  return
+
+
 
 def index_pats_distributed(pats = None, filename=None, filenameout=None, phaselist=['FCC'], \
                vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
@@ -131,14 +171,14 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
     timers = []
     rateave = 0.0
     for i in range(n_cpu_nodes):
-      pats = indexer.fID.read_data(convertToFloat=True, patStartEnd=[p_indx_start[i],p_indx_end[i]],returnArrayOnly=True)
+      #pats = indexer.fID.read_data(convertToFloat=True, patStartEnd=[p_indx_start[i],p_indx_end[i]],returnArrayOnly=True)
       #pats = None
       #workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart=p_indx_start[nsubmit],
       #                                  patEnd=p_indx_end[nsubmit]))
-      workers.append(index_chunk.remote(pats = None, indexer = remote_indexer, \
+      workers.append(index_chunk_ray.remote(pats = None, indexer = remote_indexer, \
                                         patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
       timers.append(timer())
-      time.sleep(1)
+      time.sleep(0.05)
       nsubmit += 1
 
     #workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
@@ -167,7 +207,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
 
         #workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart = p_indx_start[nsubmit],
         #                                  patEnd = p_indx_end[nsubmit]))
-        workers.append(index_chunk.remote(pats=None,indexer=remote_indexer,patStart=p_indx_start[nsubmit],
+        workers.append(index_chunk_ray.remote(pats=None,indexer=remote_indexer,patStart=p_indx_start[nsubmit],
                                           patEnd=p_indx_end[nsubmit]))
         timers.append(timer())
         nsubmit += 1
@@ -175,7 +215,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
 
   if mode == 'memorymode':
     # send out the first batch
-    workers = [index_chunk.remote(pats=pats[p_indx_start[i]:p_indx_end[i],:,:],indexer=remote_indexer,patStart=p_indx_start[i],patEnd=p_indx_end[i]) for i
+    workers = [index_chunk_ray.remote(pats=pats[p_indx_start[i]:p_indx_end[i],:,:],indexer=remote_indexer,patStart=p_indx_start[i],patEnd=p_indx_end[i]) for i
                in range(n_cpu_nodes)]
     nsubmit += n_cpu_nodes
 
@@ -188,7 +228,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
       ndone += 1
 
       if nsubmit < njobs:
-        workers.append(index_chunk.remote(pats=pats[p_indx_start[nsubmit]:p_indx_end[nsubmit],:,:],indexer=remote_indexer,patStart=p_indx_start[nsubmit],
+        workers.append(index_chunk_ray.remote(pats=pats[p_indx_start[nsubmit]:p_indx_end[nsubmit],:,:],indexer=remote_indexer,patStart=p_indx_start[nsubmit],
                                           patEnd=p_indx_end[nsubmit]))
         nsubmit += 1
 
@@ -198,6 +238,171 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
   else:
     return dataout
 
+def index_patsMP(pats = None, filename=None, filenameout=None, phaselist=['FCC'], \
+               vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
+               peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9,
+               patStart = 0, patEnd = -1, chunksize = 1000, ncpu=-1,
+               return_indexer_obj = False, ebsd_indexer_obj = None):
+
+
+
+  n_cpu_nodes = int(multiprocessing.cpu_count()) #int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
+  if ncpu != -1:
+    n_cpu_nodes = ncpu
+
+
+  if pats is None:
+    pdim = None
+  else:
+    pdim = pats.shape[-2:]
+  if ebsd_indexer_obj == None:
+    indexer = EBSDIndexer(filename=filename, phaselist=phaselist, \
+               vendor=None, PC = PC, sampleTilt=sampleTilt, camElev = camElev,\
+               peakDetectPlan = peakDetectPlan, \
+               nRho=nRho, nTheta=nTheta, tSigma= tSigma, rSigma=rSigma, rhoMaskFrac=rhoMaskFrac, nBands=nBands, patDim = pdim)
+  else:
+    indexer = ebsd_indexer_obj
+
+  # differentiate between getting a file to index or an array
+  # Need to index one pattern to make sure the indexer object is fully initiated before
+  #   placing in shared memory store.
+  mode = 'memorymode'
+  if pats is None:
+    mode = 'filemode'
+    #just make sure indexer is fully initialized
+    temp, indexer = index_pats(patStart = 0, patEnd = 1,return_indexer_obj = True, ebsd_indexer_obj = indexer)
+
+  if mode == 'filemode':
+    npats = indexer.fID.nPatterns
+  else:
+    pshape = pats.shape
+    if len(pshape) == 2:
+      npats = 1
+      pats = pats.reshape([1,pshape[0],pshape[1]])
+    else:
+      npats = pshape[0]
+    temp,indexer = index_pats(pats[0,:,:], patStart=0,patEnd=1,return_indexer_obj=True,ebsd_indexer_obj=indexer)
+
+  if patEnd == 0:
+    patEnd = 1
+  if (patStart !=0) or (patEnd > 0):
+    npats = patEnd - patStart
+
+  # set up the jobs
+  njobs = (np.ceil(npats/chunksize)).astype(np.long)
+  p_indx_start = [i*chunksize+patStart for i in range(njobs)]
+  p_indx_end = [(i+1)*chunksize+patStart for i in range(njobs)]
+  p_indx_end[-1] = npats+patStart
+  if njobs < n_cpu_nodes:
+    n_cpu_nodes = njobs
+
+
+
+  dataout = np.zeros((npats),dtype=indexer.dataTemplate)
+  returnqueue = []
+
+  ndone = 0
+  tic = timer()
+  npatsdone = 0.0
+  toc = 0.0
+  messagequeue = [] # each worker will get its own message queue
+  workers = []
+  rateave = 0.0
+  jobqueue = multiprocessing.Queue()
+  jcheck = np.ones(njobs)
+  if mode == 'filemode':
+    for i in range(njobs):
+      jobqueue.put((p_indx_start[i],p_indx_end[i], i))
+
+    tic = timer()
+    for i in range(n_cpu_nodes): # launch the workers
+      messagequeue.append(multiprocessing.Queue())
+      messagequeue[i].put((indexer, mode))
+      returnqueue.append(multiprocessing.Queue())
+      workers.append(multiprocessing.Process(target=index_chunk_MP,args=(None, \
+                                            [messagequeue[i], jobqueue, returnqueue[i]], i)))
+      workers[i].start()
+    ntry = -1
+    workToDo = True
+    while ndone < njobs:
+      # check if work is done.
+      time.sleep(0.01)
+      for i in range(n_cpu_nodes):
+        try:
+          wrkdataout,indxstr,indxend, rate, wrkID, jid = returnqueue[i].get(False)
+          dataout[indxstr:indxend] = wrkdataout
+          npatsdone += rate[1]
+          ratetemp = n_cpu_nodes*(rate[1]) / (rate[0])
+          rateave += ratetemp
+          jcheck[jid] = 0
+          ntry = 0
+          ndone = np.count_nonzero(jcheck == 0)
+          #print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp), '  ',
+          #      np.int(npatsdone/(timer()-tic)), np.int(npatsdone/npats*100), '%  ', njobs, ndone )
+          whzero = jcheck.nonzero()[0]
+          if whzero.size < 10:
+            print(jcheck.nonzero()[0])
+        except queue.Empty: # there is a strange race condition that I can not figure out.
+          if ntry >= 0:
+            ntry +=1
+            time.sleep(0.001)
+            if ntry > 1000:
+              ntry = 0
+              whbad = jcheck.nonzero()[0]
+              print('adding back jobs', whbad[0])
+              jobqueue.put((p_indx_start[whbad[0]],p_indx_end[whbad[0]], whbad[0]))
+        except:
+          print("Unexpected error:",sys.exc_info()[0])
+
+
+
+  if mode == 'memorymode':
+
+    nsubmit = 0
+    n2queue = n_cpu_nodes+4 if (njobs > (n_cpu_nodes+4)) else  n_cpu_nodes # going to pre-load a few extra jobs.
+    # memory concerns are the only reason we do not load all into the queue at once.
+    for i in range(n2queue):
+      jobqueue.put(((pats[p_indx_start[nsubmit]:p_indx_end[nsubmit],:,:], p_indx_start[nsubmit],p_indx_end[nsubmit])))
+      nsubmit +=1
+
+    for i in range(n_cpu_nodes): # launch the workers
+      toc = timer()
+      messagequeue.append(multiprocessing.Queue())
+      #print('New q', timer()-toc)
+      toc = timer()
+      messagequeue[i].put((indexer, mode)) # provide the indexer and where the patterns are coming from
+      workers.append(multiprocessing.Process(target=index_chunk_MP,args=(None, \
+                                            [messagequeue[i], jobqueue, returnqueue], i)))
+      workers[i].start()
+
+    while ndone < njobs:
+      # check if work is done.
+      try:
+        wrkdataout,indxstr,indxend,rate,wrkID = returnqueue.get(False)
+        dataout[indxstr:indxend] = wrkdataout
+        npatsdone += rate[1]
+        ratetemp = n_cpu_nodes * (rate[1]) / (rate[0])
+        rateave += ratetemp
+        ndone += 1
+        print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp),'  ',
+              np.int(npatsdone / (timer() - tic)),np.int(npatsdone / npats * 100),'%  ',njobs,ndone)
+        if nsubmit < njobs: # still more to do.
+          jobqueue.put(
+            ((pats[p_indx_start[nsubmit]:p_indx_end[nsubmit],:,:],p_indx_start[nsubmit],p_indx_end[nsubmit])))
+          nsubmit += 1
+      except queue.Empty:
+        pass
+
+  for i in range(n_cpu_nodes):
+    messagequeue[i].put('Done')
+    workers[i].join()
+    workers[i].close()
+
+
+  if return_indexer_obj:
+    return dataout, indexer
+  else:
+    return dataout
 
 
 
@@ -294,7 +499,7 @@ class EBSDIndexer():
     indxData['pq'] = np.sum(bandData['max'], axis = 1)
     indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
     bandNorm = self.peakDetectPlan.radon2pole(bandData,PC=self.PC,vendor=self.vendor)
-    print('Find Band: ', timer() - tic)
+    #print('Find Band: ', timer() - tic)
 
     #return bandNorm,patStart,patEnd
     tic = timer()
@@ -343,7 +548,7 @@ class EBSDIndexer():
     qref2detect = self.refframe2detector()
     q = rotlib.quat_multiply(q,qref2detect)
     indxData['quat'] = q
-    print('bandvote: ',timer() - tic)
+    #print('bandvote: ',timer() - tic)
     return indxData, patStart, patEnd
 
   def refframe2detector(self):
