@@ -149,7 +149,7 @@ class BandDetect():
     #rdnNorm = rdn*self.rdnNorm
     #print("Radon:",timer() - tic)
     tic = timer()
-    rdnConv, lMaxRdn = self.band_convCL2(rdnNorm)
+    rdnConv, lMaxRdn = self.band_conv(rdnNorm)
     #print("Conv:",timer() - tic)
     tic = timer()
     #rdnConv,lMaxRdn = self.band_convCL(rdnNorm)
