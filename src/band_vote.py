@@ -6,8 +6,11 @@ RADEG = 180.0/np.pi
 
 
 class BandVote():
-  def __init__(self, tripLib, angTol = 3.0):
+  def __init__(self, tripLib, angTol = 2.0):
     self.tripLib = tripLib
+    self.phaseName = self.tripLib.phaseName
+    self.phaseSym = self.tripLib.symmetry
+    self.latticeParam = self.tripLib.latticeParameter
     self.angTol = angTol
     # these lookup tables are used to order the index for the pole-family when
     # sorting triplet angles from low to high.
@@ -19,7 +22,9 @@ class BandVote():
       LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
     self.LUT = np.asarray(LUT).copy()
 
-  def tripvote(self, bandnormsIN, goNumba = False):
+
+
+  def tripvote(self, bandnormsIN, goNumba = True):
     tic0 = timer()
     nfam = self.tripLib.family.shape[0]
     bandnorms = np.squeeze(bandnormsIN)
@@ -74,20 +79,39 @@ class BandVote():
     #print('vote loops: ', timer() - tic)
     tic = timer()
 
-    #avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam,self.tripLib.completelib,self.angTol)
-    avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam, angTol = self.angTol)
-    if nMatch == 0:
-      srt = np.argsort(bandRank)
-      for i in range(np.min([5, n_bands])):
-        bandRank2 = bandRank
-        bandRank2[srt[i]] = -1.0
-        #avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam,self.tripLib.completelib,self.angTol)
-        avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam)
-        if nMatch > 2:
-          break
+    # avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam, angTol = self.angTol)
+    # if nMatch == 0:
+    #   srt = np.argsort(bandRank)
+    #   for i in range(np.min([5, n_bands])):
+    #     bandRank2 = bandRank
+    #     bandRank2[srt[i]] = -1.0
+    #     #avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam,self.tripLib.completelib,self.angTol)
+    #     avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam)
+    #     if nMatch > 2:
+    #       break
     #print('refinement: ', timer() - tic)
     #print('tripvote: ',timer() - tic0)
-    return avequat, fit, np.mean(band_cm), bandmatch, nMatch
+    bandRank_arg = np.argsort(bandRank)
+    test  = 0
+    for i in range(n_bands-1):
+      for j in range(i+1,n_bands):
+        avequat,fit,bandmatch,nMatch = self.band_vote_refine2(bandnorms, bandRank_arg[-1-i], bandRank_arg[-1-j] ,bandFam,angTol=self.angTol)
+        test += 1
+        if nMatch > 2:
+          break
+      if nMatch > 2:
+        break
+
+    whmatch = np.nonzero(bandmatch >= 0)[0]
+    if len(whmatch > 0):
+      cm = np.mean(band_cm[whmatch])
+    else:
+      cm = 0.0
+    # print('refinement: ', timer() - tic)
+    # print('tripvote: ',timer() - tic0)
+
+
+    return avequat, fit, cm, bandmatch, nMatch, (i,j)
 
   def band_vote_refine(self,bandnorms,bandRank,familyLabel,angTol=3.0):
     tic = timer()
@@ -152,7 +176,83 @@ class BandVote():
     #qweight = np.zeros(n2Fit)
     AB = self.band_vote_refine_loops2(nGood,whGood,poles,bandnorms,polematch,n2Fit)
 
-    #print('looping: ',timer() - tic)
+    #print('2nd looping: ',timer() - tic)
+    tic = timer()
+    quats = rotlib.om2qu(AB)
+    sign0 = np.sum(quats[0,:] * quats, axis = 1)
+    sign = ((sign0 >= 0).astype(np.float32) - (sign0 < 0).astype(np.float32)).reshape(n2Fit,1)
+    quats *= sign
+    avequat = np.mean(quats, axis = 0)
+    avequat = rotlib.quatnorm(avequat)
+    #if avequat[0] < 0:
+    #  avequat *= -1.0
+
+    test = rotlib.quat_vector(avequat,bandnorms[whGood,:])
+    test = np.sum(test * poles[polematch[whGood], :], axis = 1)
+    test = np.arccos(np.clip(test, -1.0, 1.0))*RADEG
+    fit = np.mean(test)
+    #print('averaging: ',timer() - tic)
+    return (avequat, fit, polematch, nGood )
+
+  def band_vote_refine2(self,bandnorms,bnd1,bnd2,familyLabel,angTol=3.0):
+    tic = timer()
+    nBands = np.int(bandnorms.size/3)
+    angTable = self.tripLib.completelib['angTable']
+    sztable = angTable.shape
+
+    famIndx = self.tripLib.completelib['famIndex']
+    nFam = self.tripLib.completelib['nFamily']
+    poles = self.tripLib.completelib['polesCart']
+    nPoles = np.int(poles.size / 3)
+    v0indx = bnd1
+    v1indx = bnd2
+    ang01 = 0.0
+    # need to check that the two selected bands are not parallel.
+    v0 = bandnorms[bnd1, :]
+    f0 = familyLabel[bnd1]
+    v1 = bandnorms[bnd2, :]
+    f1 = familyLabel[bnd2]
+    ang01 = np.clip(np.dot(v0, v1), -1.0, 1.0)
+    ang01 = np.arccos(ang01)*RADEG
+    if ang01 < angTol: # the two poles are parallel, send in another two poles if available.
+      return (np.array([1.0,0,0,0]),360.0,nBands - 1,0)
+
+
+
+
+    wh01 = np.nonzero(np.abs(angTable[famIndx[f0], famIndx[f1]:np.int(famIndx[f1]+nFam[f1])] - ang01) < angTol)[0]
+
+    n01 = wh01.size
+    if  n01 == 0:
+      return (np.array([1.0, 0, 0, 0]), 360.0, nBands-1, 0)
+
+    wh01 += famIndx[f1]
+    p0 = poles[famIndx[f0], :]
+    #print('pre first loop: ',timer() - tic)
+    tic = timer()
+    # place numba code here ...
+    angFit, polematch, R = self.band_vote_refine_loops1(poles,v0,v1, p0, wh01, bandnorms, angTol)
+
+    whGood = np.nonzero(angFit < angTol)[0]
+    nGood = np.int64(whGood.size)
+    if nGood < 3:
+      return (np.array([1.0,0,0,0]),360.0,nBands - 1,0)
+    whNoGood = np.nonzero(angFit >= angTol)[0]
+    nNoGood = whNoGood.size
+
+    if nNoGood > 0:
+      polematch[whNoGood] = -1
+    #print('first loop: ',timer() - tic)
+    # do a n choose 2 of the rest of the poles
+    # n choose k combinations --> C = n! / (k!(n-k)! == product(lindgen(k)+(n-k+1)) / factorial(k)
+    # N Choose K with N = good band poles and K = 2
+    tic = timer()
+    n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int(2))
+    whGood = np.asarray(whGood,dtype=np.int64)
+    #qweight = np.zeros(n2Fit)
+    AB = self.band_vote_refine_loops2(nGood,whGood,poles,bandnorms,polematch,n2Fit)
+
+    #print('2nd looping: ',timer() - tic)
     tic = timer()
     quats = rotlib.om2qu(AB)
     sign0 = np.sum(quats[0,:] * quats, axis = 1)

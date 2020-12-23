@@ -11,10 +11,11 @@ import band_vote
 import rotlib
 import tripletlib
 import ray
-#ray.services.get_node_ip_address = lambda: '127.0.0.1'
+ray.services.get_node_ip_address = lambda: '127.0.0.1'
 from timeit import default_timer as timer
 import time
 RADEG = 180.0/np.pi
+import traceback
 
 
 
@@ -52,44 +53,89 @@ def index_chunk_ray(pats = None, indexer = None, patStart = 0, patEnd = -1 ):
   rate = np.array([timer()-tic, indxend-indxstart])
   return dataout, indxstart,indxend, rate
 
-def index_chunk_MP(pats = None, queues = None, id = None):
+def index_chunk_MP(pats = None, queues = None,lock=None, id = None):
   #queues[0]: messaging queue -- will initially get the indexer object, and the mode.  Will listen for a "Done" after that.
   #queues[1]: job queue
   #queues[2]: results queue
+
   indexer, mode = queues[0].get()
   workToDo = True
   while workToDo:
     tic = timer()
 
     try:
+      #lock.acquire()
       if mode == 'filemode':
         pats = None
         patStart,patEnd, jid = queues[1].get(False)
       elif mode == 'memory': # the patterns were stored in memory and sent within the job queue
         pats, patStart,patEnd, jid = queues[1].get(False)
     except queue.Empty: # apparently queue.Empty is really unreliable.
+      #lock.release()
       time.sleep(0.01)
     else:
+      #lock.release()
       dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd)
       rate = np.array([timer() - tic,indxend - indxstart])
 
-      try:
-        queues[2].put((dataout,indxstart,indxend,rate,id,jid))
-      except:
-        print("Unexpected error:",sys.exc_info()[0])
+      #try:
+      queues[2].send((dataout,indxstart,indxend,rate,id,jid))
+      #except:
+      #  print("Unexpected error:",sys.exc_info()[0])
 
 
    # We will wait until an explicit "Done" comes from the main thread.
     try:
       wait_for_quit = queues[0].get(False)
       if wait_for_quit == 'Done':
-       workToDo = False
+        workToDo = False
+        queues[2].close()
+        return
     except queue.Empty:
       time.sleep(0.01)
-
   return
+def index_chunk_MP2(pats = None, queues = None,lock=None, id = None):
+  #queues[0]: messaging queue -- will initially get the indexer object, and the mode.  Will listen for a "Done" after that.
+  #queues[1]: job queue
+  #queues[2]: results queue
 
+  indexer, mode = queues[0].get()
+  #print('here', id)
+  workToDo = True
+  while workToDo:
+    tic = timer()
+    lock[0].acquire()
+    #print(queues[1].empty())
+    if queues[1].empty() == False:
+      if mode == 'filemode':
+        pats = None
+        patStart,patEnd, jid = queues[1].get()
+      elif mode == 'memory': # the patterns were stored in memory and sent within the job queue
+        pats, patStart,patEnd, jid = queues[1].get()
+      lock[0].release()
+      dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd)
+      rate = np.array([timer() - tic,indxend - indxstart])
 
+      queues[2].send((dataout,indxstart,indxend,rate,id,jid))
+    else:
+      lock[0].release()
+      time.sleep(0.01)
+
+    # We will wait until an explicit "Done" comes from the main thread.
+    lock[1].acquire()
+    if queues[0].empty() == False:
+      wait_for_quit = queues[0].get()
+      lock[1].release()
+      if wait_for_quit == 'Done':
+        workToDo = False
+        queues[2].close()
+        #queues[0].close()
+
+        return
+    else:
+      lock[1].release()
+      time.sleep(0.01)
+  return
 
 def index_pats_distributed(pats = None, filename=None, filenameout=None, phaselist=['FCC'], \
                vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
@@ -105,7 +151,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
 
   ray.shutdown()
 
-  ray.init(num_cpus=n_cpu_nodes, dashboard_host='0.0.0.0')
+  ray.init(num_cpus=n_cpu_nodes, num_gpus=1 )
 
   if pats is None:
     pdim = None
@@ -306,53 +352,71 @@ def index_patsMP(pats = None, filename=None, filenameout=None, phaselist=['FCC']
   npatsdone = 0.0
   toc = 0.0
   messagequeue = [] # each worker will get its own message queue
+  messagelock = []
   workers = []
   rateave = 0.0
-  jobqueue = multiprocessing.Queue()
+  readlock = multiprocessing.Lock()
+  jobqueue = multiprocessing.SimpleQueue()
   jcheck = np.ones(njobs)
   if mode == 'filemode':
-    for i in range(njobs):
-      jobqueue.put((p_indx_start[i],p_indx_end[i], i))
+
+
 
     tic = timer()
     for i in range(n_cpu_nodes): # launch the workers
-      messagequeue.append(multiprocessing.Queue())
-      messagequeue[i].put((indexer, mode))
-      returnqueue.append(multiprocessing.Queue())
-      workers.append(multiprocessing.Process(target=index_chunk_MP,args=(None, \
-                                            [messagequeue[i], jobqueue, returnqueue[i]], i)))
+      messagequeue.append(multiprocessing.SimpleQueue())
+      messagelock.append(multiprocessing.Lock())
+      returnqueue.append(multiprocessing.Pipe())
+      workers.append(multiprocessing.Process(target=index_chunk_MP2,args=(None, \
+                                            [messagequeue[i], jobqueue, returnqueue[i][1]],[readlock, messagelock[i]], i)))
       workers[i].start()
+
+    readlock.acquire()
+    for i in range(njobs):
+      jobqueue.put((p_indx_start[i],p_indx_end[i], i))
+    readlock.release()
+    for i in range(n_cpu_nodes):
+      messagelock[i].acquire()
+      messagequeue[i].put((indexer,mode))
+      messagelock[i].release()
+    ndone = 0
     ntry = -1
-    workToDo = True
+    tryThresh = 400
+    ntrysum = 0
     while ndone < njobs:
       # check if work is done.
-      time.sleep(0.01)
+
       for i in range(n_cpu_nodes):
-        try:
-          wrkdataout,indxstr,indxend, rate, wrkID, jid = returnqueue[i].get(False)
+        #try:
+        if (returnqueue[i][0]).poll():
+          wrkdataout,indxstr,indxend, rate, wrkID, jid = returnqueue[i][0].recv()
           dataout[indxstr:indxend] = wrkdataout
           npatsdone += rate[1]
           ratetemp = n_cpu_nodes*(rate[1]) / (rate[0])
           rateave += ratetemp
           jcheck[jid] = 0
+          ndone += 1#np.count_nonzero(jcheck == 0)
+          ntrysum += np.max((ntry, 0))
+          tryThresh = np.int( ntrysum/np.float(ndone) )
+          #print( tryThresh, ntry)
           ntry = 0
-          ndone = np.count_nonzero(jcheck == 0)
-          #print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp), '  ',
-          #      np.int(npatsdone/(timer()-tic)), np.int(npatsdone/npats*100), '%  ', njobs, ndone )
+          print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp), '  ',
+                np.int(npatsdone/(timer()-tic)), np.int(npatsdone/npats*100), '%  ', njobs, ndone )
           whzero = jcheck.nonzero()[0]
-          if whzero.size < 10:
-            print(jcheck.nonzero()[0])
-        except queue.Empty: # there is a strange race condition that I can not figure out.
-          if ntry >= 0:
-            ntry +=1
-            time.sleep(0.001)
-            if ntry > 1000:
-              ntry = 0
-              whbad = jcheck.nonzero()[0]
-              print('adding back jobs', whbad[0])
-              jobqueue.put((p_indx_start[whbad[0]],p_indx_end[whbad[0]], whbad[0]))
-        except:
-          print("Unexpected error:",sys.exc_info()[0])
+          #if whzero.size < 10:
+          #  print(jcheck.nonzero()[0])
+        #except queue.Empty: # there is a strange race condition that I can not figure out.
+        #else:
+      time.sleep(0.005)
+      ntry +=1
+      if ntry > (10*tryThresh):
+        ntry = 0
+        whbad = jcheck.nonzero()[0]
+        if whbad.size > 0:
+          print('adding back job', whbad[0])
+          jobqueue.put((p_indx_start[whbad[0]],p_indx_end[whbad[0]], whbad[0]))
+        #except:
+        #  print("Unexpected error:",sys.exc_info()[0])
 
 
 
@@ -394,7 +458,13 @@ def index_patsMP(pats = None, filename=None, filenameout=None, phaselist=['FCC']
         pass
 
   for i in range(n_cpu_nodes):
+    messagelock[i].acquire()
     messagequeue[i].put('Done')
+    messagequeue[i].put('Done')
+    messagequeue[i].put('Done')
+    messagelock[i].release()
+  for i in range(n_cpu_nodes):
+    workers[i].terminate()
     workers[i].join()
     workers[i].close()
 
@@ -457,7 +527,7 @@ class EBSDIndexer():
 
     self.dataTemplate = np.dtype([('quat',np.float32, (4)),('iq',np.float32), \
                              ('pq',np.float32),('cm',np.float32),('phase',np.int32), \
-                             ('fit',np.float32),('nmatch', np.int32)])
+                             ('fit',np.float32),('nmatch', np.int32), ('matchattempts', np.int32, (2))])
 
 
   def index_pats(self, patsin=None, patStart = 0, patEnd = -1):
@@ -512,29 +582,30 @@ class EBSDIndexer():
     for i in range(npoints):
     #for i in range(10):
       phase = 0
-      fitmetric = 1e6
+      fitmetric = -1
 
       #avequat, fit, cm, bandmatch, nMatch = bv[0].tripvote(bandNorm[i,:,:], goNumba = True)
-      avequat,fit,cm,bandmatch,nMatch = self.phaseLib[0].tripvote(bandNorm[i,:,:],goNumba=True)
+      avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[0].tripvote(bandNorm[i,:,:],goNumba=True)
 
       if nMatch > 0:
         phase = 1
-        fitmetric = fit/nMatch * (np.max([cm, 0.001]))
+        fitmetric = nMatch * cm
 
-      fitmetric1 = 1e6
+      fitmetric1 = -1
       for j in range(1, len(self.phaseLib)):
 
         #avequat1,fit1,cm1,bandmatch1,nMatch1 = bv[j].tripvote(bandNorm[i,:,:], goNumba = True)
-        avequat1,fit1,cm1,bandmatch1,nMatch1 = self.phaseLib[j].tripvote(bandNorm[i,:,:],goNumba=True)
+        avequat1,fit1,cm1,bandmatch1,nMatch1, matchAttempts1 = self.phaseLib[j].tripvote(bandNorm[i,:,:],goNumba=True)
         if nMatch1 > 0:
-          fitmetric1 = fit1/nMatch1 * (np.max([cm1, 0.001]))
-        if fitmetric1 < fitmetric:
+          fitmetric1 = nMatch1 * cm1
+        if fitmetric1 > fitmetric:
           fitmetric = fitmetric1
           avequat = avequat1
           fit = fit1
           cm = cm1
           bandmatch = bandmatch1
           nMatch = nMatch1
+          matchAttempts = matchAttempts1
           phase = j+1
 
       #indxData['quat'][i] = avequat
@@ -543,6 +614,7 @@ class EBSDIndexer():
       indxData['cm'][i] = cm
       indxData['phase'][i] = phase
       indxData['nmatch'][i] = nMatch
+      indxData['matchattempts'][i] = matchAttempts
 
 
     qref2detect = self.refframe2detector()

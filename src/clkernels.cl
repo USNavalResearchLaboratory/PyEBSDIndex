@@ -1,5 +1,31 @@
 
 
+
+ __kernel void radonSum(
+      __global const unsigned long int *rdnIndx, __global const float *images, __global float *radon, 
+      const unsigned long int imstep, const unsigned long int indxstep, const unsigned long int rdnstep )
+  {
+    unsigned long int gid_im = get_global_id(0);
+    unsigned long int gid_rdn = get_global_id(1);
+    unsigned long int i, k, j, idx;
+    float sum, count;
+    
+    k = gid_rdn+gid_im*rdnstep;
+    sum = 0.0;
+    count = 0.0;
+    j = gid_im*imstep;
+    for (i=0; i<indxstep; i++){  
+      idx = rdnIndx[gid_rdn*indxstep+i];
+      if (idx >= imstep) {
+        break;
+      } else {
+        sum += images[j + idx];
+        count += 1.0;
+      } 
+    }      
+    radon[k] = sum/(count + 1.0e-12);
+  }
+
 __kernel void morphDilateKernel( __global const float *in, const int imszx, const int imszy, const int imszz, 
   const int kszx, const int kszy, __global float *out)
 {

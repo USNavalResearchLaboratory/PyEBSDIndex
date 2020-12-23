@@ -5,7 +5,7 @@ import numpy as np
 RADEG = 180.0/np.pi
 
 class triplib():
-  def __init__(self, libType='FCC'):
+  def __init__(self, libType='FCC', phaseName=None, laticeParameter = None):
     self.family = None
     self.nfamily = None
     self.angles = None
@@ -14,15 +14,33 @@ class triplib():
     self.tripAngles = None
     self.tripID = None
     self.completelib = None
+    self.symmetry = None
+    self.phaseName = None
+    self.latticeParameter = np.array([1.0, 1.0, 1.0, 90.0, 90.0, 90.0])
 
     if libType is None:
       return
 
+    if phaseName is None:
+      self.phaseName = libType
+    else:
+      self.phaseName = phaseName
+
     if libType.upper() == 'FCC':
       self.build_fcc()
+      self.symmetry = 43
+      if laticeParameter is None:
+        self.latticeParameter = np.array([1.0,1.0,1.0,90.0,90.0,90.0])
+      else:
+        self.latticeParameter = laticeParameter
 
     if libType.upper() == 'BCC':
       self.build_bcc()
+      self.symmetry = 43
+      if laticeParameter is None:
+        self.latticeParameter = np.array([1.0,1.0,1.0,90.0,90.0,90.0])
+      else:
+        self.latticeParameter = laticeParameter
 
   def build_fcc(self):
     poles = np.array([[0,0,2], [1,1,1], [0,2,2], [1,1,3]])

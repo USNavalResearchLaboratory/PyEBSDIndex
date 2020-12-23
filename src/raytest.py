@@ -1,9 +1,11 @@
 import ray
 ray.services.get_node_ip_address = lambda: '127.0.0.1'
 import numpy as np
+import os, sys
 import numba
 import time
 from timeit import default_timer as timer
+import pyopencl as cl
 #1from ebsd_index import index_chunk
 
 @ray.remote
@@ -26,11 +28,14 @@ def numbaadd(x,y):
 
 @ray.remote(num_cpus=1)
 def donothing(pat = None, goon = None, start = 0, end = -1):
-  time.sleep(10)
+
+  plat = cl.get_platforms()
+  print(os.environ['PATH'])
+  time.sleep(1)
   return 1, start, end
 
 def testqueue(ncpu):
-  njobs = 400
+  njobs = 1
   chunksize = 1000
   p_indx_start = [i * chunksize for i in range(njobs)]
   p_indx_end = [(i + 1) * chunksize for i in range(njobs)]
