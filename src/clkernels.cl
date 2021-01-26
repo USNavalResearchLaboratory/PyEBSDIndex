@@ -13,13 +13,10 @@
     const unsigned long int nTheta = get_global_size(2);
     unsigned long int i, idx;
     const unsigned long int j = gid_im*imstep;
-    //unsigned long int imStart, gid_rdn, gid_rdnP;
     float sum, count;
 
     //imStart = imstep * gid_im;
     const unsigned long int gid_rdn = gid_theta + nTheta * gid_rho;
-
-
     const unsigned long int gid_rdnP = nThetaP * nRhoP * gid_im + (nThetaP * (gid_rho+rhoPad)) + (gid_theta + thetaPad) ;
 
     sum = 0.0;
