@@ -223,8 +223,10 @@ class Radon():
     rdnIndx_gpu.release()
     if returnBuff == False:
       radon_gpu.release()
+      queue.finish()
       return radon, clparams, None
     else:
+      queue.finish()
       return radon, clparams, radon_gpu
 
     #if (fixArtifacts == True):

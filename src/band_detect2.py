@@ -184,6 +184,7 @@ class BandDetect():
     #bandData['max'] += mns.reshape(nPats,1)
     #print("BandLabel:",timer() - tic)
 
+
     if verbose == True:
       print('Total Band Find Time:',timer() - tic0)
       plt.clf()
