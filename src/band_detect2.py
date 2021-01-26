@@ -147,7 +147,7 @@ class BandDetect():
     rdnNorm = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
 
     #rdnNorm = rdn*self.rdnNorm
-    #print("Radon:",timer() - tic)
+    #print("Radon:",timer() - tic1)
     tic = timer()
     rdnConv, lMaxRdn = self.band_conv(rdnNorm)
     #print("Conv:",timer() - tic)
