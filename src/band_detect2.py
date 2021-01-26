@@ -150,7 +150,7 @@ class BandDetect():
     tic1 = timer()
     #rdnNorm = self.radonPlan.radon_faster(patterns,self.padding, fixArtifacts=True)
     rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns)
-    print("Radon: ", timer()-tic1)
+
     if self.CLOps[1] == False:
       rdnNorm_gpu  = None
       clparams = [None,None,None,None,None]
@@ -512,7 +512,6 @@ class BandDetect():
       shp = radonIn.shape
       if len(shp) == 2:
         radon = radonIn.reshape(1,shp[0], shp[1])
-
       shp = radon.shape
       rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radon)
 
