@@ -150,8 +150,16 @@ class BandDetect():
     tic1 = timer()
     #rdnNorm = self.radonPlan.radon_faster(patterns,self.padding, fixArtifacts=True)
     rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns)
+    print("Radon: ", timer()-tic1)
+    if self.CLOps[1] == False:
+      rdnNorm_gpu  = None
+      clparams = [None,None,None,None,None]
     #rdnNorm = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
     rdnConv, clparams, rdnConv_gpu = self.rdn_conv(rdnNorm, clparams, rdnNorm_gpu)
+    if self.CLOps[2] == False:
+      rdnConv_gpu = None
+      clparams = [None,None,None,None,None]
+
     #plt.imshow(rdnConv[-1,:,:])
     lMaxRdn = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu)
     tic = timer()
