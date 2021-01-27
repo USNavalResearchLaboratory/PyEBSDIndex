@@ -136,10 +136,6 @@ __kernel void convolution3d2d( __global const float *in, __constant float *kern,
   const int kszx2 = kszx/2;
   const int kszy2 = kszy/2;
 
-  //const long int istart = ((x-kszx2) >= 0) ? x-kszx2: 0;
-  //const long int iend = ((x+kszx2) < imszx) ? x+kszx2: imszx-1;
-  //const long int jstart = ((y-kszy2) >= 0) ? y-kszy2: 0;
-  //const long int jend = ((y+kszy2) < imszy) ? y+kszy2: imszy-1;
   const long int istart = ((x+kszx2) >= imszx) ? x+kszx2+1-imszx: 0;
   const long int iend = ((x-kszx2) < 0) ? x+kszx2+1: kszx;
   const long int startx = x+kszx2;

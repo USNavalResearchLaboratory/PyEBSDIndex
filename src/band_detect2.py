@@ -150,29 +150,22 @@ class BandDetect():
     tic1 = timer()
     #rdnNorm = self.radonPlan.radon_faster(patterns,self.padding, fixArtifacts=True)
     rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns)
-    #print("Radon", timer()-tic1)
-    tic1 = timer()
     if self.CLOps[1] == False:
       rdnNorm_gpu  = None
       clparams = [None,None,None,None,None]
+    rdntime = timer() - tic1
+    tic1 = timer()
     #rdnNorm = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
     rdnConv, clparams, rdnConv_gpu = self.rdn_conv(rdnNorm, clparams, rdnNorm_gpu)
     if self.CLOps[2] == False:
       rdnConv_gpu = None
       clparams = [None,None,None,None,None]
-    #print('Conv: ', timer()-tic1)
+    convtime = timer()-tic1
     tic1 = timer()
     #plt.imshow(rdnConv[-1,:,:])
     lMaxRdn = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu)
-    #print("lMax: ", timer()-tic1)
-    tic = timer()
-    #rdnConv, lMaxRdn = self.band_conv(rdnNorm)
-    #print("Conv:",timer() - tic)
-    tic = timer()
-    #rdnConv,lMaxRdn = self.band_convCL(rdnNorm)
-
-
-    #bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnPad,self.peakPad,self.peakMask)
+    lmaxtime =  timer()-tic1
+    tic1 = timer()
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
     bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnConv,lMaxRdn)
     bandData['max'] = bdat[0]
@@ -185,10 +178,13 @@ class BandDetect():
       bandData['pqmax'][j,:] = \
         rdnNorm[j, (bandData['aveloc'][j,:,0]).astype(int),(bandData['aveloc'][j,:,1]).astype(int)]
     #bandData['max'] += mns.reshape(nPats,1)
-    #print("BandLabel:",timer() - tic)
+    blabeltime = timer() - tic
 
 
     if verbose == True:
+      print('Radon Time:',rdntime)
+      print('Convolution Time:', convtime)
+      print('lMax Time:', lmaxtime)
       print('Total Band Find Time:',timer() - tic0)
       plt.clf()
       plt.imshow(rdnConv[-1,self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1]], origin='lower')
