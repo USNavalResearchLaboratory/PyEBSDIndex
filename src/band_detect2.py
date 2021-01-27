@@ -7,6 +7,7 @@ import radon_fast
 from timeit import default_timer as timer
 import matplotlib.pyplot as plt
 import pyopencl as cl
+#from os import environ
 #environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
 RADEG = 180.0/np.pi
@@ -15,7 +16,7 @@ RADEG = 180.0/np.pi
 
 class BandDetect():
   def __init__(self, patterns=None, patDim = None, nTheta = 180, nRho=90,\
-      tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9):
+      tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9, clOps = [True, False, False]):
     self.patDim = None
     self.nTheta = nTheta
     self.nRho = nRho
@@ -27,14 +28,19 @@ class BandDetect():
     self.tSigma = tSigma
     self.rSigma = rSigma
     self.kernel = None
+    self.peakPad = np.array([11,11])
+    self.padding = np.array([11,11])
     self.rhoMaskFrac = rhoMaskFrac
-    self.rhoMask = None
-    self.peakPad = None
-    self.peakMask = None
+
     self.nBands = nBands
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
                     ('pqmax', np.float32)])
+
+    self.CLOps = [False, False, False]
+    if clOps is not None:
+      self.CLOps =  clOps
+
     if (patterns is None) and (patDim is None):
       pass
     else:
@@ -101,7 +107,7 @@ class BandDetect():
     if rhoMaskFrac is not None:
       self.rhoMaskFrac = rhoMaskFrac
       recalc_masks = True
-    if (self.rhoMask is None) and (self.rhoMaskFrac is not None):
+    if (self.rhoMaskFrac is not None):
       recalc_masks = True
 
     if (self.tSigma is None) and (self.dTheta is not None):
@@ -121,11 +127,9 @@ class BandDetect():
       self.kernel = kernel.reshape((1,ksz[0], ksz[1]))
       #self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int)
       self.peakPad = np.array(np.around([3 * ksz[0], 3 * ksz[1]]), dtype=np.int)
-      self.peakMask = np.ones(self.peakPad, dtype=np.int32)
-      self.rhoMask = np.ones([1,self.nRho,self.nTheta+2*self.peakPad[1] ], dtype=np.float32)
-      if self.rhoMaskFrac > 0:
-        self.rhoMask[:,0:np.int(np.floor(self.nRho*self.rhoMaskFrac)), :] = 0.0
-        self.rhoMask[:,-np.int(np.floor(self.nRho*self.rhoMaskFrac)):, :] = 0.0
+      self.peakPad += 1 - np.mod(self.peakPad, 2)  # make sure we have it as odd.
+
+    self.padding = np.array([np.max( [self.peakPad[0], self.padding[0]] ), np.max([self.peakPad[1], self.padding[1]])])
 
     if nBands is not None:
       self.nBands = nBands
@@ -144,12 +148,32 @@ class BandDetect():
 
     eps = 1.e-6
     tic1 = timer()
+<<<<<<< HEAD
     rdnNorm = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
 
     #rdnNorm = rdn*self.rdnNorm
     #print("Radon:",timer() - tic1)
+=======
+    #rdnNorm = self.radonPlan.radon_faster(patterns,self.padding, fixArtifacts=True)
+    rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns)
+    #print("Radon", timer()-tic1)
+    tic1 = timer()
+    if self.CLOps[1] == False:
+      rdnNorm_gpu  = None
+      clparams = [None,None,None,None,None]
+    #rdnNorm = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
+    rdnConv, clparams, rdnConv_gpu = self.rdn_conv(rdnNorm, clparams, rdnNorm_gpu)
+    if self.CLOps[2] == False:
+      rdnConv_gpu = None
+      clparams = [None,None,None,None,None]
+    #print('Conv: ', timer()-tic1)
+    tic1 = timer()
+    #plt.imshow(rdnConv[-1,:,:])
+    lMaxRdn = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu)
+    #print("lMax: ", timer()-tic1)
+>>>>>>> OpenCLImagePipeline
     tic = timer()
-    rdnConv, lMaxRdn = self.band_conv(rdnNorm)
+    #rdnConv, lMaxRdn = self.band_conv(rdnNorm)
     #print("Conv:",timer() - tic)
     tic = timer()
     #rdnConv,lMaxRdn = self.band_convCL(rdnNorm)
@@ -162,18 +186,19 @@ class BandDetect():
     bandData['avemax'] = bdat[1]
     bandData['maxloc'] = bdat[2]
     bandData['aveloc'] = bdat[3]
-    bandData['maxloc'] -= self.peakPad.reshape(1,1,2)
-    bandData['aveloc'] -= self.peakPad.reshape(1, 1, 2)
+    bandData['maxloc'] -= self.padding.reshape(1,1,2)
+    bandData['aveloc'] -= self.padding.reshape(1, 1, 2)
     for j in range(nPats):
       bandData['pqmax'][j,:] = \
         rdnNorm[j, (bandData['aveloc'][j,:,0]).astype(int),(bandData['aveloc'][j,:,1]).astype(int)]
     #bandData['max'] += mns.reshape(nPats,1)
     #print("BandLabel:",timer() - tic)
 
+
     if verbose == True:
       print('Total Band Find Time:',timer() - tic0)
       plt.clf()
-      plt.imshow(rdnConv[-1,self.peakPad[0]:-self.peakPad[0],self.peakPad[1]:-self.peakPad[1]], origin='lower')
+      plt.imshow(rdnConv[-1,self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1]], origin='lower')
       #plt.scatter(y = bandData['aveloc'][-1,:,0], x = bandData['aveloc'][-1,:,1]+self.peakPad[1], c ='r', s=5)
       plt.scatter(y=bandData['aveloc'][-1,:,0],x=bandData['aveloc'][-1,:,1],c='r',s=5)
       plt.show()
@@ -287,87 +312,113 @@ class BandDetect():
 
     return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc
 
-  def band_conv(self, radonIn):
+  def calc_rdn(self, patterns):
+    clparams = [None,None,None,None,None]
+    rdnNorm_gpu = None
+    if self.CLOps[0] == False:
+      rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True)
+    else:
+      rdnNorm, clparams, rdnNorm_gpu = self.radonPlan.radon_fasterCL(patterns, self.padding, fixArtifacts=True, returnBuff = self.CLOps[1])
+
+    return rdnNorm, clparams, rdnNorm_gpu
+
+  def rdn_conv(self, radonIn, clparams=[None, None, None, None, None], radonIn_gpu = None):
     tic = timer()
     ## the code below was replaced by a gpu convolution routine.
-    shp = radonIn.shape
-    if len(shp) == 2:
-      radon = radonIn.reshape(1,shp[0],shp[1])
+
+    if self.CLOps[1] == True: # perform this operation on the GPU
+      return self.rdn_convCL2(radonIn, clparams, radonIn_gpu = radonIn_gpu, returnBuff = self.CLOps[2])
+
+    else: # perform on the CPU
+
       shp = radonIn.shape
-    else:
-      radon = radonIn
-
-    rdnNormP = self.radonPad(radon,rPad=0,tPad=self.peakPad[1],mirrorTheta=True)
-
-    # pad again for doing the convolution -- this will be removed after the convolution
-    rdnNormP = self.radonPad(rdnNormP,rPad=self.peakPad[0],tPad=self.peakPad[1],mirrorTheta=False)
-
-    rdnConv = np.zeros_like(rdnNormP)
-
-    for i in range(shp[0]):
-      rdnConv[i,:,:] = -1.0 * gaussian_filter(np.squeeze(rdnNormP[i,:,:]),[self.rSigma,self.tSigma],order=[2,0])
-
-
-
-    rdnConv = self.radonPad(rdnConv,rPad=-self.peakPad[0],tPad=-self.peakPad[1],mirrorTheta=False)
-    rdnNormP = self.radonPad(rdnNormP,rPad=-self.peakPad[0],tPad=-self.peakPad[1],mirrorTheta=False)
-
-    mns = rdnConv.min(axis=1).min(axis=1)
-    rdnConv -= mns.reshape((shp[0],1,1))
-
-    rdnConv *= (rdnNormP > 0).astype(np.float32) / (rdnNormP + 1e-12)
-    rdnPad = np.array(rdnConv)
-    rdnPad *= self.rhoMask
-
-    rdnPad = np.pad(rdnPad,((0,),(self.peakPad[0],),(0,)),mode='constant',constant_values=0.0)
-
-    nnmask = np.array([-2,-1,0,1,2,self.nTheta + 2 * self.peakPad[1],-1 * (self.nTheta + 2 * self.peakPad[1])])
-
-    # find the local max
-    lMaxK = (1,self.peakMask.shape[0],self.peakMask.shape[1])
-
-    lMaxRdn = scipy_grey_dilation(rdnPad,size=lMaxK)
-    #lMaxRdn[:,:,0:self.peakPad[1]] = 0
-    #lMaxRdn[:,:,-self.peakPad[1]:] = 0
-    #location of the max is where the local max is equal to the original.
-    lMaxRdn = lMaxRdn == rdnPad
-
-    rhoMaskTrim = np.int32((shp[1] - 2 * self.peakPad[0]) * self.rhoMaskFrac + self.peakPad[0])
-    lMaxRdn[:,0:rhoMaskTrim,:] = 0
-    lMaxRdn[:,-rhoMaskTrim:,:] = 0
-    lMaxRdn[:,:,0:self.peakPad[1]] = 0
-    lMaxRdn[:,:,-self.peakPad[1]:] = 0
-
-    #print("Traditional:",timer() - tic)
-    return rdnPad, lMaxRdn
+      if len(shp) == 2:
+        radon = radonIn.reshape(1,shp[0],shp[1])
+        shp = radonIn.shape
+      else:
+        radon = radonIn
+      shprdn = radon.shape
+      #rdnNormP = self.radonPad(radon,rPad=0,tPad=self.peakPad[1],mirrorTheta=True)
+      if self.padding[1] > 0:
+        radon[:,:,0:self.padding[1]] = np.flip(radon[:,:,-2 * self.padding[1]:-self.padding[1]],axis=1)
+        radon[:,:,-self.padding[1]:] = np.flip(radon[:,:,self.padding[1]:2 * self.padding[1]],axis=1)
+      # pad again for doing the convolution -- this will be removed after the convolution
+      #rdnNormP = self.radonPad(rdnNormP,rPad=self.peakPad[0],tPad=self.peakPad[1],mirrorTheta=False)
+      if self.padding[0] > 0:
+        radon[:,0:self.padding[0], :] = radon[:,self.padding[0],:].reshape(shp[0],1,shp[2])
+        radon[:,-self.padding[0]:, :] = radon[:,-self.padding[0]-1, :].reshape(shp[0],1,shp[2])
 
 
+      rdnConv = np.zeros_like(radon)
 
-  def band_convCL(self, radonIn):
+      for i in range(shp[0]):
+        rdnConv[i,:,:] = -1.0 * gaussian_filter(np.squeeze(radon[i,:,:]),[self.rSigma,self.tSigma],order=[2,0])
+
+      #print(rdnConv.min(),rdnConv.max())
+      mns = (rdnConv[:,self.padding[0]:shprdn[1]-self.padding[0],self.padding[1]:shprdn[1]-self.padding[1]]).min(axis=1).min(axis=1)
+
+      rdnConv -= mns.reshape((shp[0],1,1))
+      rdnConv.clip(min=0.0)
+      rdnConv_gpu = None
+    return rdnConv, clparams, rdnConv_gpu
+
+  def rdn_local_max(self, rdn, clparams=[None, None, None, None, None], rdn_gpu=None):
+
+    if self.CLOps[2] == True: # perform this operation on the GPU
+      return self.rdn_local_maxCL(rdn, clparams, radonIn_gpu = rdn_gpu)
+
+    else: # perform on the CPU
+
+      shp = rdn.shape
+      # find the local max
+      lMaxK = (1,self.peakPad[0],self.peakPad[1])
+
+      lMaxRdn = scipy_grey_dilation(rdn,size=lMaxK)
+      #lMaxRdn[:,:,0:self.peakPad[1]] = 0
+      #lMaxRdn[:,:,-self.peakPad[1]:] = 0
+      #location of the max is where the local max is equal to the original.
+      lMaxRdn = lMaxRdn == rdn
+
+      rhoMaskTrim = np.int32((shp[1] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
+      lMaxRdn[:,0:rhoMaskTrim,:] = 0
+      lMaxRdn[:,-rhoMaskTrim:,:] = 0
+      lMaxRdn[:,:,0:self.padding[1]] = 0
+      lMaxRdn[:,:,-self.padding[1]:] = 0
+
+
+      #print("Traditional:",timer() - tic)
+      return lMaxRdn
+
+  def rdn_convCL(self, radonIn, clinfo):
     # this will run sequential convolutions and identify the peaks in the convolution
     tic = timer()
-    def preparray(array):
-      return np.require(array,None,"C")
+    #def preparray(array):
+    #  return np.require(array,None,"C")
+
+    mf = cl.mem_flags
+    if isinstance(clinfo[2], cl.CommandQueue):
+      gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
+      #if len(gpu) == 0:  # fall back to the numba implementation
+      #  return self.radon_faster(radon,fixArtifacts=fixArtifacts)
+      # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
+      # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
+      gpuIdx = np.random.choice(len(gpu))
+      ctx = cl.Context(devices={gpu[gpuIdx]})
+      queue = cl.CommandQueue(ctx)
+      kernel_location = path.dirname(__file__)
+      prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+    else:
+      queue = clinfo[2]
+      prg = clinfo[3]
 
     shp = radonIn.shape
     if len(shp) == 2:
-      radonIn = radonIn.reshape(1,shp[0], shp[1])
+      radonIn = radonIn.reshape(1,shp[0],shp[1])
       shp = radonIn.shape
 
-    radon =  self.radonPad(radonIn,rPad=self.peakPad[0],tPad=self.peakPad[1],mirrorTheta=True)
+    radon = self.radonPad(radonIn,rPad=self.peakPad[0],tPad=self.peakPad[1],mirrorTheta=True)
     shp = radon.shape
-    #print('array setup pad', timer()-tic)
-    tic = timer()
-    gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-    #if len(gpu) == 0:  # fall back to the numba implementation
-    #  return self.radon_faster(radon,fixArtifacts=fixArtifacts)
-    # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
-    # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
-    gpuIdx = np.random.choice(len(gpu))
-    ctx = cl.Context(devices={gpu[gpuIdx]})
-    queue = cl.CommandQueue(ctx)
-    mf = cl.mem_flags
-    #print('gpu platform setup', timer()-tic)
+
     resultConv = np.full_like(radon,-1.0e12, dtype = np.float32)
     resultPeakLoc = np.full_like(radon,-1.0e12, dtype = np.float32)
     resultPeakLoc2 = np.full_like(radon,0,dtype=np.uint8)
@@ -383,8 +434,7 @@ class BandDetect():
     kern_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=k0)
     #print('inital buffers', timer()-tic)
     #tic = timer()
-    kernel_location = path.dirname(__file__)
-    prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+
     #print('build program', timer()-tic)
     #tic = timer()
     prg.convolution3d2d(queue,(np.int32(shp[2]-2*pad[1]), np.int32(shp[1]-2*pad[0]), shp[0]),None,
@@ -435,39 +485,58 @@ class BandDetect():
 
     return resultConv, resultPeakLoc2
 
-  def band_convCL2(self, radonIn, separableKernel=True):
-    # this will run sequential convolutions and identify the peaks in the convolution
+  def rdn_convCL2(self, radonIn, clparams=[None, None, None, None, None], radonIn_gpu = None, separableKernel=True, returnBuff = False):
+    # this will run (eventually sequential) convolutions and identify the peaks in the convolution
     tic = timer()
     #def preparray(array):
     #  return np.require(array,None,"C")
-
     shp = radonIn.shape
     if len(shp) == 2:
-      radonIn = radonIn.reshape(1,shp[0], shp[1])
-      shp = radonIn.shape
-
-    radon =  self.radonPad(radonIn,rPad=self.peakPad[0],tPad=self.peakPad[1],mirrorTheta=True)
+      radon = radonIn.reshape(1,shp[0],shp[1])
+    else:
+      radon = radonIn
     shp = radon.shape
-    #print('array setup pad', timer()-tic)
-    tic = timer()
-    gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-    #if len(gpu) == 0:  # fall back to the numba implementation
-    #  return self.radon_faster(radon,fixArtifacts=fixArtifacts)
-    # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
-    # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
-    gpuIdx = np.random.choice(len(gpu))
-    ctx = cl.Context(devices={gpu[gpuIdx]})
-    queue = cl.CommandQueue(ctx)
     mf = cl.mem_flags
-    kernel_location = path.dirname(__file__)
-    prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+    if isinstance(clparams[2],cl.CommandQueue):
+      ctx = clparams[1]
+      queue = clparams[2]
+      prg = clparams[3]
+    else:
+      gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
+      # if len(gpu) == 0:  # fall back to the numba implementation
+      #  return self.radon_faster(radon,fixArtifacts=fixArtifacts)
+      # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
+      # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
+      gpuIdx = np.random.choice(len(gpu))
+      ctx = cl.Context(devices={gpu[gpuIdx]})
+      queue = cl.CommandQueue(ctx)
+      kernel_location = path.dirname(__file__)
+      prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+
+
+    nT = self.nTheta
+    nTp = nT + 2 * self.padding[1]
+    nR = self.nRho
+    nRp = nR + 2 * self.padding[0]
+
+    if isinstance(radonIn_gpu, cl.Buffer):
+      rdn_gpu = radonIn_gpu
+      nIm = np.int(rdn_gpu.size/(nTp * nRp * 4))
+      shp = (nIm, nRp, nTp)
+    else:
+      rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radon)
 
     #print('gpu platform setup', timer()-tic)
-    resultConv = np.full_like(radon,-1.0e12, dtype = np.float32)
+    resultConv = np.full(shp,0.0, dtype = np.float32)
     #resultPeakLoc = np.full_like(radon,-1.0e12, dtype = np.float32)
     #resultPeakLoc2 = np.full_like(radon,0,dtype=np.uint8)
     rdnConv_gpu = cl.Buffer(ctx,mf.WRITE_ONLY | mf.COPY_HOST_PTR,hostbuf=resultConv)
-    rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radon)
+    mns = cl.Buffer(ctx, mf.READ_WRITE|mf.COPY_HOST_PTR, hostbuf=np.full((shp[0]), -1.0e12, dtype=np.float32))
+    prg.radonPadTheta(queue,(shp[0],shp[1],1),None,rdn_gpu,
+                    np.uint64(shp[1]),np.uint64(shp[2]),np.uint64(self.padding[1]))
+    prg.radonPadRho(queue,(shp[0],shp[2],1),None,rdn_gpu,
+                      np.uint64(shp[1]),np.uint64(shp[2]),np.uint64(self.padding[0]))
+
     if separableKernel == False:
       # for now I will assume that the kernel(s) can fit in local memory on the GPU
       # also going to assume that there is only one kernel -- this will be something to fix soon.
@@ -475,11 +544,6 @@ class BandDetect():
       kshp = np.asarray(k0.shape, dtype = np.int32)
       pad = kshp/2
       kern_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0)
-      #print('inital buffers', timer()-tic)
-      #tic = timer()
-
-      #print('build program', timer()-tic)
-      #tic = timer()
       prg.convolution3d2d(queue,(np.int32(shp[2]-2*pad[1]), np.int32(shp[1]-2*pad[0]), shp[0]),None,
                         rdn_gpu, kern_gpu,np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]),
                         np.int32(kshp[1]), np.int32(kshp[0]), np.int32(pad[1]), np.int32(pad[0]), rdnConv_gpu)
@@ -487,7 +551,7 @@ class BandDetect():
     #print('convolution', timer()-tic)
       tic = timer()
     else:
-      tempConvbuff = cl.Buffer(ctx,mf.HOST_NO_ACCESS,size=radon.nbytes)
+      tempConvbuff = cl.Buffer(ctx,mf.HOST_NO_ACCESS,size=(shp[0]*shp[1]*shp[2]*4))
 
       kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
       k0x = np.require(self.kernel[0,np.int(kshp[0]/2),:],requirements=['C','A'])
@@ -513,9 +577,110 @@ class BandDetect():
       kern_gpu_y.release()
       tempConvbuff.release()
 
-    queue.finish()
-    cl.enqueue_copy(queue,resultConv,rdnConv_gpu, is_blocking=True).wait()
+    prg.imageMin(queue,(shp[0],1,1),None,
+                 rdnConv_gpu, mns,np.int32(shp[2]),np.int32(shp[1]),
+                 np.int32(self.padding[1]),np.int32(self.padding[0]))
 
+    # prg.imageSubMin(queue,(np.int32(shp[2] - 2 * pad[1]),np.int32(shp[1] - 2 * pad[0]),shp[0]),None,
+    #              rdnConv_gpu,mns,np.int32(shp[2]),np.int32(shp[1]),
+    #              np.int32(self.padding[1]),np.int32(self.padding[0]))
+
+    prg.imageSubMinWClip(queue,(np.int32(shp[2]),np.int32(shp[1]),shp[0]),None,
+                     rdnConv_gpu,mns,np.int32(shp[2]),np.int32(shp[1]),
+                     np.int32(0),np.int32(0))
+
+    queue.finish()
+    cl.enqueue_copy(queue,resultConv,rdnConv_gpu,is_blocking=True).wait()
+    if returnBuff == False:
+      return resultConv, clparams, None
+    else:
+      return resultConv, clparams, rdnConv_gpu
+
+  def rdn_local_maxCL(self,radonIn,clparams=[None,None,None,None,None],radonIn_gpu=None,):
+    # this will run a morphological max kernel over the convolved radon array
+    # the local max identifies the location of the peak max within
+    # the window size.
+
+    tic = timer()
+    shp = radonIn.shape
+    if len(shp) == 2:
+      radon = radonIn.reshape(1,shp[0],shp[1])
+    else:
+      radon = radonIn
+    shp = radon.shape
+
+    mf = cl.mem_flags
+    if isinstance(clparams[2],cl.CommandQueue):
+      ctx = clparams[1]
+      queue = clparams[2]
+      prg = clparams[3]
+    else:
+      gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
+      # if len(gpu) == 0:  # fall back to the numba implementation
+      #  return self.radon_faster(radon,fixArtifacts=fixArtifacts)
+      # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
+      # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
+      gpuIdx = np.random.choice(len(gpu))
+      ctx = cl.Context(devices={gpu[gpuIdx]})
+      queue = cl.CommandQueue(ctx)
+      kernel_location = path.dirname(__file__)
+      prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+
+    nT = self.nTheta
+    nTp = nT + 2 * self.padding[1]
+    nR = self.nRho
+    nRp = nR + 2 * self.padding[0]
+
+    if isinstance(radonIn_gpu,cl.Buffer):
+      rdn_gpu = radonIn_gpu
+      nIm = np.int(rdn_gpu.size / (nTp * nRp * 4))
+      shp = (nIm,nRp,nTp)
+    else:
+      rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radon)
+
+    out = np.zeros((shp), dtype = np.ubyte)
+    #out = np.zeros((shp),dtype=np.float32)
+    out_gpu = cl.Buffer(ctx,mf.WRITE_ONLY | mf.COPY_HOST_PTR,hostbuf=out)
+    lmaxX = cl.Buffer(ctx,mf.READ_WRITE | mf.HOST_NO_ACCESS,size=radon.size * 4)
+    lmaxXY = cl.Buffer(ctx,mf.READ_WRITE | mf.HOST_NO_ACCESS,size=radon.size * 4)
+
+
+    nChunkT = np.uint32(np.ceil(nT / np.float(self.peakPad[1])))
+    nChunkR = np.uint32(np.ceil(nR / np.float(self.peakPad[0])))
+    winszX = np.uint32(self.peakPad[1])
+    winszX2 = np.uint32((winszX-1) / 2)
+    winszY = np.uint32(self.peakPad[0])
+    winszY2 = np.uint32((winszY-1) / 2)
+
+    prg.morphDilateKernelX(queue,(nChunkT,nR,shp[0]),(1,1,1),rdn_gpu,lmaxX,
+                           winszX, winszX2, np.uint32(shp[2]),np.uint32(shp[1]),
+                           np.uint32(self.padding[1]),np.uint32(self.padding[0]),
+                           cl.LocalMemory(winszX * 4),cl.LocalMemory(winszX * 4), cl.LocalMemory((winszX*2-1) * 4) )
+
+
+    prg.morphDilateKernelY(queue,(nT, nChunkR,shp[0]),(1,1,1),lmaxX, lmaxXY,
+                           winszY,winszY2,np.uint32(shp[2]),np.uint32(shp[1]),
+                           np.uint32(self.padding[1]),np.uint32(self.padding[0]),
+                           cl.LocalMemory(winszX * 4),cl.LocalMemory(winszX * 4), cl.LocalMemory((winszX*2-1) * 4) )
+
+    # prg.morphDilateKernelBF(queue,(nT,nR,shp[0]),None,rdn_gpu,lmaxXY,
+    #                       np.uint32(shp[2]),np.uint32(shp[1]),
+    #                       np.uint32(self.padding[1]),np.uint32(self.padding[0]),
+    #                       np.uint32(self.peakPad[1]), np.uint32(self.peakPad[0]))
+
+    prg.im1EQim2(queue,(nT, nR,shp[0]),None, lmaxXY, rdn_gpu, out_gpu,
+                 np.uint32(shp[2]),np.uint32(shp[1]),
+                 np.uint32(self.padding[1]),np.uint32(self.padding[0]))
+    queue.finish()
+    cl.enqueue_copy(queue,out,out_gpu,is_blocking=True).wait()
+
+    rhoMaskTrim = np.int32((shp[1] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
+    out[:,0:rhoMaskTrim,:] = 0
+    out[:,-rhoMaskTrim:,:] = 0
+    out[:,:,0:self.padding[1]] = 0
+    out[:,:,-self.padding[1]:] = 0
+
+    return out
     # going to reuse the original rdn buffer
     #cl.enqueue_copy(queue,rdn_gpu,resultPeakLoc,is_blocking=True).wait()
     #print('second buffers',timer() - tic)
@@ -529,35 +694,4 @@ class BandDetect():
     #prg.im1NEim2(queue,(shp[2],shp[1],shp[0]),None,rdnConv_gpu,rdn_gpu,resultPeakLoc2_gpu,
     #             np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]))
 
-    mns = (resultConv[:,self.peakPad[0]:-self.peakPad[0],self.peakPad[1]:-self.peakPad[1]]).min(axis=1).min(axis=1)
-    resultConv -= mns.reshape((shp[0],1,1))
-    resultConv = resultConv.clip(min=0.0)
-
-    lMaxK = (1,self.peakMask.shape[0],self.peakMask.shape[1])
-
-    lMaxRdn = scipy_grey_dilation(resultConv,size=lMaxK)
-    #lMaxRdn[:,:,0:self.peakPad[1]] = 0
-    #lMaxRdn[:,:,-self.peakPad[1]:] = 0
-
-    # location of the max is where the local max is equal to the original.
-    resultPeakLoc2 = lMaxRdn == resultConv
-    #resultPeakLoc2[:,:,0:self.peakPad[1]] = 0
-    #resultPeakLoc2[:,:,-self.peakPad[1]:] = 0
-
-    #print('find min',timer() - tic)
-    #tic = timer()
-
-    #queue.finish()
-    #print('find max',timer() - tic)
-
-    rhoMaskTrim = np.int32((shp[1] - 2*self.peakPad[0])*self.rhoMaskFrac + self.peakPad[0])
-    resultPeakLoc2[:,0:rhoMaskTrim, :] = 0
-    resultPeakLoc2[:,-rhoMaskTrim:,:] = 0
-    resultPeakLoc2[:,:,0:self.peakPad[1]] = 0
-    resultPeakLoc2[:,:,-self.peakPad[1]:] = 0
-    #plt.imshow(resultPeakLoc2[-1,:,:])
-    #print('trim',timer() - tic)
-    #tic = timer()
-
-    return resultConv, resultPeakLoc2
 

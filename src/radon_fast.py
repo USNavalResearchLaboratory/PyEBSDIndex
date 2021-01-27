@@ -3,7 +3,8 @@ from timeit import default_timer as timer
 from os import path
 from numba import jit, prange
 import pyopencl as cl
-
+from os import environ
+environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
 RADDEG = 180.0/np.pi
 DEGRAD = np.pi/180.0
@@ -81,7 +82,7 @@ class Radon():
       self.indexPlan.sort(axis = -1)
 
 
-  def radon_fast(self, image, fixArtifacts = False):
+  def radon_fast(self, image, padding = np.array([0,0]), fixArtifacts = False):
     tic = timer()
     shapeIm = np.shape(image)
     if image.ndim == 2:
@@ -94,11 +95,13 @@ class Radon():
 
     nPx = shapeIm[-1]*shapeIm[-2]
     im = np.zeros(nPx+1, dtype=np.float32)
-    radon = np.zeros([nIm, self.nRho, self.nTheta], dtype=np.float32)
+    #radon = np.zeros([nIm, self.nRho, self.nTheta], dtype=np.float32)
+    radon = np.zeros([nIm,self.nRho + 2 * padding[0],self.nTheta + 2 * padding[1]],dtype=np.float32)
+    shpRdn = radon.shape
     norm = np.sum(self.indexPlan < nPx, axis = 2 ) + 1.0e-12
     for i in np.arange(nIm):
       im[:-1] = image[i,:,:].flatten()
-      radon[i, :, :] = np.sum(im.take(self.indexPlan.astype(np.int64)), axis=2) / norm
+      radon[i, padding[0]:shpRdn[1]-padding[0], padding[1]:shpRdn[2]-padding[1]] = np.sum(im.take(self.indexPlan.astype(np.int64)), axis=2) / norm
 
     if (fixArtifacts == True):
       radon[:,:,0] = radon[:,:,1]
@@ -110,7 +113,7 @@ class Radon():
     #print(timer()-tic)
     return radon
 
-  def radon_faster(self,image,fixArtifacts = False):
+  def radon_faster(self,image,padding = np.array([0,0]), fixArtifacts = False):
     tic = timer()
     shapeIm = np.shape(image)
     if image.ndim == 2:
@@ -125,12 +128,13 @@ class Radon():
 
     nPx = shapeIm[-1]*shapeIm[-2]
     indxDim = np.asarray(self.indexPlan.shape)
-    radon = np.zeros([nIm, self.nRho, self.nTheta], dtype=np.float32)
-    self.rdn_loops(image,self.indexPlan,nIm,nPx,indxDim,radon)
+    radon = np.zeros([nIm, self.nRho+2*padding[0], self.nTheta+2*padding[1]], dtype=np.float32)
+    shp = radon.shape
+    self.rdn_loops(image,self.indexPlan,nIm,nPx,indxDim,radon, np.asarray(padding))
 
     if (fixArtifacts == True):
-      radon[:,:,0] = radon[:,:,1]
-      radon[:,:,-1] = radon[:,:,-2]
+      radon[:,:,padding[1]] = radon[:,:,padding[1]+1]
+      radon[:,:,shp[2]-1-padding[1]] = radon[:,:,shp[2]-padding[1]-2]
 
 
     image = image.reshape(shapeIm)
@@ -140,7 +144,7 @@ class Radon():
 
   @staticmethod
   @jit(nopython=True, fastmath=True, cache=True, parallel=False)
-  def rdn_loops(images,index,nIm,nPx,indxdim,radon):
+  def rdn_loops(images,index,nIm,nPx,indxdim,radon, padding):
     nRho = indxdim[0]
     nTheta = indxdim[1]
     nIndex = indxdim[2]
@@ -149,7 +153,9 @@ class Radon():
     for q in prange(nIm):
       imstart = q*nPx
       for i in range(nRho):
+        ip = i+padding[0]
         for j in range(nTheta):
+          jp = j+padding[1]
           count = 0.0
           sum = 0.0
           for k in range(nIndex):
@@ -159,21 +165,24 @@ class Radon():
             #radon[q, i, j] += images[imstart+indx1]
             sum += images[imstart + indx1]
             count += 1.0
-          radon[q,i,j] = sum/(count+1e-12)
+          radon[q,ip,jp] = sum/(count+1e-12)
 
-  def radon_fasterCL(self,image,fixArtifacts = False):
+  def radon_fasterCL(self,image,padding = np.array([0,0]),fixArtifacts = False, returnBuff = False):
     # while keeping this as a method works in multiprocessing on the Mac, it does not on Linux.  Thus I make it a separate function
 
     tic = timer()
     gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
     if len(gpu) == 0: # fall back to the numba implementation
-      return self.radon_faster(image,fixArtifacts = fixArtifacts)
+      return self.radon_faster(image,padding=padding,fixArtifacts = fixArtifacts)
     # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
     # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
     gpuIdx = np.random.choice(len(gpu))
     ctx = cl.Context(devices = {gpu[gpuIdx]})
     queue = cl.CommandQueue(ctx)
     mf = cl.mem_flags
+    kernel_location = path.dirname(__file__)
+    prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+
 
     shapeIm = np.shape(image)
     if image.ndim == 2:
@@ -185,76 +194,68 @@ class Radon():
     #  reform = False
 
     image = image.reshape(-1).astype(np.float32)
-    imstep = np.uint64(np.product(shapeIm[-2:]))
-    indxstep = np.uint64(self.indexPlan.shape[-1])
-    rdnstep = np.uint64(self.nRho * self.nTheta)
+    imstep = np.uint32(np.product(shapeIm[-2:]))
+    indxstep = np.uint32(self.indexPlan.shape[-1])
+    rdnstep = np.uint32(self.nRho * self.nTheta)
 
 
-    steps = np.asarray((imstep, indxstep, rdnstep), dtype = np.uint64)
-
-    radon = np.zeros([nIm,self.nRho,self.nTheta],dtype=np.float32)
-    #image_gpu = cl_array.to_device(ctx, queue, image.astype(np.float32))
-    #rdnIndx_gpu = cl_array.to_device(ctx, queue, self.indexPlan.astype(np.uint32).reshape[-1])
-    #radon_gpu = cl_array.to_device(ctx, queue, radon.astype(np.float32).reshape[-1])
+    radon = np.zeros([nIm,self.nRho+2*padding[0],self.nTheta+2*padding[1]],dtype=np.float32)
     image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image)
     rdnIndx_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=self.indexPlan)
     radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
-    #steps_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=steps)
-
-    # prg = cl.Program(ctx,"""
-    # __kernel void radonSum(
-    #     __global const unsigned long int *rdnIndx, __global const float *images, __global float *radon,
-    #     const unsigned long int imstep, const unsigned long int indxstep, const unsigned long int rdnstep )
-    # {
-    #   unsigned long int gid_im = get_global_id(0);
-    #   unsigned long int gid_rdn = get_global_id(1);
-    #   unsigned long int i, k, j, idx;
-    #   float sum, count;
-    #
-    #   k = gid_rdn+gid_im*rdnstep;
-    #   sum = 0.0;
-    #   count = 0.0;
-    #   j = gid_im*imstep;
-    #   for (i=0; i<indxstep; i++){
-    #     idx = rdnIndx[gid_rdn*indxstep+i];
-    #     if (idx >= imstep) {
-    #       break;
-    #     } else {
-    #       sum += images[j + idx];
-    #       count += 1.0;
-    #     }
-    #   }
-    #   radon[k] = sum/(count + 1.0e-12);
-    # }
-    # """).build()
-
-    kernel_location = path.dirname(__file__)
-    prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
 
 
-    prg.radonSum(queue,(nIm,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,imstep, indxstep, rdnstep)
-    queue.finish()
-    cl.enqueue_copy(queue, radon, radon_gpu, is_blocking=True).wait()
 
+    shpRdn = np.asarray(radon.shape, dtype = np.uint32)
+    padRho = np.uint32(padding[0])
+    padTheta = np.uint32(padding[1])
+    tic = timer()
+
+    # prg.radonSum2(queue,(nIm,self.nRho, self.nTheta),None,rdnIndx_gpu,image_gpu,radon_gpu,
+    #              imstep, indxstep, shpRdn[1], shpRdn[2], padRho, padTheta)
+
+    prg.radonSum(queue,(nIm,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
+                  imstep, indxstep, shpRdn[1], shpRdn[2], padRho, padTheta, np.uint32(self.nTheta))
 
 
     if (fixArtifacts == True):
-      radon[:,:,0] = radon[:,:,1]
-      radon[:,:,-1] = radon[:,:,-2]
-
+      prg.radonFixArt(queue,(nIm,self.nRho,1),None,radon_gpu,
+                      shpRdn[1],shpRdn[2],padTheta)
 
     image = image.reshape(shapeIm)
+    queue.flush()
+
+    #print(queue.get_info(cl.command_queue_info.REFERENCE_COUNT))
+    #print(ctx.get_info(cl.context_info.REFERENCE_COUNT))
+    #print('RDN Sum',timer() - tic)
+    if returnBuff == False:
+      cl.enqueue_copy(queue,radon,radon_gpu,is_blocking=True).wait()
+      radon_gpu.release()
+      queue.flush()
+      radon_gpu = None
+      clparams = (None, None, None, None, None)
+      return radon, clparams, None
+    else:
+      clparams = (gpu,ctx,queue,prg,mf)
+      return radon, clparams, radon_gpu
+
+    #if (fixArtifacts == True):
+    #  radon[:,:,padding[1]] = radon[:,:,padding[1]+1]
+    #  radon[:,:,-padding[1]-1] = radon[:,:,-2-padding[1]]
+
+
+
 
     #print(timer()-tic)
-    return radon
+
 
 
 
 
 # if __name__ == "__main__":
 #   import ebsd_pattern, ebsd_index
-#   file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1'
-#   f = ebsd_pattern.UPFile(file)
+#   file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1' ;f = ebsd_pattern.UPFile(file)
+#
 #   pat = f.read_data(patStartEnd=[0,1],convertToFloat=True,returnArrayOnly=True )
 #   dat, indxer = ebsd_index.index_pats(filename = file, patStart = 0, patEnd = 1,return_indexer_obj = True)
 #   dat = ebsd_index.index_pats_distributed(filename = file,patStart = 0, patEnd = -1, chunksize = 1000, ncpu = 34, ebsd_indexer_obj = indxer )
