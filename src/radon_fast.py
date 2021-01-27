@@ -182,7 +182,7 @@ class Radon():
     mf = cl.mem_flags
     kernel_location = path.dirname(__file__)
     prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
-    clparams = (gpu,ctx,queue,prg,mf)
+
 
     shapeIm = np.shape(image)
     if image.ndim == 2:
@@ -223,18 +223,19 @@ class Radon():
                       shpRdn[1],shpRdn[2],padTheta)
 
     image = image.reshape(shapeIm)
-    queue.flush()
+
     cl.enqueue_copy(queue,radon,radon_gpu,is_blocking=True).wait()
-    print(queue.get_info(cl.command_queue_info.REFERENCE_COUNT))
-    print(ctx.get_info(cl.context_info.REFERENCE_COUNT))
+    #print(queue.get_info(cl.command_queue_info.REFERENCE_COUNT))
+    #print(ctx.get_info(cl.context_info.REFERENCE_COUNT))
     #print('RDN Sum',timer() - tic)
     if returnBuff == False:
       radon_gpu.release()
-      queue = None
-      ctx = None
-      gpu = None
+      queue.flush()
+      radon_gpu = None
+      clparams = (None, None, None, None, None)
       return radon, clparams, None
     else:
+      clparams = (gpu,ctx,queue,prg,mf)
       return radon, clparams, radon_gpu
 
     #if (fixArtifacts == True):

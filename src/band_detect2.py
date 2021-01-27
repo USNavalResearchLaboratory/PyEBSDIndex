@@ -150,7 +150,8 @@ class BandDetect():
     tic1 = timer()
     #rdnNorm = self.radonPlan.radon_faster(patterns,self.padding, fixArtifacts=True)
     rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns)
-
+    print("Radon", timer()-tic1)
+    tic1 = timer()
     if self.CLOps[1] == False:
       rdnNorm_gpu  = None
       clparams = [None,None,None,None,None]
@@ -159,9 +160,11 @@ class BandDetect():
     if self.CLOps[2] == False:
       rdnConv_gpu = None
       clparams = [None,None,None,None,None]
-
+    print('Conv: ', timer()-tic1)
+    tic1 = timer()
     #plt.imshow(rdnConv[-1,:,:])
     lMaxRdn = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu)
+    print("lMax: ", timer()-tic1)
     tic = timer()
     #rdnConv, lMaxRdn = self.band_conv(rdnNorm)
     #print("Conv:",timer() - tic)
@@ -480,7 +483,12 @@ class BandDetect():
     tic = timer()
     #def preparray(array):
     #  return np.require(array,None,"C")
-
+    shp = radonIn.shape
+    if len(shp) == 2:
+      radon = radonIn.reshape(1,shp[0],shp[1])
+    else:
+      radon = radonIn
+    shp = radon.shape
     mf = cl.mem_flags
     if isinstance(clparams[2],cl.CommandQueue):
       ctx = clparams[1]
@@ -509,10 +517,6 @@ class BandDetect():
       nIm = np.int(rdn_gpu.size/(nTp * nRp * 4))
       shp = (nIm, nRp, nTp)
     else:
-      shp = radonIn.shape
-      if len(shp) == 2:
-        radon = radonIn.reshape(1,shp[0], shp[1])
-      shp = radon.shape
       rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radon)
 
     #print('gpu platform setup', timer()-tic)
