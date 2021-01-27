@@ -148,12 +148,6 @@ class BandDetect():
 
     eps = 1.e-6
     tic1 = timer()
-<<<<<<< HEAD
-    rdnNorm = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
-
-    #rdnNorm = rdn*self.rdnNorm
-    #print("Radon:",timer() - tic1)
-=======
     #rdnNorm = self.radonPlan.radon_faster(patterns,self.padding, fixArtifacts=True)
     rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns)
     #print("Radon", timer()-tic1)
@@ -171,7 +165,6 @@ class BandDetect():
     #plt.imshow(rdnConv[-1,:,:])
     lMaxRdn = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu)
     #print("lMax: ", timer()-tic1)
->>>>>>> OpenCLImagePipeline
     tic = timer()
     #rdnConv, lMaxRdn = self.band_conv(rdnNorm)
     #print("Conv:",timer() - tic)
