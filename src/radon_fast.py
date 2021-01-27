@@ -194,41 +194,42 @@ class Radon():
     #  reform = False
 
     image = image.reshape(-1).astype(np.float32)
-    imstep = np.uint64(np.product(shapeIm[-2:]))
-    indxstep = np.uint64(self.indexPlan.shape[-1])
-    rdnstep = np.uint64(self.nRho * self.nTheta)
+    imstep = np.uint32(np.product(shapeIm[-2:]))
+    indxstep = np.uint32(self.indexPlan.shape[-1])
+    rdnstep = np.uint32(self.nRho * self.nTheta)
 
-    #steps = np.asarray((imstep, indxstep, rdnstep), dtype = np.uint64)
 
     radon = np.zeros([nIm,self.nRho+2*padding[0],self.nTheta+2*padding[1]],dtype=np.float32)
-    #image_gpu = cl_array.to_device(ctx, queue, image.astype(np.float32))
-    #rdnIndx_gpu = cl_array.to_device(ctx, queue, self.indexPlan.astype(np.uint32).reshape[-1])
-    #radon_gpu = cl_array.to_device(ctx, queue, radon.astype(np.float32).reshape[-1])
-    radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
     image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image)
     rdnIndx_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=self.indexPlan)
+    radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
 
 
-    shpRdn = np.asarray(radon.shape, dtype = np.uint64)
-    padRho = np.uint64(padding[0])
-    padTheta = np.uint64(padding[1])
+
+    shpRdn = np.asarray(radon.shape, dtype = np.uint32)
+    padRho = np.uint32(padding[0])
+    padTheta = np.uint32(padding[1])
     tic = timer()
 
-    prg.radonSum(queue,(nIm,self.nRho, self.nTheta),None,rdnIndx_gpu,image_gpu,radon_gpu,
-                 imstep, indxstep, shpRdn[1], shpRdn[2], padRho, padTheta)
-    queue.finish()
+    # prg.radonSum2(queue,(nIm,self.nRho, self.nTheta),None,rdnIndx_gpu,image_gpu,radon_gpu,
+    #              imstep, indxstep, shpRdn[1], shpRdn[2], padRho, padTheta)
+
+    prg.radonSum(queue,(nIm,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
+                  imstep, indxstep, shpRdn[1], shpRdn[2], padRho, padTheta, np.uint32(self.nTheta))
+
 
     if (fixArtifacts == True):
       prg.radonFixArt(queue,(nIm,self.nRho,1),None,radon_gpu,
                       shpRdn[1],shpRdn[2],padTheta)
 
     image = image.reshape(shapeIm)
+    queue.flush()
 
-    cl.enqueue_copy(queue,radon,radon_gpu,is_blocking=True).wait()
     #print(queue.get_info(cl.command_queue_info.REFERENCE_COUNT))
     #print(ctx.get_info(cl.context_info.REFERENCE_COUNT))
     #print('RDN Sum',timer() - tic)
     if returnBuff == False:
+      cl.enqueue_copy(queue,radon,radon_gpu,is_blocking=True).wait()
       radon_gpu.release()
       queue.flush()
       radon_gpu = None

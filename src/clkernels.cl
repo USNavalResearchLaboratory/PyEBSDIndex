@@ -1,39 +1,65 @@
 
 
 
- __kernel void radonSum(
+ __kernel void radonSum2( // turns out this is significantly slower.
+ // something about allocating the additional set of loops?
       __global const unsigned long int *rdnIndx, __global const float *images, __global float *radon, 
-      const unsigned long int imstep, const unsigned long int indxstep,
-      const unsigned long int nRhoP, const unsigned long int nThetaP,
-      const unsigned long int rhoPad, const unsigned long int thetaPad)
+      const unsigned int imstep, const unsigned int indxstep,
+      const unsigned int nRhoP, const unsigned int nThetaP,
+      const unsigned int rhoPad, const unsigned int thetaPad)
   {
+    float sum = 0.0, count = 0.0;
     const unsigned long int gid_im = get_global_id(0);
     const unsigned long int gid_rho = get_global_id(1);
     const unsigned long int gid_theta = get_global_id(2);
     const unsigned long int nTheta = get_global_size(2);
+
+    const unsigned long int imStart = imstep * gid_im;
+    //const unsigned long int gid_rdn = gid_theta + nTheta * gid_rho;
+    //const unsigned long int indxStart = gid_rdn*indxstep;
+    const unsigned long int indxStart = (gid_theta + nTheta * gid_rho)*indxstep;
     unsigned long int i, idx;
-    const unsigned long int j = gid_im*imstep;
-    float sum, count;
 
-    //imStart = imstep * gid_im;
-    const unsigned long int gid_rdn = gid_theta + nTheta * gid_rho;
-    const unsigned long int gid_rdnP = nThetaP * nRhoP * gid_im + (nThetaP * (gid_rho+rhoPad)) + (gid_theta + thetaPad) ;
-
-    sum = 0.0;
-    count = 0.0;
-    //j = gid_im*imstep;
     for (i=0; i<indxstep; i++){  
-      idx = rdnIndx[gid_rdn*indxstep+i];
+      idx = rdnIndx[indxStart+i];
       if (idx >= imstep) {
         break;
       } else {
-        sum += images[j + idx];
+        sum += images[imStart + idx];
         count += 1.0;
       } 
     }
-    sum /=   (count + 1.0e-12);
-    radon[gid_rdnP] = sum;
   }
+
+__kernel void radonSum(
+      __global const unsigned long int *rdnIndx, __global const float *images, __global float *radon,
+      const unsigned int imstep, const unsigned int indxstep,
+      const unsigned int nRhoP, const unsigned int nThetaP,
+      const unsigned int rhoPad, const unsigned int thetaPad,const unsigned int nTheta )
+    {
+    float sum = 0.0, count = 0.0;
+    const unsigned long int gid_im = get_global_id(0);
+    const unsigned long int q = get_global_id(1);
+    const unsigned long int gid_rho = q/nTheta;
+    const unsigned long int gid_theta = q % nTheta;
+
+    const unsigned long int imStart = imstep * gid_im;
+    const unsigned long int indxStart = (gid_theta + nTheta * gid_rho)*indxstep;
+    unsigned long int i, idx;
+
+    for (i=0; i<indxstep; i++){
+      idx = rdnIndx[indxStart+i];
+      if (idx >= imstep) {
+        break;
+      } else {
+        sum += images[imStart + idx];
+        count += 1.0;
+      }
+    }
+
+    const unsigned long int gid_rdnP = (nThetaP * nRhoP * gid_im) + (nThetaP * (gid_rho+rhoPad)) + (gid_theta + thetaPad) ;
+    radon[gid_rdnP] = sum/(count + 1.0e-12);
+    }
 
   __kernel void radonFixArt(
       __global float *radon,
