@@ -585,10 +585,20 @@ class BandDetect():
     #                        cl.LocalMemory(wrkGrpsize),cl.LocalMemory(wrkGrpsize),
     #                        cl.LocalMemory(wrkGrpsize2 ))
 
-    prg.morphDilateKernelBF(queue,(np.uint32(nT),np.uint32(nR),nImChunk),None,rdn_gpu,lmaxXY,
-                          np.int64(shp[1]),np.int64(shp[0]),
-                          np.int64(self.padding[1]),np.int64(self.padding[0]),
-                          np.int64(self.peakPad[1]), np.int64(self.peakPad[0]))
+    # prg.morphDilateKernelBF(queue,(np.uint32(nT),np.uint32(nR),nImChunk),None,rdn_gpu,lmaxXY,
+    #                       np.int64(shp[1]),np.int64(shp[0]),
+    #                       np.int64(self.padding[1]),np.int64(self.padding[0]),
+    #                       np.int64(self.peakPad[1]), np.int64(self.peakPad[0]))
+
+    prg.morphDilateKernelBF(queue,(np.uint32(nT),np.uint32(nR),nImChunk),None,rdn_gpu,lmaxX,
+                            np.int64(shp[1]),np.int64(shp[0]),
+                            np.int64(self.padding[1]),np.int64(self.padding[0]),
+                            np.int64(1),np.int64(self.peakPad[0]))
+
+    prg.morphDilateKernelBF(queue,(np.uint32(nT),np.uint32(nR),nImChunk),None,lmaxX,lmaxXY,
+                            np.int64(shp[1]),np.int64(shp[0]),
+                            np.int64(self.padding[1]),np.int64(self.padding[0]),
+                            np.int64(self.peakPad[1]),np.int64(1))
 
     out = np.zeros((shp),dtype=np.ubyte)
     out_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=out.nbytes)
@@ -596,10 +606,7 @@ class BandDetect():
     prg.im1EQim2(queue,(np.uint32(nT),np.uint32(nR),nImCL),None, lmaxXY, rdn_gpu, out_gpu,
                  np.uint64(shp[1]),np.uint64(shp[0]),
                  np.uint64(self.padding[1]),np.uint64(self.padding[0]))
-    # prg.im1EQim2(queue,(np.uint32(nT * nR),nImChunk),None,lmaxXY,rdn_gpu,out_gpu,
-    #              np.uint64(shp[1]),np.uint64(shp[0]),
-    #              np.uint64(self.padding[1]),np.uint64(self.padding[0]))
-    #queue.flush()
+
     cl.enqueue_copy(queue,out,out_gpu,is_blocking=True).wait()
 
     rhoMaskTrim = np.int32((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
