@@ -16,7 +16,7 @@ RADEG = 180.0/np.pi
 
 class BandDetect():
   def __init__(self, patterns=None, patDim = None, nTheta = 180, nRho=90,\
-      tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9, clOps = [True, False, False]):
+      tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9, clOps = [True, True, True]):
     self.patDim = None
     self.nTheta = nTheta
     self.nRho = nRho
@@ -126,7 +126,7 @@ class BandDetect():
       kernel = -1.0*gaussian_filter(kernel, [self.rSigma, self.tSigma], order=[2,0])
       self.kernel = kernel.reshape((1,ksz[0], ksz[1]))
       #self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int)
-      self.peakPad = np.array(np.around([3 * ksz[0], 3 * ksz[1]]), dtype=np.int)
+      self.peakPad = np.array(np.around([3 * ksz[0], 4 * ksz[1]]), dtype=np.int)
       self.peakPad += 1 - np.mod(self.peakPad, 2)  # make sure we have it as odd.
 
     self.padding = np.array([np.max( [self.peakPad[0], self.padding[0]] ), np.max([self.peakPad[1], self.padding[1]])])
@@ -148,21 +148,18 @@ class BandDetect():
 
     eps = 1.e-6
     tic1 = timer()
-    #rdnNorm = self.radonPlan.radon_faster(patterns,self.padding, fixArtifacts=True)
     rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns)
     if self.CLOps[1] == False:
       rdnNorm_gpu  = None
       clparams = [None,None,None,None,None]
     rdntime = timer() - tic1
     tic1 = timer()
-    #rdnNorm = self.radonPlan.radon_fasterCL(patterns,fixArtifacts=True)
     rdnConv, clparams, rdnConv_gpu = self.rdn_conv(rdnNorm, clparams, rdnNorm_gpu)
     if self.CLOps[2] == False:
       rdnConv_gpu = None
       clparams = [None,None,None,None,None]
     convtime = timer()-tic1
     tic1 = timer()
-    #plt.imshow(rdnConv[-1,:,:])
     lMaxRdn = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu)
     lmaxtime =  timer()-tic1
     tic1 = timer()
@@ -176,7 +173,7 @@ class BandDetect():
     bandData['aveloc'] -= self.padding.reshape(1, 1, 2)
     for j in range(nPats):
       bandData['pqmax'][j,:] = \
-        rdnNorm[j, (bandData['aveloc'][j,:,0]).astype(int),(bandData['aveloc'][j,:,1]).astype(int)]
+        rdnNorm[(bandData['aveloc'][j,:,0]).astype(int),(bandData['aveloc'][j,:,1]).astype(int), j]
     #bandData['max'] += mns.reshape(nPats,1)
     blabeltime = timer() - tic
 
@@ -184,10 +181,11 @@ class BandDetect():
     if verbose == True:
       print('Radon Time:',rdntime)
       print('Convolution Time:', convtime)
-      print('lMax Time:', lmaxtime)
+      print('Peak ID Time:', lmaxtime)
+      print('Band Label Time:', blabeltime)
       print('Total Band Find Time:',timer() - tic0)
       plt.clf()
-      plt.imshow(rdnConv[-1,self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1]], origin='lower')
+      plt.imshow(rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], nPats-1], origin='lower', cmap='gray')
       #plt.scatter(y = bandData['aveloc'][-1,:,0], x = bandData['aveloc'][-1,:,1]+self.peakPad[1], c ='r', s=5)
       plt.scatter(y=bandData['aveloc'][-1,:,0],x=bandData['aveloc'][-1,:,1],c='r',s=5)
       plt.show()
@@ -271,6 +269,7 @@ class BandDetect():
     nR = np.int(nRho)
     nT = np.int(nTheta)
     shp  = rdnPad.shape
+    #print(shp)
     bandData_max = np.zeros((nP,nB), dtype = np.float32) # max of the convolved peak value
     bandData_avemax = np.zeros((nP,nB), dtype = np.float32) # mean of the nearest neighborhood values around the max
     bandData_maxloc = np.zeros((nP,nB,2), dtype = np.float32)-20.0 # location of the max within the radon transform
@@ -280,11 +279,11 @@ class BandDetect():
     nny = np.array([-1,-1,-1,-1,-1,0,0,0,0,0,1,1,1,1,1],dtype=np.float32)
 
     for q in range(nPats):
-      rdnPad_q = rdnPad[q,:,:]
-      lMaxRdn_q = lMaxRdn[q,:,:]
+      rdnPad_q = rdnPad[:,:,q]
+      lMaxRdn_q = lMaxRdn[:,:,q]
       #peakLoc = np.nonzero((lMaxRdn_q == rdnPad_q) & (rdnPad_q > 1.0e-6))
       peakLoc = np.nonzero(lMaxRdn_q)
-      indx1D = peakLoc[1] + peakLoc[0] * shp[2]
+      indx1D = peakLoc[1] + peakLoc[0] * shp[1]
       temp = (rdnPad_q.ravel())[indx1D]
       srt = np.argsort(temp)
       nBq = nB if (len(srt) > nB) else len(srt)
@@ -313,40 +312,40 @@ class BandDetect():
 
   def rdn_conv(self, radonIn, clparams=[None, None, None, None, None], radonIn_gpu = None):
     tic = timer()
-    ## the code below was replaced by a gpu convolution routine.
 
     if self.CLOps[1] == True: # perform this operation on the GPU
+
       return self.rdn_convCL2(radonIn, clparams, radonIn_gpu = radonIn_gpu, returnBuff = self.CLOps[2])
 
     else: # perform on the CPU
 
       shp = radonIn.shape
       if len(shp) == 2:
-        radon = radonIn.reshape(1,shp[0],shp[1])
-        shp = radonIn.shape
+        radon = radonIn.reshape(shp[0],shp[1],1)
+        shp = radon.shape
       else:
         radon = radonIn
       shprdn = radon.shape
       #rdnNormP = self.radonPad(radon,rPad=0,tPad=self.peakPad[1],mirrorTheta=True)
       if self.padding[1] > 0:
-        radon[:,:,0:self.padding[1]] = np.flip(radon[:,:,-2 * self.padding[1]:-self.padding[1]],axis=1)
-        radon[:,:,-self.padding[1]:] = np.flip(radon[:,:,self.padding[1]:2 * self.padding[1]],axis=1)
-      # pad again for doing the convolution -- this will be removed after the convolution
+        radon[:,0:self.padding[1],:] = np.flip(radon[:,-2 * self.padding[1]:-self.padding[1],:],axis=0)
+        radon[:,-self.padding[1]:,:] = np.flip(radon[:,self.padding[1]:2 * self.padding[1],:],axis=0)
+      # pad again for doing the convolution
       #rdnNormP = self.radonPad(rdnNormP,rPad=self.peakPad[0],tPad=self.peakPad[1],mirrorTheta=False)
       if self.padding[0] > 0:
-        radon[:,0:self.padding[0], :] = radon[:,self.padding[0],:].reshape(shp[0],1,shp[2])
-        radon[:,-self.padding[0]:, :] = radon[:,-self.padding[0]-1, :].reshape(shp[0],1,shp[2])
+        radon[0:self.padding[0], :,:] = radon[self.padding[0],:,:].reshape(1,shp[1], shp[2])
+        radon[-self.padding[0]:, :,:] = radon[-self.padding[0]-1, :,:].reshape(1, shp[1],shp[2])
 
 
       rdnConv = np.zeros_like(radon)
 
-      for i in range(shp[0]):
-        rdnConv[i,:,:] = -1.0 * gaussian_filter(np.squeeze(radon[i,:,:]),[self.rSigma,self.tSigma],order=[2,0])
+      for i in range(shp[2]):
+        rdnConv[:,:,i] = -1.0 * gaussian_filter(np.squeeze(radon[:,:,i]),[self.rSigma,self.tSigma],order=[2,0])
 
       #print(rdnConv.min(),rdnConv.max())
-      mns = (rdnConv[:,self.padding[0]:shprdn[1]-self.padding[0],self.padding[1]:shprdn[1]-self.padding[1]]).min(axis=1).min(axis=1)
+      mns = (rdnConv[self.padding[0]:shprdn[1]-self.padding[0],self.padding[1]:shprdn[1]-self.padding[1],:]).min(axis=0).min(axis=0)
 
-      rdnConv -= mns.reshape((shp[0],1,1))
+      rdnConv -= mns.reshape((1,1, shp[2]))
       rdnConv.clip(min=0.0)
       rdnConv_gpu = None
     return rdnConv, clparams, rdnConv_gpu
@@ -360,7 +359,7 @@ class BandDetect():
 
       shp = rdn.shape
       # find the local max
-      lMaxK = (1,self.peakPad[0],self.peakPad[1])
+      lMaxK = (self.peakPad[0],self.peakPad[1],1)
 
       lMaxRdn = scipy_grey_dilation(rdn,size=lMaxK)
       #lMaxRdn[:,:,0:self.peakPad[1]] = 0
@@ -368,111 +367,15 @@ class BandDetect():
       #location of the max is where the local max is equal to the original.
       lMaxRdn = lMaxRdn == rdn
 
-      rhoMaskTrim = np.int32((shp[1] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
-      lMaxRdn[:,0:rhoMaskTrim,:] = 0
-      lMaxRdn[:,-rhoMaskTrim:,:] = 0
-      lMaxRdn[:,:,0:self.padding[1]] = 0
-      lMaxRdn[:,:,-self.padding[1]:] = 0
+      rhoMaskTrim = np.int32((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
+      lMaxRdn[0:rhoMaskTrim,:,:] = 0
+      lMaxRdn[-rhoMaskTrim:,:,:] = 0
+      lMaxRdn[:,0:self.padding[1],:] = 0
+      lMaxRdn[:,-self.padding[1]:,:] = 0
 
 
       #print("Traditional:",timer() - tic)
       return lMaxRdn
-
-  def rdn_convCL(self, radonIn, clinfo):
-    # this will run sequential convolutions and identify the peaks in the convolution
-    tic = timer()
-    #def preparray(array):
-    #  return np.require(array,None,"C")
-
-    mf = cl.mem_flags
-    if isinstance(clinfo[2], cl.CommandQueue):
-      gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-      #if len(gpu) == 0:  # fall back to the numba implementation
-      #  return self.radon_faster(radon,fixArtifacts=fixArtifacts)
-      # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
-      # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
-      gpuIdx = np.random.choice(len(gpu))
-      ctx = cl.Context(devices={gpu[gpuIdx]})
-      queue = cl.CommandQueue(ctx)
-      kernel_location = path.dirname(__file__)
-      prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
-    else:
-      queue = clinfo[2]
-      prg = clinfo[3]
-
-    shp = radonIn.shape
-    if len(shp) == 2:
-      radonIn = radonIn.reshape(1,shp[0],shp[1])
-      shp = radonIn.shape
-
-    radon = self.radonPad(radonIn,rPad=self.peakPad[0],tPad=self.peakPad[1],mirrorTheta=True)
-    shp = radon.shape
-
-    resultConv = np.full_like(radon,-1.0e12, dtype = np.float32)
-    resultPeakLoc = np.full_like(radon,-1.0e12, dtype = np.float32)
-    resultPeakLoc2 = np.full_like(radon,0,dtype=np.uint8)
-
-    rdn_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
-    rdnConv_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=resultConv)
-
-    # for now I will assume that the kernel(s) can fit in local memory on the GPU
-    # also going to assume that there is only one kernel -- this will be something to fix soon.
-    k0 = self.kernel[0,:,:]
-    kshp = np.asarray(k0.shape, dtype = np.int32)
-    pad = kshp/2
-    kern_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=k0)
-    #print('inital buffers', timer()-tic)
-    #tic = timer()
-
-    #print('build program', timer()-tic)
-    #tic = timer()
-    prg.convolution3d2d(queue,(np.int32(shp[2]-2*pad[1]), np.int32(shp[1]-2*pad[0]), shp[0]),None,
-                        rdn_gpu, kern_gpu,np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]),
-                        np.int32(kshp[1]), np.int32(kshp[0]), np.int32(pad[1]), np.int32(pad[0]), rdnConv_gpu)
-    queue.finish()
-    #print('convolution', timer()-tic)
-    tic = timer()
-    cl.enqueue_copy(queue,resultConv,rdnConv_gpu, is_blocking=True).wait()
-
-    # going to reuse the original rdn buffer
-    cl.enqueue_copy(queue,rdn_gpu,resultPeakLoc,is_blocking=True).wait()
-    #print('second buffers',timer() - tic)
-    tic = timer()
-    #rdn_gpu.release()
-    #resultPeakLoc_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=resultPeakLoc)
-    resultPeakLoc2_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=resultPeakLoc2)
-    prg.morphDilateKernel(queue,(shp[2], shp[1], shp[0]),None,rdnConv_gpu,np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]),
-                          np.int32(self.peakMask.shape[1]), np.int32(self.peakMask.shape[0]), rdn_gpu)
-    queue.finish()
-    prg.im1NEim2(queue,(shp[2],shp[1],shp[0]),None,rdnConv_gpu,rdn_gpu,resultPeakLoc2_gpu,
-                 np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]))
-
-    mns = (resultConv[:,self.peakPad[0]:-self.peakPad[0],self.peakPad[1]:-self.peakPad[1]]).min(axis=1).min(axis=1)
-    resultConv -= mns.reshape((shp[0],1,1))
-    resultConv = resultConv.clip(min=0.0)
-    #print('find min',timer() - tic)
-    #tic = timer()
-
-    queue.finish()
-    #print('find max',timer() - tic)
-    tic = timer()
-
-
-
-    #cl.enqueue_copy(queue,resultPeakLoc,rdn_gpu,is_blocking=True).wait()
-    cl.enqueue_copy(queue,resultPeakLoc2,resultPeakLoc2_gpu,is_blocking=True).wait()
-    #print('copyback',timer() - tic)
-    tic = timer()
-
-    rhoMaskTrim = np.int32((shp[1] - 2*self.peakPad[0])*self.rhoMaskFrac + self.peakPad[0])
-    resultPeakLoc2[:,0:rhoMaskTrim, :] = 0
-    resultPeakLoc2[:,-rhoMaskTrim:,:] = 0
-    resultPeakLoc2[:,:,0:self.peakPad[1]] = 0
-    resultPeakLoc2[:,:,-self.peakPad[1]:] = 0
-    #print('trim',timer() - tic)
-    #tic = timer()
-
-    return resultConv, resultPeakLoc2
 
   def rdn_convCL2(self, radonIn, clparams=[None, None, None, None, None], radonIn_gpu = None, separableKernel=True, returnBuff = False):
     # this will run (eventually sequential) convolutions and identify the peaks in the convolution
@@ -480,11 +383,14 @@ class BandDetect():
     #def preparray(array):
     #  return np.require(array,None,"C")
     shp = radonIn.shape
+    clvtypesize = 16  # this is the vector size to be used in the openCL implementation.
     if len(shp) == 2:
-      radon = radonIn.reshape(1,shp[0],shp[1])
+      radon = radonIn.reshape(shp[0],shp[1],1)
+      nIm = 1
     else:
       radon = radonIn
     shp = radon.shape
+    nIm = shp[2]
     mf = cl.mem_flags
     if isinstance(clparams[2],cl.CommandQueue):
       ctx = clparams[1]
@@ -510,21 +416,31 @@ class BandDetect():
 
     if isinstance(radonIn_gpu, cl.Buffer):
       rdn_gpu = radonIn_gpu
-      nIm = np.int(rdn_gpu.size/(nTp * nRp * 4))
-      shp = (nIm, nRp, nTp)
+      nImCL = np.int(rdn_gpu.size/(nTp * nRp * 4))
+      shp = (nRp, nTp, nImCL)
     else:
-      rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radon)
 
-    #print('gpu platform setup', timer()-tic)
-    resultConv = np.full(shp,0.0, dtype = np.float32)
+      nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm / clvtypesize))))
+      # there is something very strange that happens if the number of images
+      # is a exact multiple of the max group size (typically 256)
+      mxGroupSz = gpu[0].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
+      nImCL += np.int(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
+      radonCL = np.zeros( (nRp , nTp, nImCL), dtype = np.float32)
+      radonCL[:,:,0:shp[2]] = radon
+      rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radonCL)
+      shp = (nRp, nTp, nImCL)
+
+    nImChunk = np.uint64(nImCL / clvtypesize)
+    resultConv = np.full(shp,0.0,dtype=np.float32)
     #resultPeakLoc = np.full_like(radon,-1.0e12, dtype = np.float32)
     #resultPeakLoc2 = np.full_like(radon,0,dtype=np.uint8)
-    rdnConv_gpu = cl.Buffer(ctx,mf.WRITE_ONLY | mf.COPY_HOST_PTR,hostbuf=resultConv)
-    mns = cl.Buffer(ctx, mf.READ_WRITE|mf.COPY_HOST_PTR, hostbuf=np.full((shp[0]), -1.0e12, dtype=np.float32))
-    prg.radonPadTheta(queue,(shp[0],shp[1],1),None,rdn_gpu,
-                    np.uint64(shp[1]),np.uint64(shp[2]),np.uint64(self.padding[1]))
-    prg.radonPadRho(queue,(shp[0],shp[2],1),None,rdn_gpu,
-                      np.uint64(shp[1]),np.uint64(shp[2]),np.uint64(self.padding[0]))
+    #rdnConv_gpu = cl.Buffer(ctx,mf.WRITE_ONLY | mf.COPY_HOST_PTR,hostbuf=resultConv)
+    rdnConv_gpu = cl.Buffer(ctx,mf.WRITE_ONLY ,size=resultConv.nbytes)
+
+    prg.radonPadTheta(queue,(shp[2],shp[0],1),None,rdn_gpu,
+                    np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[1]))
+    prg.radonPadRho(queue,(shp[2],shp[1],1),None,rdn_gpu,
+                      np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[0]))
 
     if separableKernel == False:
       # for now I will assume that the kernel(s) can fit in local memory on the GPU
@@ -533,8 +449,8 @@ class BandDetect():
       kshp = np.asarray(k0.shape, dtype = np.int32)
       pad = kshp/2
       kern_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0)
-      prg.convolution3d2d(queue,(np.int32(shp[2]-2*pad[1]), np.int32(shp[1]-2*pad[0]), shp[0]),None,
-                        rdn_gpu, kern_gpu,np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]),
+      prg.convolution3d2d(queue,(np.int32((shp[1]-2*pad[1])*(shp[0]-2*pad[0])), nImChunk),None,
+                        rdn_gpu, kern_gpu,np.int32(shp[1]),np.int32(shp[0]),np.int32(shp[2]),
                         np.int32(kshp[1]), np.int32(kshp[0]), np.int32(pad[1]), np.int32(pad[0]), rdnConv_gpu)
 
     #print('convolution', timer()-tic)
@@ -543,43 +459,45 @@ class BandDetect():
       tempConvbuff = cl.Buffer(ctx,mf.HOST_NO_ACCESS,size=(shp[0]*shp[1]*shp[2]*4))
 
       kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
-      k0x = np.require(self.kernel[0,np.int(kshp[0]/2),:],requirements=['C','A'])
+      pad = kshp
+      k0x = np.require(self.kernel[0,np.int(kshp[0]/2),:],requirements=['C','A', 'W', 'O'])
+      k0x *= 1.0 / k0x.sum()
       k0x = (k0x[...,:]).reshape(1,kshp[1])
-      k0y = np.require(self.kernel[0,:,np.int(kshp[1]/2)],requirements=['C','A'])
-      k0y = (k0y[...,:]).reshape(kshp[0],1)
+
+
 
       kshp = np.asarray(k0x.shape,dtype=np.int32)
-      pad = kshp / 2
+
       kern_gpu_x = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0x)
-      prg.convolution3d2d(queue,(np.int32(shp[2] - 2 * pad[1]),np.int32(shp[1] - 2 * pad[0]),shp[0]),None,
-                          rdn_gpu,kern_gpu_x,np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]),
+      prg.convolution3d2d(queue,(np.int32((shp[1] - 2 * pad[1]) * (shp[0] - 2 * pad[0])),nImChunk),None,
+                          rdn_gpu,kern_gpu_x,np.int32(shp[1]),np.int32(shp[0]),np.int32(shp[2]),
                           np.int32(kshp[1]),np.int32(kshp[0]),np.int32(pad[1]),np.int32(pad[0]),tempConvbuff)
 
+      kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
+      k0y = np.require(self.kernel[0,:,np.int(kshp[1] / 2)],requirements=['C','A', 'W', 'O'])
+      k0y *= 1.0 / k0y.sum()
+      k0y = (k0y[...,:]).reshape(kshp[0],1)
       kshp = np.asarray(k0y.shape,dtype=np.int32)
-      pad = kshp / 2
 
       kern_gpu_y = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0y)
-      prg.convolution3d2d(queue,(np.int32(shp[2] - 2 * pad[1]),np.int32(shp[1] - 2 * pad[0]),shp[0]),None,
-                          tempConvbuff,kern_gpu_y,np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]),
+      prg.convolution3d2d(queue,(np.int32((shp[1] - 2 * pad[1]) * (shp[0] - 2 * pad[0])),nImChunk),None,
+                          tempConvbuff,kern_gpu_y,np.int32(shp[1]),np.int32(shp[0]),np.int32(shp[0]),
                           np.int32(kshp[1]),np.int32(kshp[0]),np.int32(pad[1]),np.int32(pad[0]),rdnConv_gpu)
-      kern_gpu_x.release()
-      kern_gpu_y.release()
-      tempConvbuff.release()
 
-    prg.imageMin(queue,(shp[0],1,1),None,
-                 rdnConv_gpu, mns,np.int32(shp[2]),np.int32(shp[1]),
-                 np.int32(self.padding[1]),np.int32(self.padding[0]))
+    mns = cl.Buffer(ctx,mf.READ_WRITE,size=nImCL * 4)
 
-    # prg.imageSubMin(queue,(np.int32(shp[2] - 2 * pad[1]),np.int32(shp[1] - 2 * pad[0]),shp[0]),None,
-    #              rdnConv_gpu,mns,np.int32(shp[2]),np.int32(shp[1]),
-    #              np.int32(self.padding[1]),np.int32(self.padding[0]))
+    prg.imageMin(queue,(nImChunk,1,1),None,
+                 rdnConv_gpu, mns,np.uint32(shp[1]),np.uint32(shp[0]),
+                 np.uint32(self.padding[1]),np.uint32(self.padding[0]))
 
-    prg.imageSubMinWClip(queue,(np.int32(shp[2]),np.int32(shp[1]),shp[0]),None,
-                     rdnConv_gpu,mns,np.int32(shp[2]),np.int32(shp[1]),
-                     np.int32(0),np.int32(0))
+    prg.imageSubMinWClip(queue,(np.int32(shp[1]*shp[0]),nImChunk),None,
+                     rdnConv_gpu,mns,np.uint32(shp[1]),np.uint32(shp[0]),
+                     np.uint32(0),np.uint32(0))
 
-    queue.finish()
-    cl.enqueue_copy(queue,resultConv,rdnConv_gpu,is_blocking=True).wait()
+    queue.flush()
+    cl.enqueue_copy(queue,resultConv,rdnConv_gpu,is_blocking=False)#,is_blocking=True).wait()
+
+
     if returnBuff == False:
       return resultConv, clparams, None
     else:
@@ -591,12 +509,14 @@ class BandDetect():
     # the window size.
 
     tic = timer()
+    clvtypesize = 16  # this is the vector size to be used in the openCL implementation.
     shp = radonIn.shape
     if len(shp) == 2:
-      radon = radonIn.reshape(1,shp[0],shp[1])
+      radon = radonIn.reshape(shp[0],shp[1], 1)
     else:
       radon = radonIn
     shp = radon.shape
+    nIm = shp[2]
 
     mf = cl.mem_flags
     if isinstance(clparams[2],cl.CommandQueue):
@@ -622,65 +542,71 @@ class BandDetect():
 
     if isinstance(radonIn_gpu,cl.Buffer):
       rdn_gpu = radonIn_gpu
-      nIm = np.int(rdn_gpu.size / (nTp * nRp * 4))
-      shp = (nIm,nRp,nTp)
+      nImCL = np.int(rdn_gpu.size / (nTp * nRp * 4))
+      shp = (nRp,nTp,nImCL)
     else:
-      rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radon)
+      nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm / clvtypesize))))
+      # there is something very strange that happens if the number of images
+      # is a exact multiple of the max group size (typically 256)
+      mxGroupSz = gpu[0].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
+      nImCL += np.int(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
+      radonCL = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
+      radonCL[:,:,0:shp[2]] = radon
+      rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radonCL)
+      shp = (nRp,nTp,nImCL)
 
-    out = np.zeros((shp), dtype = np.ubyte)
-    #out = np.zeros((shp),dtype=np.float32)
-    out_gpu = cl.Buffer(ctx,mf.WRITE_ONLY | mf.COPY_HOST_PTR,hostbuf=out)
-    lmaxX = cl.Buffer(ctx,mf.READ_WRITE | mf.HOST_NO_ACCESS,size=radon.size * 4)
-    lmaxXY = cl.Buffer(ctx,mf.READ_WRITE | mf.HOST_NO_ACCESS,size=radon.size * 4)
-
-
-    nChunkT = np.uint32(np.ceil(nT / np.float(self.peakPad[1])))
-    nChunkR = np.uint32(np.ceil(nR / np.float(self.peakPad[0])))
-    winszX = np.uint32(self.peakPad[1])
-    winszX2 = np.uint32((winszX-1) / 2)
-    winszY = np.uint32(self.peakPad[0])
-    winszY2 = np.uint32((winszY-1) / 2)
-
-    prg.morphDilateKernelX(queue,(nChunkT,nR,shp[0]),(1,1,1),rdn_gpu,lmaxX,
-                           winszX, winszX2, np.uint32(shp[2]),np.uint32(shp[1]),
-                           np.uint32(self.padding[1]),np.uint32(self.padding[0]),
-                           cl.LocalMemory(winszX * 4),cl.LocalMemory(winszX * 4), cl.LocalMemory((winszX*2-1) * 4) )
+    nImChunk = np.uint64(nImCL / clvtypesize)
+    #out = np.zeros((shp), dtype = np.int32)
+    out = np.zeros((shp),dtype=np.ubyte)
+    out_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=out.nbytes)
+    lmaxX = cl.Buffer(ctx,mf.READ_WRITE ,size=rdn_gpu.size)
+    lmaxXY = cl.Buffer(ctx,mf.READ_WRITE ,size=rdn_gpu.size)
 
 
-    prg.morphDilateKernelY(queue,(nT, nChunkR,shp[0]),(1,1,1),lmaxX, lmaxXY,
-                           winszY,winszY2,np.uint32(shp[2]),np.uint32(shp[1]),
-                           np.uint32(self.padding[1]),np.uint32(self.padding[0]),
-                           cl.LocalMemory(winszX * 4),cl.LocalMemory(winszX * 4), cl.LocalMemory((winszX*2-1) * 4) )
+    nChunkT = np.uint64(np.ceil(nT / np.float(self.peakPad[1])))
+    nChunkR = np.uint64(np.ceil(nR / np.float(self.peakPad[0])))
+    winszX = np.uint64(self.peakPad[1])
+    winszX2 = np.uint64((winszX-1) / 2)
+    winszY = np.uint64(self.peakPad[0])
+    winszY2 = np.uint64((winszY-1) / 2)
 
-    # prg.morphDilateKernelBF(queue,(nT,nR,shp[0]),None,rdn_gpu,lmaxXY,
-    #                       np.uint32(shp[2]),np.uint32(shp[1]),
-    #                       np.uint32(self.padding[1]),np.uint32(self.padding[0]),
-    #                       np.uint32(self.peakPad[1]), np.uint32(self.peakPad[0]))
+    # wrkGrpsize = np.int(winszX * 4 * clvtypesize)
+    # wrkGrpsize2 = np.int((winszX*2-1) * 4 * clvtypesize)
+    # prg.morphDilateKernelX(queue,(nChunkT,nR,nImChunk),None,rdn_gpu,lmaxX,
+    #                        winszX, winszX2, np.uint64(shp[1]),np.uint64(shp[0]),
+    #                        np.uint64(self.padding[1]),np.uint64(self.padding[0]),
+    #                        cl.LocalMemory(wrkGrpsize),cl.LocalMemory(wrkGrpsize),
+    #                        cl.LocalMemory(wrkGrpsize2) )
+    #
+    # wrkGrpsize = np.int(winszY * 4 * clvtypesize)
+    # wrkGrpsize2 = np.int((winszY * 2 - 1) * 4 * clvtypesize)
+    # prg.morphDilateKernelY(queue,(nT, nChunkR,nImChunk),None,lmaxX, lmaxXY,
+    #                        winszY,winszY2,np.uint64(shp[1]),np.uint64(shp[0]),
+    #                        np.uint64(self.padding[1]),np.uint64(self.padding[0]),
+    #                        cl.LocalMemory(wrkGrpsize),cl.LocalMemory(wrkGrpsize),
+    #                        cl.LocalMemory(wrkGrpsize2 ))
 
-    prg.im1EQim2(queue,(nT, nR,shp[0]),None, lmaxXY, rdn_gpu, out_gpu,
-                 np.uint32(shp[2]),np.uint32(shp[1]),
-                 np.uint32(self.padding[1]),np.uint32(self.padding[0]))
-    queue.finish()
+    prg.morphDilateKernelBF(queue,(np.uint32(nT*nR),nImChunk),None,rdn_gpu,lmaxXY,
+                          np.int64(shp[1]),np.int64(shp[0]),
+                          np.int64(self.padding[1]),np.int64(self.padding[0]),
+                          np.int64(self.peakPad[1]), np.int64(self.peakPad[0]))
+
+    prg.im1EQim2(queue,(np.uint32(nT*nR),nImCL),None, lmaxXY, rdn_gpu, out_gpu,
+                 np.uint64(shp[1]),np.uint64(shp[0]),
+                 np.uint64(self.padding[1]),np.uint64(self.padding[0]))
+    # prg.im1EQim2(queue,(np.uint32(nT * nR),nImChunk),None,lmaxXY,rdn_gpu,out_gpu,
+    #              np.uint64(shp[1]),np.uint64(shp[0]),
+    #              np.uint64(self.padding[1]),np.uint64(self.padding[0]))
+    #queue.flush()
     cl.enqueue_copy(queue,out,out_gpu,is_blocking=True).wait()
 
-    rhoMaskTrim = np.int32((shp[1] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
-    out[:,0:rhoMaskTrim,:] = 0
-    out[:,-rhoMaskTrim:,:] = 0
-    out[:,:,0:self.padding[1]] = 0
-    out[:,:,-self.padding[1]:] = 0
+    rhoMaskTrim = np.int32((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
+    out[0:rhoMaskTrim,:, :] = 0
+    out[-rhoMaskTrim:,:,:] = 0
+    out[:,0:self.padding[1],:] = 0
+    out[:,-self.padding[1]:,:] = 0
 
     return out
-    # going to reuse the original rdn buffer
-    #cl.enqueue_copy(queue,rdn_gpu,resultPeakLoc,is_blocking=True).wait()
-    #print('second buffers',timer() - tic)
-    #tic = timer()
-    #rdn_gpu.release()
-    #resultPeakLoc_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=resultPeakLoc)
-    #resultPeakLoc2_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=resultPeakLoc2)
-    #prg.morphDilateKernel(queue,(shp[2], shp[1], shp[0]),None,rdnConv_gpu,np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]),
-    #                      np.int32(self.peakMask.shape[1]), np.int32(self.peakMask.shape[0]), rdn_gpu)
-    #queue.finish()
-    #prg.im1NEim2(queue,(shp[2],shp[1],shp[0]),None,rdnConv_gpu,rdn_gpu,resultPeakLoc2_gpu,
-    #             np.int32(shp[2]),np.int32(shp[1]),np.int32(shp[0]))
+
 
 

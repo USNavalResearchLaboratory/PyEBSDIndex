@@ -3,6 +3,7 @@ from timeit import default_timer as timer
 from os import path
 from numba import jit, prange
 import pyopencl as cl
+import matplotlib.pyplot as plt
 from os import environ
 environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
@@ -107,6 +108,8 @@ class Radon():
       radon[:,:,0] = radon[:,:,1]
       radon[:,:,-1] = radon[:,:,-2]
 
+    radon = np.transpose(radon, [1,2,0]).copy()
+
     if reform==True:
       image = image.reshape(shapeIm)
 
@@ -128,13 +131,15 @@ class Radon():
 
     nPx = shapeIm[-1]*shapeIm[-2]
     indxDim = np.asarray(self.indexPlan.shape)
-    radon = np.zeros([nIm, self.nRho+2*padding[0], self.nTheta+2*padding[1]], dtype=np.float32)
+    #radon = np.zeros([nIm, self.nRho+2*padding[0], self.nTheta+2*padding[1]], dtype=np.float32)
+    radon = np.zeros([self.nRho + 2 * padding[0],self.nTheta + 2 * padding[1], nIm],dtype=np.float32)
     shp = radon.shape
+
     self.rdn_loops(image,self.indexPlan,nIm,nPx,indxDim,radon, np.asarray(padding))
 
     if (fixArtifacts == True):
-      radon[:,:,padding[1]] = radon[:,:,padding[1]+1]
-      radon[:,:,shp[2]-1-padding[1]] = radon[:,:,shp[2]-padding[1]-2]
+      radon[:,padding[1],:] = radon[:,padding[1]+1,:]
+      radon[:,shp[1]-1-padding[1],:] = radon[:,shp[1]-padding[1]-2,:]
 
 
     image = image.reshape(shapeIm)
@@ -165,7 +170,7 @@ class Radon():
             #radon[q, i, j] += images[imstart+indx1]
             sum += images[imstart + indx1]
             count += 1.0
-          radon[q,ip,jp] = sum/(count+1e-12)
+          radon[ip,jp,q] = sum/(count + 1.0e-12)
 
   def radon_fasterCL(self,image,padding = np.array([0,0]),fixArtifacts = False, returnBuff = False):
     # while keeping this as a method works in multiprocessing on the Mac, it does not on Linux.  Thus I make it a separate function
@@ -187,54 +192,55 @@ class Radon():
     shapeIm = np.shape(image)
     if image.ndim == 2:
       nIm = 1
-      #image = image[np.newaxis, : ,:]
-      #reform = True
+      image = image.reshape(1, shapeIm[0], shapeIm[1])
+      shapeIm = np.shape(image)
     else:
       nIm = shapeIm[0]
     #  reform = False
 
-    image = image.reshape(-1).astype(np.float32)
-    imstep = np.uint32(np.product(shapeIm[-2:]))
-    indxstep = np.uint32(self.indexPlan.shape[-1])
-    rdnstep = np.uint32(self.nRho * self.nTheta)
-
-
-    radon = np.zeros([nIm,self.nRho+2*padding[0],self.nTheta+2*padding[1]],dtype=np.float32)
-    image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image)
+    clvtypesize = 16 # this is the vector size to be used in the openCL implementation.
+    nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm/clvtypesize))))
+    # there is something very strange that happens if the number of images
+    # is a exact multiple of the max group size (typically 256)
+    mxGroupSz = gpu[0].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
+    nImCL += np.int(16 * (1 - np.int(np.mod(nImCL, mxGroupSz ) > 0)))
+    image_align = np.zeros((shapeIm[1], shapeIm[2], nImCL), dtype = np.float32)
+    image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()
+    radon = np.zeros([self.nRho+2*padding[0],self.nTheta+2*padding[1], nImCL],dtype=np.float32)
+    radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=radon.nbytes)
+    #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
+    image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image_align)
     rdnIndx_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=self.indexPlan)
-    radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
 
-
-
-    shpRdn = np.asarray(radon.shape, dtype = np.uint32)
-    padRho = np.uint32(padding[0])
-    padTheta = np.uint32(padding[1])
+    imstep = np.uint64(np.product(shapeIm[-2:]))
+    indxstep = np.uint64(self.indexPlan.shape[-1])
+    rdnstep = np.uint64(self.nRho * self.nTheta)
+    shpRdn = np.asarray(radon.shape, dtype = np.uint64)
+    padRho = np.uint64(padding[0])
+    padTheta = np.uint64(padding[1])
     tic = timer()
 
-    # prg.radonSum2(queue,(nIm,self.nRho, self.nTheta),None,rdnIndx_gpu,image_gpu,radon_gpu,
-    #              imstep, indxstep, shpRdn[1], shpRdn[2], padRho, padTheta)
-
-    prg.radonSum(queue,(nIm,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
-                  imstep, indxstep, shpRdn[1], shpRdn[2], padRho, padTheta, np.uint32(self.nTheta))
+    nImChunk = np.uint64(nImCL/clvtypesize)
+    prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
+                  imstep, indxstep,
+                 shpRdn[0], shpRdn[1],
+                 padRho, padTheta, np.uint64(self.nTheta))
 
 
     if (fixArtifacts == True):
-      prg.radonFixArt(queue,(nIm,self.nRho,1),None,radon_gpu,
-                      shpRdn[1],shpRdn[2],padTheta)
+       prg.radonFixArt(queue,(nImChunk,self.nRho),None,radon_gpu,
+                       shpRdn[0],shpRdn[1],padTheta)
 
-    image = image.reshape(shapeIm)
+    #image = image.reshape(shapeIm)
     queue.flush()
 
-    #print(queue.get_info(cl.command_queue_info.REFERENCE_COUNT))
-    #print(ctx.get_info(cl.context_info.REFERENCE_COUNT))
-    #print('RDN Sum',timer() - tic)
     if returnBuff == False:
       cl.enqueue_copy(queue,radon,radon_gpu,is_blocking=True).wait()
       radon_gpu.release()
-      queue.flush()
+      radon = radon[:,:, 0:nIm]
       radon_gpu = None
       clparams = (None, None, None, None, None)
-      return radon, clparams, None
+      return radon, clparams, radon_gpu
     else:
       clparams = (gpu,ctx,queue,prg,mf)
       return radon, clparams, radon_gpu
