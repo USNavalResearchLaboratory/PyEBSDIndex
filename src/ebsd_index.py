@@ -19,21 +19,21 @@ import traceback
 
 
 
-def index_pats(pats = None, filename=None, filenameout=None, phaselist=['FCC'], \
-               vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
-               peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9,\
-               patStart = 0, patEnd = -1,\
-               return_indexer_obj = False, ebsd_indexer_obj = None):
+def index_pats(pats = None,filename=None,filenameout=None,phaselist=['FCC'], \
+               vendor=None,PC = None,sampleTilt=70.0,camElev = 5.3, \
+               bandDetectPlan = None,nRho=90,nTheta=180,tSigma= None,rSigma=None,rhoMaskFrac=0.1,nBands=9, \
+               patStart = 0,patEnd = -1, \
+               return_indexer_obj = False,ebsd_indexer_obj = None):
 
   if pats is None:
     pdim = None
   else:
     pdim = pats.shape[-2:]
   if ebsd_indexer_obj == None:
-    indexer = EBSDIndexer(filename=filename, phaselist=phaselist, \
-               vendor=None, PC = PC, sampleTilt=sampleTilt, camElev = camElev,\
-               peakDetectPlan = peakDetectPlan, \
-               nRho=nRho, nTheta=nTheta, tSigma= tSigma, rSigma=rSigma, rhoMaskFrac=rhoMaskFrac, nBands=nBands, patDim = pdim)
+    indexer = EBSDIndexer(filename=filename,phaselist=phaselist, \
+                          vendor=None,PC = PC,sampleTilt=sampleTilt,camElev = camElev, \
+                          bandDetectPlan= bandDetectPlan, \
+                          nRho=nRho,nTheta=nTheta,tSigma= tSigma,rSigma=rSigma,rhoMaskFrac=rhoMaskFrac,nBands=nBands,patDim = pdim)
   else:
     indexer = ebsd_indexer_obj
 
@@ -158,10 +158,10 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
   else:
     pdim = pats.shape[-2:]
   if ebsd_indexer_obj == None:
-    indexer = EBSDIndexer(filename=filename, phaselist=phaselist, \
-               vendor=None, PC = PC, sampleTilt=sampleTilt, camElev = camElev,\
-               peakDetectPlan = peakDetectPlan, \
-               nRho=nRho, nTheta=nTheta, tSigma= tSigma, rSigma=rSigma, rhoMaskFrac=rhoMaskFrac, nBands=nBands, patDim = pdim)
+    indexer = EBSDIndexer(filename=filename,phaselist=phaselist, \
+                          vendor=None,PC = PC,sampleTilt=sampleTilt,camElev = camElev, \
+                          bandDetectPlan= peakDetectPlan, \
+                          nRho=nRho,nTheta=nTheta,tSigma= tSigma,rSigma=rSigma,rhoMaskFrac=rhoMaskFrac,nBands=nBands,patDim = pdim)
   else:
     indexer = ebsd_indexer_obj
 
@@ -224,7 +224,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
       workers.append(index_chunk_ray.remote(pats = None, indexer = remote_indexer, \
                                         patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
       timers.append(timer())
-      time.sleep(0.05)
+      time.sleep(0.01)
       nsubmit += 1
 
     #workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
@@ -232,7 +232,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
     while ndone < njobs:
       toc = timer()
       wrker,busy = ray.wait(workers, num_returns=1, timeout=None)
-      print("waittime: ",timer() - toc)
+      #print("waittime: ",timer() - toc)
       wrkdataout,indxstr,indxend, rate = ray.get(wrker[0])
       p = workers.index(wrker[0])
       workers.remove(wrker[0])
@@ -302,10 +302,10 @@ def index_patsMP(pats = None, filename=None, filenameout=None, phaselist=['FCC']
   else:
     pdim = pats.shape[-2:]
   if ebsd_indexer_obj == None:
-    indexer = EBSDIndexer(filename=filename, phaselist=phaselist, \
-               vendor=None, PC = PC, sampleTilt=sampleTilt, camElev = camElev,\
-               peakDetectPlan = peakDetectPlan, \
-               nRho=nRho, nTheta=nTheta, tSigma= tSigma, rSigma=rSigma, rhoMaskFrac=rhoMaskFrac, nBands=nBands, patDim = pdim)
+    indexer = EBSDIndexer(filename=filename,phaselist=phaselist, \
+                          vendor=None,PC = PC,sampleTilt=sampleTilt,camElev = camElev, \
+                          bandDetectPlan= peakDetectPlan, \
+                          nRho=nRho,nTheta=nTheta,tSigma= tSigma,rSigma=rSigma,rhoMaskFrac=rhoMaskFrac,nBands=nBands,patDim = pdim)
   else:
     indexer = ebsd_indexer_obj
 
@@ -477,9 +477,9 @@ def index_patsMP(pats = None, filename=None, filenameout=None, phaselist=['FCC']
 
 
 class EBSDIndexer():
-  def __init__(self, filename=None, phaselist=['FCC'], \
-               vendor=None, PC =None, sampleTilt=70.0, camElev = 5.3,\
-               peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9, patDim=None):
+  def __init__(self,filename=None,phaselist=['FCC'], \
+               vendor=None,PC =None,sampleTilt=70.0,camElev = 5.3, \
+               bandDetectPlan = None,nRho=90,nTheta=180,tSigma= None,rSigma=None,rhoMaskFrac=0.1,nBands=9,patDim=None):
     self.filein = filename
     if self.filein is not None:
       self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
@@ -509,18 +509,18 @@ class EBSDIndexer():
     # self.endPat = endPat
     # if (self.endPat == -1) and self.fID is not None:
     #   self.endPat = self.fID.nPatterns+1
-    if peakDetectPlan is None:
-        self.peakDetectPlan = band_detect2.BandDetect(nRho=nRho,nTheta=nTheta,\
-                                                     tSigma=tSigma, rSigma=rSigma,\
-                                                     rhoMaskFrac=rhoMaskFrac,nBands=nBands)
+    if bandDetectPlan is None:
+        self.bandDetectPlan = band_detect2.BandDetect(nRho=nRho,nTheta=nTheta, \
+                                                      tSigma=tSigma,rSigma=rSigma, \
+                                                      rhoMaskFrac=rhoMaskFrac,nBands=nBands)
     else:
-      self.peakDetectPlan = peakDetectPlan
+      self.bandDetectPlan = bandDetectPlan
 
     if self.fID is not None:
-      self.peakDetectPlan.band_detect_setup(patDim=[self.fID.patternW,self.fID.patternH ])
+      self.bandDetectPlan.band_detect_setup(patDim=[self.fID.patternW,self.fID.patternH])
     else:
       if patDim is not None:
-        self.peakDetectPlan.band_detect_setup(patDim=patDim)
+        self.bandDetectPlan.band_detect_setup(patDim=patDim)
     self.phaseLib =[]
     for ph in self.phaselist:
       self.phaseLib.append(band_vote.BandVote(tripletlib.triplib(libType=ph)))
@@ -543,14 +543,14 @@ class EBSDIndexer():
         pats = patsin#[patStart:patEnd, :,:]
       pshape = pats.shape
 
-      if self.peakDetectPlan.patDim is None:
-        self.peakDetectPlan.band_detect_setup(patDim=pshape[1:3])
+      if self.bandDetectPlan.patDim is None:
+        self.bandDetectPlan.band_detect_setup(patDim=pshape[1:3])
       else:
-        if np.all((np.array(pshape[1:3])-self.peakDetectPlan.patDim) == 0):
-          self.peakDetectPlan.band_detect_setup(patDim=pshape[1:3])
+        if np.all((np.array(pshape[1:3])-self.bandDetectPlan.patDim) == 0):
+          self.bandDetectPlan.band_detect_setup(patDim=pshape[1:3])
 
-    if self.peakDetectPlan.patDim is None:
-      self.peakDetectPlan.band_detect_setup(patterns = pats)
+    if self.bandDetectPlan.patDim is None:
+      self.bandDetectPlan.band_detect_setup(patterns = pats)
 
     npoints = pats.shape[0]
     if patEnd == -1:
@@ -563,12 +563,12 @@ class EBSDIndexer():
     q = np.zeros((npoints, 4))
     #print(timer() - tic)
     tic = timer()
-    bandData = self.peakDetectPlan.find_bands(pats)
+    bandData = self.bandDetectPlan.find_bands(pats)
 
 
     indxData['pq'] = np.sum(bandData['max'], axis = 1)
     indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
-    bandNorm = self.peakDetectPlan.radon2pole(bandData,PC=self.PC,vendor=self.vendor)
+    bandNorm = self.bandDetectPlan.radon2pole(bandData,PC=self.PC,vendor=self.vendor)
     #print('Find Band: ', timer() - tic)
 
     #return bandNorm,patStart,patEnd
