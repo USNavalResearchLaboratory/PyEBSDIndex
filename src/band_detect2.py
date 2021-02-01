@@ -449,7 +449,7 @@ class BandDetect():
       kshp = np.asarray(k0.shape, dtype = np.int32)
       pad = kshp/2
       kern_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0)
-      prg.convolution3d2d(queue,(np.int32((shp[1]-2*pad[1])*(shp[0]-2*pad[0])), nImChunk),None,
+      prg.convolution3d2d(queue,(np.int32((shp[1]-2*pad[1])),np.int32((shp[0]-2*pad[0])), nImChunk),None,
                         rdn_gpu, kern_gpu,np.int32(shp[1]),np.int32(shp[0]),np.int32(shp[2]),
                         np.int32(kshp[1]), np.int32(kshp[0]), np.int32(pad[1]), np.int32(pad[0]), rdnConv_gpu)
 
@@ -469,7 +469,7 @@ class BandDetect():
       kshp = np.asarray(k0x.shape,dtype=np.int32)
 
       kern_gpu_x = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0x)
-      prg.convolution3d2d(queue,(np.int32((shp[1] - 2 * pad[1]) * (shp[0] - 2 * pad[0])),nImChunk),None,
+      prg.convolution3d2d(queue,(np.int32((shp[1]-2*pad[1])),np.int32((shp[0]-2*pad[0])), nImChunk),None,
                           rdn_gpu,kern_gpu_x,np.int32(shp[1]),np.int32(shp[0]),np.int32(shp[2]),
                           np.int32(kshp[1]),np.int32(kshp[0]),np.int32(pad[1]),np.int32(pad[0]),tempConvbuff)
 
@@ -480,7 +480,7 @@ class BandDetect():
       kshp = np.asarray(k0y.shape,dtype=np.int32)
 
       kern_gpu_y = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0y)
-      prg.convolution3d2d(queue,(np.int32((shp[1] - 2 * pad[1]) * (shp[0] - 2 * pad[0])),nImChunk),None,
+      prg.convolution3d2d(queue,(np.int32((shp[1]-2*pad[1])),np.int32((shp[0]-2*pad[0])), nImChunk),None,
                           tempConvbuff,kern_gpu_y,np.int32(shp[1]),np.int32(shp[0]),np.int32(shp[0]),
                           np.int32(kshp[1]),np.int32(kshp[0]),np.int32(pad[1]),np.int32(pad[0]),rdnConv_gpu)
 
@@ -490,7 +490,7 @@ class BandDetect():
                  rdnConv_gpu, mns,np.uint32(shp[1]),np.uint32(shp[0]),
                  np.uint32(self.padding[1]),np.uint32(self.padding[0]))
 
-    prg.imageSubMinWClip(queue,(np.int32(shp[1]*shp[0]),nImChunk),None,
+    prg.imageSubMinWClip(queue,(np.int32(shp[1]), np.int32(shp[0]),nImChunk),None,
                      rdnConv_gpu,mns,np.uint32(shp[1]),np.uint32(shp[0]),
                      np.uint32(0),np.uint32(0))
 
@@ -557,8 +557,7 @@ class BandDetect():
 
     nImChunk = np.uint64(nImCL / clvtypesize)
     #out = np.zeros((shp), dtype = np.int32)
-    out = np.zeros((shp),dtype=np.ubyte)
-    out_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=out.nbytes)
+
     lmaxX = cl.Buffer(ctx,mf.READ_WRITE ,size=rdn_gpu.size)
     lmaxXY = cl.Buffer(ctx,mf.READ_WRITE ,size=rdn_gpu.size)
 
@@ -586,12 +585,15 @@ class BandDetect():
     #                        cl.LocalMemory(wrkGrpsize),cl.LocalMemory(wrkGrpsize),
     #                        cl.LocalMemory(wrkGrpsize2 ))
 
-    prg.morphDilateKernelBF(queue,(np.uint32(nT*nR),nImChunk),None,rdn_gpu,lmaxXY,
+    prg.morphDilateKernelBF(queue,(np.uint32(nT),np.uint32(nR),nImChunk),None,rdn_gpu,lmaxXY,
                           np.int64(shp[1]),np.int64(shp[0]),
                           np.int64(self.padding[1]),np.int64(self.padding[0]),
                           np.int64(self.peakPad[1]), np.int64(self.peakPad[0]))
 
-    prg.im1EQim2(queue,(np.uint32(nT*nR),nImCL),None, lmaxXY, rdn_gpu, out_gpu,
+    out = np.zeros((shp),dtype=np.ubyte)
+    out_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=out.nbytes)
+
+    prg.im1EQim2(queue,(np.uint32(nT),np.uint32(nR),nImCL),None, lmaxXY, rdn_gpu, out_gpu,
                  np.uint64(shp[1]),np.uint64(shp[0]),
                  np.uint64(self.padding[1]),np.uint64(self.padding[0]))
     # prg.im1EQim2(queue,(np.uint32(nT * nR),nImChunk),None,lmaxXY,rdn_gpu,out_gpu,

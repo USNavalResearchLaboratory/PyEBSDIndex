@@ -104,13 +104,10 @@ __kernel void convolution3d2d( __global const float16 *in, __constant float *ker
   const int kszx, const int kszy, const int padx, const int pady, __global float16 *out)
 {
   // IDs of work-item represent x and y coordinates in image
-  const long xy = get_global_id(0);
-  const long imszx_2p = imszx - 2*padx;
-  const long y = xy/(imszx_2p) + pady;
-  const long x = xy % imszx_2p + padx;
-  //const long y = get_global_id(1)+pady;
-  const unsigned long int z = get_global_id(1);
-  const unsigned long int nImChunk = get_global_size(1);
+  const long x = get_global_id(0) + padx;
+  const long y = get_global_id(1) + pady;
+  const unsigned long int z = get_global_id(2);
+  const unsigned long int nImChunk = get_global_size(2);
   //long int indxIm; 
   //long int indxK;
   long unsigned long yIndx; 
@@ -160,12 +157,10 @@ __kernel void morphDilateKernelBF( __global const float16 *in,  __global float16
   //IDs of work-item represent x and y coordinates in image; z is the n-th image.
   //const long int x = get_global_id(0) + xpad;
   //const long int y = get_global_id(1) + ypad;
-  const long xy = get_global_id(0);
-  const long imszx_2p = imszx - 2*padx;
-  const long y = xy/(imszx_2p) + pady;
-  const long x = xy % imszx_2p + padx;
-  const long int z = get_global_id(1);
-  const long int nImChunk = get_global_size(1);
+  const long x = get_global_id(0) + padx;
+  const long y = get_global_id(1) + pady;
+  const long int z = get_global_id(2);
+  const long int nImChunk = get_global_size(2);
   long int yIndx;
   float16 pxVal;
   const  long kszx2 = kszx/2;
@@ -227,12 +222,10 @@ __kernel void imageSubMinWClip( __global float16 *im1, __global const float16 *i
   // IDs of work-item represent x and y coordinates in image
   //const unsigned long int x = get_global_id(0) + padx;
   //const unsigned long int y = get_global_id(1) + pady;
-  const unsigned long xy = get_global_id(0);
-  const unsigned long imszx_2p = imszx - 2*padx;
-  const unsigned long y = xy/(imszx_2p) + pady;
-  const unsigned long x = xy % imszx_2p + padx;
-  const unsigned long z = get_global_id(1);
-  const unsigned long nImChunk = get_global_size(1);
+  const long x = get_global_id(0) + padx;
+  const long y = get_global_id(1) + pady;
+  const unsigned long z = get_global_id(2);
+  const unsigned long nImChunk = get_global_size(2);
 
   const long int indx = (x+y*imszx)*nImChunk + z;
   const float16 im1val = im1[indx];
@@ -253,13 +246,10 @@ __kernel void im1EQim2( __global const float *im1, __global const float *im2, __
   // IDs of work-item represent x and y coordinates in image
   //const unsigned long int x = get_global_id(0)+padx;
   //const unsigned long int y = get_global_id(1)+pady;
-  const unsigned long xy = get_global_id(0);
-  const unsigned long imszx_2p = imszx - 2*padx;
-  const unsigned long y = xy/(imszx_2p) + pady;
-  const unsigned long x = xy % imszx_2p + padx;
-
-  const unsigned long int z = get_global_id(1);
-  const unsigned long int nImChunk = get_global_size(1);
+  const unsigned long x = get_global_id(0) + padx;
+  const unsigned long y = get_global_id(1) + pady;
+  const unsigned long int z = get_global_id(2);
+  const unsigned long int nImChunk = get_global_size(2);
   //const int16 yes = (int16)(1);
   //const int16 no = (int16)(0);
 
@@ -307,6 +297,7 @@ __kernel void morphDilateKernelX( __global const float16 *im1, __global float16 
   
   unsigned long int i;
   unsigned long int indx;
+
 
   for (i=0; i<winszX; i++){
     s[i] = (float16) (-1.0e12f);
