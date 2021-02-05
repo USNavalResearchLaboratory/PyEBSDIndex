@@ -172,22 +172,28 @@ class Radon():
             count += 1.0
           radon[ip,jp,q] = sum/(count + 1.0e-12)
 
-  def radon_fasterCL(self,image,padding = np.array([0,0]),fixArtifacts = False, returnBuff = False):
-    # while keeping this as a method works in multiprocessing on the Mac, it does not on Linux.  Thus I make it a separate function
+  def radon_fasterCL(self,image,padding = np.array([0,0]),fixArtifacts = False, returnBuff = False, clparams=[None, None, None, None, None] ):
 
     tic = timer()
-    gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-    if len(gpu) == 0: # fall back to the numba implementation
-      return self.radon_faster(image,padding=padding,fixArtifacts = fixArtifacts)
-    # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
-    # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
-    gpuIdx = np.random.choice(len(gpu))
-    ctx = cl.Context(devices = {gpu[gpuIdx]})
-    queue = cl.CommandQueue(ctx)
-    mf = cl.mem_flags
-    kernel_location = path.dirname(__file__)
-    prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
-
+    if isinstance(clparams[1],cl.Context):
+      gpu = clparams[0]
+      ctx = clparams[1]
+      prg = clparams[3]
+      if isinstance(clparams[2], cl.CommandQueue):
+        queue = clparams[2]
+      else:
+        queue = cl.CommandQueue(ctx)
+      mf = clparams[4]
+    else:
+      try:
+        gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
+        ctx = cl.Context(devices={gpu[0]})
+        queue = cl.CommandQueue(ctx)
+        mf = cl.mem_flags
+        kernel_location = path.dirname(__file__)
+        prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+      except:
+        return self.radon_faster(image,padding=padding,fixArtifacts = fixArtifacts)
 
     shapeIm = np.shape(image)
     if image.ndim == 2:
@@ -239,10 +245,10 @@ class Radon():
       radon_gpu.release()
       radon = radon[:,:, 0:nIm]
       radon_gpu = None
-      clparams = (None, None, None, None, None)
+      clparams = [None, None, None, None, None]
       return radon, clparams, radon_gpu
     else:
-      clparams = (gpu,ctx,queue,prg,mf)
+      clparams = [gpu,ctx,queue,prg,mf]
       return radon, clparams, radon_gpu
 
     #if (fixArtifacts == True):

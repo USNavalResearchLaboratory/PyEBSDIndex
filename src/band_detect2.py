@@ -134,7 +134,7 @@ class BandDetect():
     if nBands is not None:
       self.nBands = nBands
 
-  def find_bands(self, patternsIn, faster=False, verbose=False):
+  def find_bands(self, patternsIn, faster=False, verbose=False, clparams = [None, None, None, None, None]):
     tic0 = timer()
     tic = timer()
     ndim = patternsIn.ndim
@@ -148,7 +148,7 @@ class BandDetect():
 
     eps = 1.e-6
     tic1 = timer()
-    rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns)
+    rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns, clparams)
     if self.CLOps[1] == False:
       rdnNorm_gpu  = None
       clparams = [None,None,None,None,None]
@@ -163,6 +163,8 @@ class BandDetect():
     lMaxRdn = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu)
     lmaxtime =  timer()-tic1
     tic1 = timer()
+    # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
+    clparams[2] = None
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
     bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnConv,lMaxRdn)
     bandData['max'] = bdat[0]
@@ -300,13 +302,13 @@ class BandDetect():
 
     return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc
 
-  def calc_rdn(self, patterns):
-    clparams = [None,None,None,None,None]
+  def calc_rdn(self, patterns, clparams = [None, None, None, None]):
     rdnNorm_gpu = None
     if self.CLOps[0] == False:
       rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True)
     else:
-      rdnNorm, clparams, rdnNorm_gpu = self.radonPlan.radon_fasterCL(patterns, self.padding, fixArtifacts=True, returnBuff = self.CLOps[1])
+      rdnNorm, clparams, rdnNorm_gpu = self.radonPlan.radon_fasterCL(patterns, self.padding, fixArtifacts=True,
+                                                                     returnBuff = self.CLOps[1], clparams = clparams)
 
     return rdnNorm, clparams, rdnNorm_gpu
 
@@ -392,22 +394,26 @@ class BandDetect():
     shp = radon.shape
     nIm = shp[2]
     mf = cl.mem_flags
-    if isinstance(clparams[2],cl.CommandQueue):
+    if isinstance(clparams[1],cl.Context):
+      gpu = clparams[0]
       ctx = clparams[1]
-      queue = clparams[2]
       prg = clparams[3]
+      if isinstance(clparams[2], cl.CommandQueue):
+        queue = clparams[2]
+      else:
+        queue = cl.CommandQueue(ctx)
+      mf = clparams[4]
     else:
-      gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-      # if len(gpu) == 0:  # fall back to the numba implementation
-      #  return self.radon_faster(radon,fixArtifacts=fixArtifacts)
-      # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
-      # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
-      gpuIdx = np.random.choice(len(gpu))
-      ctx = cl.Context(devices={gpu[gpuIdx]})
-      queue = cl.CommandQueue(ctx)
-      kernel_location = path.dirname(__file__)
-      prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
-
+      try:
+        gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
+        ctx = cl.Context(devices={gpu[0]})
+        queue = cl.CommandQueue(ctx)
+        kernel_location = path.dirname(__file__)
+        prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+        mf = cl.mem_flags
+      except:
+        return self.rdn_conv(radonIn, clparams=[None, None, None, None, None], radonIn_gpu = None)
+    clparams = [gpu,ctx,queue,prg,mf]
 
     nT = self.nTheta
     nTp = nT + 2 * self.padding[1]
@@ -519,22 +525,27 @@ class BandDetect():
     nIm = shp[2]
 
     mf = cl.mem_flags
-    if isinstance(clparams[2],cl.CommandQueue):
+    if isinstance(clparams[1],cl.Context):
+      gpu = clparams[0]
       ctx = clparams[1]
-      queue = clparams[2]
       prg = clparams[3]
+      if isinstance(clparams[2],cl.CommandQueue):
+        queue = clparams[2]
+      else:
+        queue = cl.CommandQueue(ctx)
+      mf = clparams[4]
     else:
-      gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-      # if len(gpu) == 0:  # fall back to the numba implementation
-      #  return self.radon_faster(radon,fixArtifacts=fixArtifacts)
-      # apparently it is very difficult to get a consistent ordering of multiple GPU systems.
-      # my lazy way to do this is to assign them randomly, and figure it will even out in the long run
-      gpuIdx = np.random.choice(len(gpu))
-      ctx = cl.Context(devices={gpu[gpuIdx]})
-      queue = cl.CommandQueue(ctx)
-      kernel_location = path.dirname(__file__)
-      prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+      try:
+        gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
+        ctx = cl.Context(devices={gpu[0]})
+        queue = cl.CommandQueue(ctx)
+        kernel_location = path.dirname(__file__)
+        prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+        mf = cl.mem_flags
+      except: # fall back to CPU
+        return self.rdn_local_max(radonIn, clparams=[None, None, None, None, None], rdn_gpu=None)
 
+    clparams = [gpu,ctx,queue,prg,mf]
     nT = self.nTheta
     nTp = nT + 2 * self.padding[1]
     nR = self.nRho
