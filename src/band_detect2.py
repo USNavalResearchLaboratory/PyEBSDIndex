@@ -175,7 +175,7 @@ class BandDetect():
       bandData['pqmax'][j,:] = \
         rdnNorm[(bandData['aveloc'][j,:,0]).astype(int),(bandData['aveloc'][j,:,1]).astype(int), j]
     #bandData['max'] += mns.reshape(nPats,1)
-    blabeltime = timer() - tic
+    blabeltime = timer() - tic1
 
 
     if verbose == True:

@@ -1,4 +1,5 @@
 import numpy as np
+import pyopencl as cl
 from pathlib import Path
 import sys
 import multiprocessing
@@ -46,7 +47,7 @@ def index_pats(pats = None,filename=None,filenameout=None,phaselist=['FCC'], \
     return dataout, indexer
 
 
-@ray.remote
+@ray.remote(num_cpus=1, num_gpus=1)
 def index_chunk_ray(pats = None, indexer = None, patStart = 0, patEnd = -1 ):
   tic = timer()
   dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd)
@@ -149,6 +150,15 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
   if ncpu != -1:
     n_cpu_nodes = ncpu
 
+  try:
+    plat = cl.get_platforms()
+    gpu = plat[0].get_devices(device_type=cl.device_type.GPU)
+    ngpu = len(gpu)
+    ngpupnode = ngpu/n_cpu_nodes
+  except:
+    ngpu = 0
+    ngpupnode = 0
+
   ray.shutdown()
 
   ray.init(num_cpus=n_cpu_nodes, num_gpus=1 )
@@ -221,7 +231,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
       #pats = None
       #workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart=p_indx_start[nsubmit],
       #                                  patEnd=p_indx_end[nsubmit]))
-      workers.append(index_chunk_ray.remote(pats = None, indexer = remote_indexer, \
+      workers.append(index_chunk_ray.options(num_cpus=1, num_gpus=ngpupnode).remote(pats = None, indexer = remote_indexer, \
                                         patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
       timers.append(timer())
       time.sleep(0.01)
@@ -253,7 +263,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
 
         #workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart = p_indx_start[nsubmit],
         #                                  patEnd = p_indx_end[nsubmit]))
-        workers.append(index_chunk_ray.remote(pats=None,indexer=remote_indexer,patStart=p_indx_start[nsubmit],
+        workers.append(index_chunk_ray.options(num_cpus=1, num_gpus=ngpupnode).remote(pats=None,indexer=remote_indexer,patStart=p_indx_start[nsubmit],
                                           patEnd=p_indx_end[nsubmit]))
         timers.append(timer())
         nsubmit += 1
