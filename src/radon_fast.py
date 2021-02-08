@@ -239,7 +239,8 @@ class Radon():
 
     #image = image.reshape(shapeIm)
     queue.flush()
-
+    rdnIndx_gpu.release()
+    image_gpu.release()
     if returnBuff == False:
       cl.enqueue_copy(queue,radon,radon_gpu,is_blocking=True).wait()
       radon_gpu.release()
