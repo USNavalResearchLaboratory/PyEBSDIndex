@@ -1,7 +1,10 @@
 import numpy as np
 import pyopencl as cl
 import ray
-ray.services.get_node_ip_address = lambda: '127.0.0.1'
+if ray.__version__ < '1.1.0': # this fixes an issue when runnning locally on a VPN
+  ray.services.get_node_ip_address = lambda: '127.0.0.1'
+else:
+  ray._private.services.get_node_ip_address = lambda: '127.0.0.1'
 from pathlib import Path
 from os import path
 import multiprocessing
@@ -51,10 +54,10 @@ def index_pats(pats = None,filename=None,filenameout=None,phaselist=['FCC'], \
 class IndexerRay():
   def __init__(self):
     #device, context, queue, program, mf
-    self.dataout = None
-    self.indxstart = None
-    self.indxend = None
-    self.rate = None
+    #self.dataout = None
+    #self.indxstart = None
+    #self.indxend = None
+    #self.rate = None
     self.openCLParams = [None, None, None, None, None]
     try:
       self.openCLParams[0] = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
@@ -75,17 +78,18 @@ class IndexerRay():
 
   def index_chunk_ray(self, pats = None, indexer = None, patStart = 0, patEnd = -1 ):
     tic = timer()
-    self.dataout,self.indxstart,self.indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd, clparams = self.openCLParams)
-    self.rate = np.array([timer()-tic, self.indxend-self.indxstart])
+    dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd, clparams = self.openCLParams)
+    rate = np.array([timer()-tic, indxend-indxstart])
+    return dataout, indxstart,indxend, rate
 
-  def readdata(self):
-    return self.dataout, self.indxstart,self.indxend, self.rate
-
-  def cleardata(self):
-    self.dataout = None
-    self.indxstart = None
-    self.indxend = None
-    self.rate = None
+  # def readdata(self):
+  #   return self.dataout, self.indxstart,self.indxend, self.rate
+  #
+  # def cleardata(self):
+  #   #self.dataout = None
+  #   self.indxstart = None
+  #   self.indxend = None
+  #   self.rate = None
 
 
 def index_chunk_MP(pats = None, queues = None,lock=None, id = None):
@@ -245,13 +249,10 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
   if njobs < n_cpu_nodes:
     n_cpu_nodes = njobs
 
-
   dataout = np.zeros((npats),dtype=indexer.dataTemplate)
   ndone = 0
   nsubmit = 0
   nread = 0
-  #ray.shutdown()
-  #return
   tic = timer()
   npatsdone = 0.0
   toc = 0.0
@@ -262,52 +263,47 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
     timers = []
     rateave = 0.0
     for i in range(n_cpu_nodes):
-      #pats = indexer.fID.read_data(convertToFloat=True, patStartEnd=[p_indx_start[i],p_indx_end[i]],returnArrayOnly=True)
-      #pats = None
-      #workers.append(index_chunk.remote(pats = pats, indexer = remote_indexer, patStart=p_indx_start[nsubmit],
-      #                                  patEnd=p_indx_end[nsubmit]))
+
       workers.append(IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote())
       jobs.append(workers[i].index_chunk_ray.remote(pats = None, indexer = remote_indexer, \
                                         patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
-      #workers.append(index_chunk_ray.options(num_cpus=1, num_gpus=ngpupnode).remote(pats = None, indexer = remote_indexer, \
-      #                                  patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
+      nsubmit += 1
       timers.append(timer())
       time.sleep(0.01)
-      nsubmit += 1
+
 
     #workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
     #nsubmit += n_cpu_nodes
+
     while ndone < njobs:
       toc = timer()
-      for i in range(n_cpu_nodes):
-        wrkdataout,indxstr,indxend,rate = ray.wait(jobs, num_returns = 1)
-        
+      wrker,busy = ray.wait(jobs,num_returns=1,timeout=None)
 
-        # read = workers[i].readdata.remote()
-        # try:
-        #   wrkdataout,indxstr,indxend, rate = ray.get(read, timeout=0.001)
-        #   if wrkdataout is None:
-        #     pass
-        #   else:
-        #     dataout[indxstr:indxend] = wrkdataout
-        #     workers[i].cleardata.remote()
-        #     ticp = timers[i]
-        #
-        #
-        #     npatsdone += rate[1]
-        #     ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
-        #     rateave += ratetemp
-        #     # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
-        #     ndone += 1
-        #     print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp),'  ',np.int(rateave / ndone))
-        #
-        #   if nsubmit < njobs:
-        #     workers[i].index_chunk_ray.remote(pats=None,indexer=remote_indexer,
-        #                                         patStart=p_indx_start[nsubmit], patEnd=p_indx_end[nsubmit])
-        #     timers[i]= timer()
-        #     nsubmit += 1
-        # except ray.exceptions.GetTimeoutError:
-        #   pass
+      # print("waittime: ",timer() - toc)
+      wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
+      jid = jobs.index(wrker[0])
+      ticp = timers[jid]
+      dataout[indxstr:indxend] = wrkdataout
+      npatsdone += rate[1]
+      ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
+      rateave += ratetemp
+      # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
+      ndone += 1
+      print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp),'  ',np.int(rateave / ndone))
+
+      if nsubmit < njobs:
+
+        jobs[jid] = workers[jid].index_chunk_ray.remote(pats=None,indexer=remote_indexer,
+                                                    patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit])
+        nsubmit += 1
+        timers[jid] = timer()
+      else: #start destroying workers, jobs, etc...
+        del jobs[jid]
+        del workers[jid]
+        del timers[jid]
+
+
+
 
   if mode == 'memorymode':
     pass
@@ -685,3 +681,7 @@ class EBSDIndexer():
 
       return quatref2detect
 
+
+
+def __main__():
+  file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1'
