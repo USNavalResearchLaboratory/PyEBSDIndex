@@ -148,19 +148,19 @@ class BandDetect():
 
     eps = 1.e-6
     tic1 = timer()
-    rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns, clparams)
+    rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns, clparams, use_gpu=self.CLOps[0])
     if self.CLOps[1] == False:
       rdnNorm_gpu  = None
       clparams = [None,None,None,None,None]
     rdntime = timer() - tic1
     tic1 = timer()
-    rdnConv, clparams, rdnConv_gpu = self.rdn_conv(rdnNorm, clparams, rdnNorm_gpu)
+    rdnConv, clparams, rdnConv_gpu = self.rdn_conv(rdnNorm, clparams, rdnNorm_gpu, use_gpu=self.CLOps[1])
     if self.CLOps[2] == False:
       rdnConv_gpu = None
       clparams = [None,None,None,None,None]
     convtime = timer()-tic1
     tic1 = timer()
-    lMaxRdn = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu)
+    lMaxRdn = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu, use_gpu=self.CLOps[2])
     lmaxtime =  timer()-tic1
     tic1 = timer()
     # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
@@ -302,23 +302,39 @@ class BandDetect():
 
     return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc
 
-  def calc_rdn(self, patterns, clparams = [None, None, None, None]):
+  def calc_rdn(self, patterns, clparams = [None, None, None, None], use_gpu=False):
     rdnNorm_gpu = None
-    if self.CLOps[0] == False:
+    if use_gpu == False:
       rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True)
     else:
-      rdnNorm, clparams, rdnNorm_gpu = self.radonPlan.radon_fasterCL(patterns, self.padding, fixArtifacts=True,
+      try:
+        rdnNorm, clparams, rdnNorm_gpu = self.radonPlan.radon_fasterCL(patterns, self.padding, fixArtifacts=True,
                                                                      returnBuff = self.CLOps[1], clparams = clparams)
+      except:
+        rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True)
 
     return rdnNorm, clparams, rdnNorm_gpu
 
-  def rdn_conv(self, radonIn, clparams=[None, None, None, None, None], radonIn_gpu = None):
+  def rdn_conv(self, radonIn, clparams=[None, None, None, None, None], radonIn_gpu = None, use_gpu=False):
     tic = timer()
 
-    if self.CLOps[1] == True: # perform this operation on the GPU
-
-      return self.rdn_convCL2(radonIn, clparams, radonIn_gpu = radonIn_gpu, returnBuff = self.CLOps[2])
-
+    if use_gpu == True: # perform this operation on the GPU
+      try:
+        return self.rdn_convCL2(radonIn, clparams, radonIn_gpu = radonIn_gpu, returnBuff = self.CLOps[2])
+      except:
+        if isinstance(radonIn_gpu, cl.Buffer):
+          nT = self.nTheta
+          nTp = nT + 2 * self.padding[1]
+          nR = self.nRho
+          nRp = nR + 2 * self.padding[0]
+          rdn_gpu = radonIn_gpu
+          nImCL = np.int(rdn_gpu.size / (nTp * nRp * 4))
+          shp = (nRp,nTp,nImCL)
+          radonTry = np.zeros(shp, dtype=np.float32)
+          cl.enqueue_copy(clparams[2],radonTry,radonIn_gpu,is_blocking=True)
+        else:
+          radonTry = radonIn
+        return self.rdn_conv(radonTry, use_gpu=False)
     else: # perform on the CPU
 
       shp = radonIn.shape
@@ -352,11 +368,24 @@ class BandDetect():
       rdnConv_gpu = None
     return rdnConv, clparams, rdnConv_gpu
 
-  def rdn_local_max(self, rdn, clparams=[None, None, None, None, None], rdn_gpu=None):
+  def rdn_local_max(self, rdn, clparams=[None, None, None, None, None], rdn_gpu=None, use_gpu=False):
 
-    if self.CLOps[2] == True: # perform this operation on the GPU
-      return self.rdn_local_maxCL(rdn, clparams, radonIn_gpu = rdn_gpu)
-
+    if use_gpu == True: # perform this operation on the GPU
+      try:
+        return self.rdn_local_maxCL(rdn, clparams, radonIn_gpu = rdn_gpu)
+      except:
+        if isinstance(rdn_gpu, cl.Buffer):
+          nT = self.nTheta
+          nTp = nT + 2 * self.padding[1]
+          nR = self.nRho
+          nRp = nR + 2 * self.padding[0]
+          nImCL = np.int(rdn_gpu.size / (nTp * nRp * 4))
+          shp = (nRp,nTp,nImCL)
+          radonTry = np.zeros(shp, dtype=np.float32)
+          cl.enqueue_copy(clparams[2],radonTry,rdn_gpu,is_blocking=True)
+        else:
+          radonTry = rdn
+        return self.rdn_local_max(radonTry, use_gpu=False)
     else: # perform on the CPU
 
       shp = rdn.shape
@@ -447,7 +476,7 @@ class BandDetect():
                     np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[1]))
     prg.radonPadRho(queue,(shp[2],shp[1],1),None,rdn_gpu,
                       np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[0]))
-
+    kern_gpu = None
     if separableKernel == False:
       # for now I will assume that the kernel(s) can fit in local memory on the GPU
       # also going to assume that there is only one kernel -- this will be something to fix soon.
@@ -459,8 +488,9 @@ class BandDetect():
                         rdn_gpu, kern_gpu,np.int32(shp[1]),np.int32(shp[0]),np.int32(shp[2]),
                         np.int32(kshp[1]), np.int32(kshp[0]), np.int32(pad[1]), np.int32(pad[0]), rdnConv_gpu)
 
-    #print('convolution', timer()-tic)
-      tic = timer()
+
+
+      #tic = timer()
     else:
       tempConvbuff = cl.Buffer(ctx,mf.HOST_NO_ACCESS,size=(shp[0]*shp[1]*shp[2]*4))
 
@@ -502,6 +532,15 @@ class BandDetect():
 
     queue.flush()
     cl.enqueue_copy(queue,resultConv,rdnConv_gpu,is_blocking=False)#,is_blocking=True).wait()
+    rdn_gpu.release()
+    mns.release()
+    if kern_gpu is None:
+      kern_gpu_y.release()
+      kern_gpu_x.release()
+      tempConvbuff.release()
+    else:
+      kern_gpu.release()
+
 
 
     if returnBuff == False:
@@ -619,7 +658,10 @@ class BandDetect():
                  np.uint64(self.padding[1]),np.uint64(self.padding[0]))
 
     cl.enqueue_copy(queue,out,out_gpu,is_blocking=True).wait()
-
+    rdn_gpu.release()
+    lmaxX.release()
+    lmaxXY.release()
+    out_gpu.release()
     rhoMaskTrim = np.int32((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
     out[0:rhoMaskTrim,:, :] = 0
     out[-rhoMaskTrim:,:,:] = 0
