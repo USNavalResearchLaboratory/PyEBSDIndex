@@ -225,6 +225,7 @@ class BandDetect():
 
 
   def radon2pole(self,bandData,PC=None,vendor='EDAX'):
+    # Following Krieger-Lassen1994 eq 3.1.6
     if PC is None:
       PC = np.array([0.471659,0.675044,0.630139])
     ven = str.upper(vendor)
@@ -232,16 +233,22 @@ class BandDetect():
     PC_PX = PC.copy()
     dimf = np.array(self.patDim, dtype=np.float32)
     if ven == 'EDAX':
+      #PC_PX[1] = 1.0 - PC_PX[1]
       PC_PX *= np.array([dimf[0], dimf[1], -dimf[0]])
 
 
     nPats = bandData.shape[0]
     nBands = bandData.shape[1]
 
-    theta = self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1], dtype=np.int)]/RADEG
-    rho = self.radonPlan.rho[np.array(bandData['aveloc'][:, :, 0], dtype=np.int)]
-    #theta = self.radonPlan.theta[np.array(bandData['maxloc'][:,:,1], dtype=np.int)]/RADEG
-    #rho = self.radonPlan.rho[np.array(bandData['maxloc'][:, :, 0], dtype=np.int)]
+    # This translation from the Radon to theta and rho assumes that the first pixel read
+    # in off the detector is in the bottom left corner.
+    #theta = self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1], dtype=np.int)]/RADEG
+    #rho = self.radonPlan.rho[np.array(bandData['aveloc'][:, :, 0], dtype=np.int)]
+
+    # This translation from the Radon to theta and rho assumes that the first pixel read
+    # in off the detector is in the top left corner.
+    theta = np.pi - self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1],dtype=np.int64)] / RADEG
+    rho = self.radonPlan.rho[np.array(self.nRho - bandData['aveloc'][:,:,0],dtype=np.int64)]
 
     stheta = np.sin(theta)
     ctheta = np.cos(theta)

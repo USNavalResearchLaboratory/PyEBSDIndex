@@ -179,7 +179,6 @@ class UPFile(EBSDPatternFile):
       onePat = onePat.reshape(self.patternH, self.patternW)
       patterns[p, :, :] = onePat.astype(typeout)
 
-    patterns =np.flip(patterns,axis=-2)  # vertical flip of the axis vertical axis
     if returnArrayOnly == True:
       return patterns
     else: #package this up in an EBSDPatterns Object
