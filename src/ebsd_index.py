@@ -579,7 +579,7 @@ class EBSDIndexer():
                              ('fit',np.float32),('nmatch', np.int32), ('matchattempts', np.int32, (2))])
 
 
-  def index_pats(self, patsin=None, patStart = 0, patEnd = -1,clparams = [None, None, None, None, None]):
+  def index_pats(self, patsin=None, patStart = 0, patEnd = -1,clparams = [None, None, None, None, None], PC=[None, None, None]):
     tic = timer()
 
     if patsin is None:
@@ -617,7 +617,11 @@ class EBSDIndexer():
 
     indxData['pq'] = np.sum(bandData['max'], axis = 1)
     indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
-    bandNorm = self.bandDetectPlan.radon2pole(bandData,PC=self.PC,vendor=self.vendor)
+    if PC[0] is None:
+      PC_0 = self.PC
+    else:
+      PC_0 = PC
+    bandNorm = self.bandDetectPlan.radon2pole(bandData,PC=PC_0,vendor=self.vendor)
     #print('Find Band: ', timer() - tic)
 
     #return bandNorm,patStart,patEnd
