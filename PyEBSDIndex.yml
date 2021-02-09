@@ -9,6 +9,7 @@ dependencies:
   - scipy 
   - matplotlib 
   - pyopencl
+  - ocl-icd-system
   - pip
   - pip:
     - ray
