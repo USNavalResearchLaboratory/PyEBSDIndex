@@ -33,6 +33,7 @@ class BandDetect():
     self.rhoMaskFrac = rhoMaskFrac
 
     self.nBands = nBands
+    self.EDAXIQ = False
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
                     ('pqmax', np.float32)])
@@ -115,7 +116,7 @@ class BandDetect():
       recalc_masks = True
 
     if (self.rSigma is None) and (self.dRho is not None):
-      self.rSigma = 0.25/np.float32(self.dRho)
+      self.rSigma = 0.4/np.float32(self.dRho)
       recalc_masks = True
 
     if recalc_masks == True:
@@ -149,6 +150,14 @@ class BandDetect():
     eps = 1.e-6
     tic1 = timer()
     rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns, clparams, use_gpu=self.CLOps[0])
+    if self.EDAXIQ == True:
+      if rdnNorm is None:
+        nTp = self.nTheta + 2 * self.padding[1]
+        nRp = self.nRho + 2 * self.padding[0]
+        nImCL = int(rdnNorm_gpu.size/(nTp*nRp*4))
+        rdnNorm = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
+        cl.enqueue_copy(clparams[2],rdnNorm,rdnNorm_gpu,is_blocking=True)
+
     if self.CLOps[1] == False:
       rdnNorm_gpu  = None
       clparams = [None,None,None,None,None]
@@ -166,7 +175,11 @@ class BandDetect():
     # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
     clparams[2] = None
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
-    bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnConv,lMaxRdn)
+
+    if self.EDAXIQ == True:
+      bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnConv,rdnNorm,lMaxRdn)
+    else:
+      bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnConv,rdnConv,lMaxRdn)
     bandData['max'] = bdat[0]
     bandData['avemax'] = bdat[1]
     bandData['maxloc'] = bdat[2]
@@ -280,7 +293,7 @@ class BandDetect():
 
   @staticmethod
   @numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
-  def band_label(nBands, nPats, nRho, nTheta, rdnPad,  lMaxRdn ):
+  def band_label(nBands, nPats, nRho, nTheta, rdnConv, rdnPad,  lMaxRdn ):
     nB = np.int(nBands)
     nP = np.int(nPats)
     nR = np.int(nRho)
@@ -296,12 +309,13 @@ class BandDetect():
     nny = np.array([-1,-1,-1,-1,-1,0,0,0,0,0,1,1,1,1,1],dtype=np.float32)
 
     for q in range(nPats):
+      rdnConv_q = rdnConv[:,:,q]
       rdnPad_q = rdnPad[:,:,q]
       lMaxRdn_q = lMaxRdn[:,:,q]
       #peakLoc = np.nonzero((lMaxRdn_q == rdnPad_q) & (rdnPad_q > 1.0e-6))
       peakLoc = np.nonzero(lMaxRdn_q)
       indx1D = peakLoc[1] + peakLoc[0] * shp[1]
-      temp = (rdnPad_q.ravel())[indx1D]
+      temp = (rdnConv_q.ravel())[indx1D]
       srt = np.argsort(temp)
       nBq = nB if (len(srt) > nB) else len(srt)
       for i in range(nBq):
@@ -325,7 +339,8 @@ class BandDetect():
       try:
         rdnNorm, clparams, rdnNorm_gpu = self.radonPlan.radon_fasterCL(patterns, self.padding, fixArtifacts=True,
                                                                      returnBuff = self.CLOps[1], clparams = clparams)
-      except:
+      except Exception as e:
+        print(e)
         rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True)
 
     return rdnNorm, clparams, rdnNorm_gpu
@@ -336,7 +351,8 @@ class BandDetect():
     if use_gpu == True: # perform this operation on the GPU
       try:
         return self.rdn_convCL2(radonIn, clparams, radonIn_gpu = radonIn_gpu, returnBuff = self.CLOps[2])
-      except:
+      except Exception as e:
+        print(e)
         if isinstance(radonIn_gpu, cl.Buffer):
           nT = self.nTheta
           nTp = nT + 2 * self.padding[1]
@@ -379,7 +395,7 @@ class BandDetect():
       mns = (rdnConv[self.padding[0]:shprdn[1]-self.padding[0],self.padding[1]:shprdn[1]-self.padding[1],:]).min(axis=0).min(axis=0)
 
       rdnConv -= mns.reshape((1,1, shp[2]))
-      rdnConv.clip(min=0.0)
+      rdnConv = rdnConv.clip(min=0.0)
       rdnConv_gpu = None
     return rdnConv, clparams, rdnConv_gpu
 
@@ -428,15 +444,9 @@ class BandDetect():
     tic = timer()
     #def preparray(array):
     #  return np.require(array,None,"C")
-    shp = radonIn.shape
+
     clvtypesize = 16  # this is the vector size to be used in the openCL implementation.
-    if len(shp) == 2:
-      radon = radonIn.reshape(shp[0],shp[1],1)
-      nIm = 1
-    else:
-      radon = radonIn
-    shp = radon.shape
-    nIm = shp[2]
+
     mf = cl.mem_flags
     if isinstance(clparams[1],cl.Context):
       gpu = clparams[0]
@@ -469,7 +479,14 @@ class BandDetect():
       nImCL = np.int(rdn_gpu.size/(nTp * nRp * 4))
       shp = (nRp, nTp, nImCL)
     else:
-
+      shp = radonIn.shape
+      if len(shp) == 2:
+        radon = radonIn.reshape(shp[0],shp[1],1)
+        nIm = 1
+      else:
+        radon = radonIn
+      shp = radon.shape
+      nIm = shp[2]
       nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm / clvtypesize))))
       # there is something very strange that happens if the number of images
       # is a exact multiple of the max group size (typically 256)
@@ -545,8 +562,8 @@ class BandDetect():
                      rdnConv_gpu,mns,np.uint32(shp[1]),np.uint32(shp[0]),
                      np.uint32(0),np.uint32(0))
 
-    queue.flush()
-    cl.enqueue_copy(queue,resultConv,rdnConv_gpu,is_blocking=False)#,is_blocking=True).wait()
+
+
     rdn_gpu.release()
     mns.release()
     if kern_gpu is None:
@@ -556,12 +573,13 @@ class BandDetect():
     else:
       kern_gpu.release()
 
-
+    cl.enqueue_copy(queue,resultConv,rdnConv_gpu,is_blocking=True)
 
     if returnBuff == False:
-      return resultConv, clparams, None
-    else:
-      return resultConv, clparams, rdnConv_gpu
+      rdnConv_gpu.release()
+      rdnConv_gpu = None
+
+    return resultConv, clparams, rdnConv_gpu
 
   def rdn_local_maxCL(self,radonIn,clparams=[None,None,None,None,None],radonIn_gpu=None,):
     # this will run a morphological max kernel over the convolved radon array
@@ -570,13 +588,7 @@ class BandDetect():
 
     tic = timer()
     clvtypesize = 16  # this is the vector size to be used in the openCL implementation.
-    shp = radonIn.shape
-    if len(shp) == 2:
-      radon = radonIn.reshape(shp[0],shp[1], 1)
-    else:
-      radon = radonIn
-    shp = radon.shape
-    nIm = shp[2]
+
 
     mf = cl.mem_flags
     if isinstance(clparams[1],cl.Context):
@@ -610,6 +622,13 @@ class BandDetect():
       nImCL = np.int(rdn_gpu.size / (nTp * nRp * 4))
       shp = (nRp,nTp,nImCL)
     else:
+      shp = radonIn.shape
+      if len(shp) == 2:
+        radon = radonIn.reshape(shp[0],shp[1],1)
+      else:
+        radon = radonIn
+      shp = radon.shape
+      nIm = shp[2]
       nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm / clvtypesize))))
       # there is something very strange that happens if the number of images
       # is a exact multiple of the max group size (typically 256)
@@ -672,7 +691,8 @@ class BandDetect():
                  np.uint64(shp[1]),np.uint64(shp[0]),
                  np.uint64(self.padding[1]),np.uint64(self.padding[0]))
 
-    cl.enqueue_copy(queue,out,out_gpu,is_blocking=True).wait()
+
+    cl.enqueue_copy(queue,out,out_gpu,is_blocking=True)
     rdn_gpu.release()
     lmaxX.release()
     lmaxXY.release()

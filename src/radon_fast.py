@@ -217,8 +217,9 @@ class Radon():
     nImCL += np.int(16 * (1 - np.int(np.mod(nImCL, mxGroupSz ) > 0)))
     image_align = np.zeros((shapeIm[1], shapeIm[2], nImCL), dtype = np.float32)
     image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()
-    radon = np.zeros([self.nRho+2*padding[0],self.nTheta+2*padding[1], nImCL],dtype=np.float32)
-    radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=radon.nbytes)
+    shpRdn = np.asarray( ((self.nRho+2*padding[0]), (self.nTheta+2*padding[1]), nImCL),dtype=np.uint64)
+    radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=int((self.nRho+2*padding[0])*(self.nTheta+2*padding[1])*nImCL*4))
+    #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=radon.nbytes)
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
     image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image_align)
     rdnIndx_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=self.indexPlan)
@@ -226,7 +227,7 @@ class Radon():
     imstep = np.uint64(np.product(shapeIm[-2:]))
     indxstep = np.uint64(self.indexPlan.shape[-1])
     rdnstep = np.uint64(self.nRho * self.nTheta)
-    shpRdn = np.asarray(radon.shape, dtype = np.uint64)
+
     padRho = np.uint64(padding[0])
     padTheta = np.uint64(padding[1])
     tic = timer()
@@ -242,20 +243,22 @@ class Radon():
        prg.radonFixArt(queue,(nImChunk,self.nRho),None,radon_gpu,
                        shpRdn[0],shpRdn[1],padTheta)
 
-    #image = image.reshape(shapeIm)
-    queue.flush()
+
     rdnIndx_gpu.release()
     image_gpu.release()
+
     if returnBuff == False:
-      cl.enqueue_copy(queue,radon,radon_gpu,is_blocking=True).wait()
+      radon = np.zeros([self.nRho + 2 * padding[0],self.nTheta + 2 * padding[1],nImCL],dtype=np.float32)
+      cl.enqueue_copy(queue,radon,radon_gpu,is_blocking=True)
       radon_gpu.release()
       radon = radon[:,:, 0:nIm]
       radon_gpu = None
       clparams = [None, None, None, None, None]
-      return radon, clparams, radon_gpu
     else:
+      radon = None
       clparams = [gpu,ctx,queue,prg,mf]
-      return radon, clparams, radon_gpu
+
+    return radon, clparams, radon_gpu
 
     #if (fixArtifacts == True):
     #  radon[:,:,padding[1]] = radon[:,:,padding[1]+1]

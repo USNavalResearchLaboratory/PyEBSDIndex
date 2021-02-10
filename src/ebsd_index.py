@@ -641,7 +641,7 @@ class EBSDIndexer():
       bandNorm1 = bandNorm[i,:,:]
       bDat1 = bandData[i,:]
       whgood = np.nonzero(bDat1['max'] > -1.0e6)[0]
-      if whgood.size > 0:
+      if whgood.size >= 3:
         bDat1 = bDat1[whgood]
         bandNorm1 = bandNorm1[whgood,:]
         indxData['pq'][i] = np.sum(bDat1['max'],axis=0)
