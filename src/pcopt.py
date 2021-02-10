@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.optimize as opt
+import copy
 from timeit import default_timer as timer
 import time
 import ebsd_index
@@ -21,11 +22,14 @@ def optimzie(pats, indexer):
   nPats = shape[0]
 
   PCopts = np.zeros((nPats,3), dtype = np.float32)
-
+  clops = indexer.bandDetectPlan.CLOps
+  indexer.bandDetectPlan.CLOps = [False, False, False]
   for i in range(nPats):
     PC0 = indexer.PC
     PCopt = opt.minimize(optfunction, PC0, args =(indexer,patterns), method = 'Nelder-Mead'  )
     PCopts[i,:] = PCopt['x']
+
+  indexer.bandDetectPlan.CLOps = clops
   return PCopts
 
 
