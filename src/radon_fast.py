@@ -44,13 +44,15 @@ class Radon():
     self.theta = np.arange(self.nTheta, dtype = np.float32)*180.0/self.nTheta
     self.rho = np.arange(self.nRho, dtype = np.float32)*deltaRho - (self.rhoMax-deltaRho)
 
+    #xmin = -1.0*(self.imDim[0]-1)*0.5
+    #ymin = -1.0*(self.imDim[1]-1)*0.5
     xmin = -1.0*(self.imDim[0]-1)*0.5
     ymin = -1.0*(self.imDim[1]-1)*0.5
 
     #self.radon = np.zeros([self.nRho, self.nTheta])
     sTheta = np.sin(self.theta*DEGRAD)
     cTheta = np.cos(self.theta*DEGRAD)
-    thetatest = np.abs(sTheta) > (np.sqrt(2.) * 0.5)
+    thetatest = np.abs(sTheta) >= (np.sqrt(2.) * 0.5)
 
     m = np.arange(self.imDim[0], dtype = np.uint32)
     n = np.arange(self.imDim[1], dtype = np.uint32)
@@ -75,7 +77,10 @@ class Radon():
       else:
         b1 /= cTheta[i]
         b1 = b1.reshape(self.nRho, 1)
-        indx_x = np.floor(a[i]*n + b1).astype(np.int64)
+        if cTheta[i] > 0:
+          indx_x = np.floor(a[i]*n + b1).astype(np.int64)
+        else:
+          indx_x = np.ceil(a[i] * n + b1).astype(np.int64)
         indx_x = np.where(indx_x < 0, outofbounds, indx_x)
         indx_x = np.where(indx_x >= self.imDim[0], outofbounds, indx_x)
         indx1D = np.clip(indx_x+self.imDim[0]*n, 0, outofbounds)
