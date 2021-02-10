@@ -539,14 +539,15 @@ class EBSDIndexer():
     #   self.fileout = str.lower(Path(self.filein).stem)+'.ang'
     self.phaselist = phaselist
 
+    self.vendor = 'EDAX'
     if vendor is None:
       if self.fID is not None:
         self.vendor = self.fID.vendor
     else:
       if vendor is not None:
         self.vendor = vendor
-      else:
-        self.vendor = 'EDAX'
+
+
 
     if PC is None:
       self.PC = np.array([0.471659,0.675044,0.630139])
@@ -615,8 +616,8 @@ class EBSDIndexer():
     bandData = self.bandDetectPlan.find_bands(pats, clparams = clparams)
 
 
-    indxData['pq'] = np.sum(bandData['max'], axis = 1)
-    indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
+
+    #indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
     if PC[0] is None:
       PC_0 = self.PC
     else:
@@ -637,37 +638,44 @@ class EBSDIndexer():
       phase = 0
       fitmetric = -1
 
-      #avequat, fit, cm, bandmatch, nMatch = bv[0].tripvote(bandNorm[i,:,:], goNumba = True)
-      avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[0].tripvote(bandNorm[i,:,:],goNumba=True)
+      bandNorm1 = bandNorm[i,:,:]
+      bDat1 = bandData[i,:]
+      whgood = np.nonzero(bDat1['max'] > -1.0e6)[0]
+      if whgood.size > 0:
+        bDat1 = bDat1[whgood]
+        bandNorm1 = bandNorm1[whgood,:]
+        indxData['pq'][i] = np.sum(bDat1['max'],axis=0)
+        #avequat, fit, cm, bandmatch, nMatch = bv[0].tripvote(bandNorm[i,:,:], goNumba = True)
+        avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[0].tripvote(bandNorm1,goNumba=True)
 
-      if nMatch > 0:
-        phase = 1
-        fitmetric = nMatch * cm
+        if nMatch > 0:
+          phase = 1
+          fitmetric = nMatch * cm
 
-      fitmetric1 = -1
-      for j in range(1, len(self.phaseLib)):
+        fitmetric1 = -1
+        for j in range(1, len(self.phaseLib)):
 
-        #avequat1,fit1,cm1,bandmatch1,nMatch1 = bv[j].tripvote(bandNorm[i,:,:], goNumba = True)
-        avequat1,fit1,cm1,bandmatch1,nMatch1, matchAttempts1 = self.phaseLib[j].tripvote(bandNorm[i,:,:],goNumba=True)
-        if nMatch1 > 0:
-          fitmetric1 = nMatch1 * cm1
-        if fitmetric1 > fitmetric:
-          fitmetric = fitmetric1
-          avequat = avequat1
-          fit = fit1
-          cm = cm1
-          bandmatch = bandmatch1
-          nMatch = nMatch1
-          matchAttempts = matchAttempts1
-          phase = j+1
+          #avequat1,fit1,cm1,bandmatch1,nMatch1 = bv[j].tripvote(bandNorm[i,:,:], goNumba = True)
+          avequat1,fit1,cm1,bandmatch1,nMatch1, matchAttempts1 = self.phaseLib[j].tripvote(bandNorm1,goNumba=True)
+          if nMatch1 > 0:
+            fitmetric1 = nMatch1 * cm1
+          if fitmetric1 > fitmetric:
+            fitmetric = fitmetric1
+            avequat = avequat1
+            fit = fit1
+            cm = cm1
+            bandmatch = bandmatch1
+            nMatch = nMatch1
+            matchAttempts = matchAttempts1
+            phase = j+1
 
-      #indxData['quat'][i] = avequat
-      q[i,:] = avequat
-      indxData['fit'][i] = fit
-      indxData['cm'][i] = cm
-      indxData['phase'][i] = phase
-      indxData['nmatch'][i] = nMatch
-      indxData['matchattempts'][i] = matchAttempts
+        #indxData['quat'][i] = avequat
+        q[i,:] = avequat
+        indxData['fit'][i] = fit
+        indxData['cm'][i] = cm
+        indxData['phase'][i] = phase
+        indxData['nmatch'][i] = nMatch
+        indxData['matchattempts'][i] = matchAttempts
 
 
     qref2detect = self.refframe2detector()

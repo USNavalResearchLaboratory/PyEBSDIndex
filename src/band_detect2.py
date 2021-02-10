@@ -173,10 +173,10 @@ class BandDetect():
     bandData['aveloc'] = bdat[3]
     bandData['maxloc'] -= self.padding.reshape(1,1,2)
     bandData['aveloc'] -= self.padding.reshape(1, 1, 2)
-    for j in range(nPats):
-      bandData['pqmax'][j,:] = \
-        rdnNorm[(bandData['aveloc'][j,:,0]).astype(int),(bandData['aveloc'][j,:,1]).astype(int), j]
-    #bandData['max'] += mns.reshape(nPats,1)
+    # for j in range(nPats):
+    #   bandData['pqmax'][j,:] = \
+    #     rdnNorm[(bandData['aveloc'][j,:,0]).astype(int),(bandData['aveloc'][j,:,1]).astype(int), j]
+
     blabeltime = timer() - tic1
 
 
@@ -196,6 +196,11 @@ class BandDetect():
     return bandData
 
   def radonPad(self,radon,rPad=0,tPad = 0, mirrorTheta = True):
+    # function for padding the radon transform
+    # theta padding (tPad) will use the symmetry of the radon and will vertical flip the transform and place it on
+    # the other side.
+    # rho padding simply repeats the top/bottom rows into the padded region
+    # negative padding values will result in a crop (remove the padding).
     shp = radon.shape
     if (tPad==0)&(rPad == 0):
       return radon
@@ -225,45 +230,48 @@ class BandDetect():
 
 
   def radon2pole(self,bandData,PC=None,vendor='EDAX'):
-    # Following Krieger-Lassen1994 eq 3.1.6
+    # Following Krieger-Lassen1994 eq 3.1.6 //figure 3.1.1
     if PC is None:
       PC = np.array([0.471659,0.675044,0.630139])
     ven = str.upper(vendor)
-
-    PC_PX = PC.copy()
-    dimf = np.array(self.patDim, dtype=np.float32)
-    if ven == 'EDAX':
-      #PC_PX[1] = 1.0 - PC_PX[1]
-      PC_PX *= np.array([dimf[0], dimf[1], -dimf[0]])
-
 
     nPats = bandData.shape[0]
     nBands = bandData.shape[1]
 
     # This translation from the Radon to theta and rho assumes that the first pixel read
     # in off the detector is in the bottom left corner.
-    #theta = self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1], dtype=np.int)]/RADEG
-    #rho = self.radonPlan.rho[np.array(bandData['aveloc'][:, :, 0], dtype=np.int)]
+    # theta = self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1], dtype=np.int)]/RADEG
+    # rho = self.radonPlan.rho[np.array(bandData['aveloc'][:, :, 0], dtype=np.int)]
 
     # This translation from the Radon to theta and rho assumes that the first pixel read
     # in off the detector is in the top left corner.
     theta = np.pi - self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1],dtype=np.int64)] / RADEG
-    rho = self.radonPlan.rho[np.array(self.nRho - bandData['aveloc'][:,:,0],dtype=np.int64)]
-
+    # rho = self.radonPlan.rho[np.array(self.nRho -
+    #                                   bandData['aveloc'][:,:,0],dtype=np.int64).clip(0,self.radonPlan.nRho-1)]
+    rho = -1.0*self.radonPlan.rho[np.array(bandData['aveloc'][:,:,0],dtype=np.int64)]
+    # from this point on, we will assume the image origin and t-vector (aka pattern center) is described
+    # at the bottom left of the pattern
     stheta = np.sin(theta)
     ctheta = np.cos(theta)
 
+    t = PC.copy()
+    dimf = np.array(self.patDim, dtype=np.float32)
+    if ven == 'EDAX':
+      t *= np.array([dimf[0],dimf[1],-dimf[0]])
+    # describes the translation from the bottom left corner of the pattern image to the point on the detector
+    # perpendicular to where the beam contacts the sample.
+
     r = np.zeros((nPats, nBands, 3), dtype=np.float32)
     r[:,:,0] = -1*stheta
-    r[:,:,1] = ctheta
+    r[:,:,1] = ctheta # now defined as r_v
 
     p = np.zeros((nPats, nBands, 3), dtype=np.float32)
-    p[:,:,0] = rho*ctheta
+    p[:,:,0] = rho*ctheta # get a point within the band -- here it is the point perpendicular to the image center.
     p[:,:,1] = rho*stheta
-    p[:,:,0] += dimf[0] * 0.5
-    p[:,:,1] += dimf[1] * 0.5
+    p[:,:,0] += dimf[0] * 0.5 # now convert this with reference to the image origin.
+    p[:,:,1] += dimf[1] * 0.5 # this is now [O_vP]_v in Eq 3.1.6
 
-    n2 = p - PC_PX.reshape(1, 1, 3)
+    n2 = p - t.reshape(1,1,3)
     n = np.cross(r.reshape(nPats*nBands, 3), n2.reshape(nPats*nBands, 3) )
     norm = np.linalg.norm(n, axis=1)
     n /= norm.reshape(nPats*nBands, 1)
@@ -279,10 +287,10 @@ class BandDetect():
     nT = np.int(nTheta)
     shp  = rdnPad.shape
     #print(shp)
-    bandData_max = np.zeros((nP,nB), dtype = np.float32) # max of the convolved peak value
-    bandData_avemax = np.zeros((nP,nB), dtype = np.float32) # mean of the nearest neighborhood values around the max
-    bandData_maxloc = np.zeros((nP,nB,2), dtype = np.float32)-20.0 # location of the max within the radon transform
-    bandData_aveloc = np.zeros((nP,nB,2), dtype = np.float32)-20.0 # location of the max based on the nearest neighbor interpolation
+    bandData_max = np.zeros((nP,nB), dtype = np.float32) - 2.0e6 # max of the convolved peak value
+    bandData_avemax = np.zeros((nP,nB), dtype = np.float32) - 2.0e6 # mean of the nearest neighborhood values around the max
+    bandData_maxloc = np.zeros((nP,nB,2), dtype = np.float32) # location of the max within the radon transform
+    bandData_aveloc = np.zeros((nP,nB,2), dtype = np.float32) # location of the max based on the nearest neighbor interpolation
 
     nnx = np.array([-2,-1,0,1,2,-2,-1,0,1,2,-2,-1,0,1,2],dtype=np.float32)
     nny = np.array([-1,-1,-1,-1,-1,0,0,0,0,0,1,1,1,1,1],dtype=np.float32)
