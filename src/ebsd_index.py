@@ -13,7 +13,6 @@ import queue
 import ebsd_pattern
 import band_detect2
 import band_vote
-
 import rotlib
 import tripletlib
 from timeit import default_timer as timer
