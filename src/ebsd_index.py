@@ -176,7 +176,7 @@ def index_chunk_MP2(pats = None, queues = None,lock=None, id = None):
       time.sleep(0.01)
   return
 
-def index_pats_distributed(pats = None, filename=None, filenameout=None, phaselist=['FCC'], \
+def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phaselist=['FCC'], \
                vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
                peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9,
                patStart = 0, patEnd = -1, chunksize = 1000, ncpu=-1,
@@ -201,10 +201,15 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
 
   ray.init(num_cpus=n_cpu_nodes, num_gpus=ngpu )
 
-  if pats is None:
+  if patsIn is None:
     pdim = None
   else:
+    if patsIn is ebsd_pattern.EBSDPatterns:
+      pats = patsIn.patterns
+    if type(patsIn) is np.ndarray:
+      pats = patsIn
     pdim = pats.shape[-2:]
+
   if ebsd_indexer_obj == None:
     indexer = EBSDIndexer(filename=filename,phaselist=phaselist, \
                           vendor=None,PC = PC,sampleTilt=sampleTilt,camElev = camElev, \
@@ -213,6 +218,10 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
   else:
     indexer = ebsd_indexer_obj
 
+  if filename is not None:
+    indexer.update_file(filename)
+  else:
+    indexer.update_file(patDim=pats.shape[-2:])
 
 
   # differentiate between getting a file to index or an array
@@ -234,10 +243,16 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
       npats = pshape[0]
     temp,indexer = index_pats(pats[0,:,:], patStart=0,patEnd=1,return_indexer_obj=True,ebsd_indexer_obj=indexer)
 
-  if patEnd == 0:
-    patEnd = 1
-  if (patStart !=0) or (patEnd > 0):
-    npats = patEnd - patStart
+  if patStart < 0:
+    patStart = npats - patStart
+  if patEnd <= 0:
+    patEnd = npats - patEnd + 1
+  if patEnd > npats:
+    patEnd = npats
+  if patEnd <= patStart:
+    patEnd = patStart +1
+
+  npats = patEnd - patStart
 
   #place indexer obj in shared memory store so all workers can use it.
   remote_indexer = ray.put(indexer)
@@ -248,6 +263,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
   p_indx_end[-1] = npats+patStart
   if njobs < n_cpu_nodes:
     n_cpu_nodes = njobs
+
 
   dataout = np.zeros((npats),dtype=indexer.dataTemplate)
   ndone = 0
@@ -283,7 +299,7 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
       wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
       jid = jobs.index(wrker[0])
       ticp = timers[jid]
-      dataout[indxstr:indxend] = wrkdataout
+      dataout[indxstr-patStart:indxend-patStart] = wrkdataout
       npatsdone += rate[1]
       ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
       rateave += ratetemp
@@ -306,7 +322,49 @@ def index_pats_distributed(pats = None, filename=None, filenameout=None, phaseli
 
 
   if mode == 'memorymode':
-    pass
+    workers = []
+    jobs = []
+    timers = []
+    rateave = 0.0
+    for i in range(n_cpu_nodes):
+      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote())
+      jobs.append(workers[i].index_chunk_ray.remote(pats=pats[p_indx_start[i]:p_indx_end[i],:,:],
+                                                    indexer=remote_indexer, \
+                                                    patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
+      nsubmit += 1
+      timers.append(timer())
+      time.sleep(0.01)
+
+    # workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
+    # nsubmit += n_cpu_nodes
+
+    while ndone < njobs:
+      toc = timer()
+      wrker,busy = ray.wait(jobs,num_returns=1,timeout=None)
+
+      # print("waittime: ",timer() - toc)
+      wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
+      jid = jobs.index(wrker[0])
+      ticp = timers[jid]
+      dataout[indxstr-patStart:indxend-patStart] = wrkdataout
+      npatsdone += rate[1]
+      ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
+      rateave += ratetemp
+      # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
+      ndone += 1
+      print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp),'  ',np.int(rateave / ndone))
+
+      if nsubmit < njobs:
+
+        jobs[jid] = workers[jid].index_chunk_ray.remote(pats=pats[p_indx_start[nsubmit]:p_indx_end[nsubmit]]
+                                                        ,indexer=remote_indexer,
+                                                        patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit])
+        nsubmit += 1
+        timers[jid] = timer()
+      else:  # start destroying workers, jobs, etc...
+        del jobs[jid]
+        del workers[jid]
+        del timers[jid]
     # # send out the first batch
     # workers = [index_chunk_ray.remote(pats=pats[p_indx_start[i]:p_indx_end[i],:,:],indexer=remote_indexer,patStart=p_indx_start[i],patEnd=p_indx_end[i]) for i
     #            in range(n_cpu_nodes)]
@@ -528,16 +586,21 @@ def index_patsMP(pats = None, filename=None, filenameout=None, phaselist=['FCC']
 class EBSDIndexer():
   def __init__(self,filename=None,phaselist=['FCC'], \
                vendor=None,PC =None,sampleTilt=70.0,camElev = 5.3, \
-               bandDetectPlan = None,nRho=90,nTheta=180,tSigma= None,rSigma=None,rhoMaskFrac=0.1,nBands=9,patDim=None):
+               bandDetectPlan = None,nRho=90,nTheta=180,tSigma= 1.0,rSigma=1.2,rhoMaskFrac=0.15,nBands=9,patDim=None):
     self.filein = filename
     if self.filein is not None:
       self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
     else:
       self.fID = None
+
     # self.fileout = filenameout
     # if self.fileout is None:
     #   self.fileout = str.lower(Path(self.filein).stem)+'.ang'
+
     self.phaselist = phaselist
+    self.phaseLib = []
+    for ph in self.phaselist:
+      self.phaseLib.append(band_vote.BandVote(tripletlib.triplib(libType=ph)))
 
     self.vendor = 'EDAX'
     if vendor is None:
@@ -547,18 +610,14 @@ class EBSDIndexer():
       if vendor is not None:
         self.vendor = vendor
 
-
-
     if PC is None:
       self.PC = np.array([0.471659,0.675044,0.630139])
     else:
       self.PC = np.asarray(PC)
     self.sampleTilt = sampleTilt
     self.camElev = camElev
-    # self.startPat = startPat
-    # self.endPat = endPat
-    # if (self.endPat == -1) and self.fID is not None:
-    #   self.endPat = self.fID.nPatterns+1
+
+
     if bandDetectPlan is None:
         self.bandDetectPlan = band_detect2.BandDetect(nRho=nRho,nTheta=nTheta, \
                                                       tSigma=tSigma,rSigma=rSigma, \
@@ -571,13 +630,20 @@ class EBSDIndexer():
     else:
       if patDim is not None:
         self.bandDetectPlan.band_detect_setup(patDim=patDim)
-    self.phaseLib =[]
-    for ph in self.phaselist:
-      self.phaseLib.append(band_vote.BandVote(tripletlib.triplib(libType=ph)))
+
 
     self.dataTemplate = np.dtype([('quat',np.float32, (4)),('iq',np.float32), \
                              ('pq',np.float32),('cm',np.float32),('phase',np.int32), \
                              ('fit',np.float32),('nmatch', np.int32), ('matchattempts', np.int32, (2))])
+
+  def update_file(self, filename=None, patDim = np.array([120,120], dtype=np.int32)):
+    if filename is None:
+      self.filein = None
+      self.bandDetectPlan.band_detect_setup(patDim = patDim)
+    else:
+      self.filein = filename
+      self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
+      self.bandDetectPlan.band_detect_setup(patDim=[self.fID.patternW,self.fID.patternH])
 
 
   def index_pats(self, patsin=None, patStart = 0, patEnd = -1,clparams = [None, None, None, None, None], PC=[None, None, None]):

@@ -38,6 +38,7 @@ class EBSDPatterns():
     self.xStep = None
     self.yStep = None
     self.patStartEnd = None
+    self.patterns = None
     # the 1D index range of patterns that was read
 
 
@@ -56,6 +57,7 @@ class EBSDPatternFile():
     self.xStep = None
     self.yStep = None
     self.file_type = file_type
+
 
   def read_header(self, path=None):
     pass
@@ -165,6 +167,9 @@ class UPFile(EBSDPatternFile):
     patEnd = patStartEnd[-1]
     if patEnd == -1:
       patEnd = self.nPatterns
+    if patEnd <= patStart:
+      patEnd = patStart+1
+
     nPatToRead = int(patEnd - patStart)
     nPerPat = self.patternW * self.patternH
     f.seek(nPerPat * patStart, 1)
