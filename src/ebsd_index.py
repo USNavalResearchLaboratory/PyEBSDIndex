@@ -7,17 +7,19 @@ else:
   ray._private.services.get_node_ip_address = lambda: '127.0.0.1'
 from pathlib import Path
 from os import path
+import sys
 import multiprocessing
 import queue
 import ebsd_pattern
 import band_detect2
 import band_vote
-#import band_vote_org
-#import band_voteEX
+
 import rotlib
 import tripletlib
 from timeit import default_timer as timer
 import time
+import EBSDImage.IPFcolor as ipfcolor
+import matplotlib.pyplot as plt
 RADEG = 180.0/np.pi
 import traceback
 
@@ -180,8 +182,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
                vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
                peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9,
                patStart = 0, patEnd = -1, chunksize = 1000, ncpu=-1,
-               return_indexer_obj = False, ebsd_indexer_obj = None):
-
+               return_indexer_obj = False, ebsd_indexer_obj = None, keep_log = False):
 
 
   n_cpu_nodes = int(multiprocessing.cpu_count()) #int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
@@ -200,7 +201,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
   ray.shutdown()
 
   ray.init(num_cpus=n_cpu_nodes, num_gpus=ngpu )
-
+  pats = None
   if patsIn is None:
     pdim = None
   else:
@@ -272,6 +273,11 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
   tic = timer()
   npatsdone = 0.0
   toc = 0.0
+
+  if keep_log is True:
+    newline = '\n'
+  else:
+    newline = '\r'
   if mode == 'filemode':
     # send out the first batch
     workers = []
@@ -305,7 +311,11 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       rateave += ratetemp
       # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
       ndone += 1
-      print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp),'  ',np.int(rateave / ndone))
+      if keep_log is False:
+        print('                                                                                             ',end='\r')
+        time.sleep(0.0001)
+      print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp),'  ',np.int(rateave / ndone)
+            , end=newline)
 
       if nsubmit < njobs:
 
@@ -352,7 +362,10 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       rateave += ratetemp
       # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
       ndone += 1
-      print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp),'  ',np.int(rateave / ndone))
+      if keep_log is False:
+        print('                                                                                             ',end='\r')
+      print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp),'  ',np.int(rateave / ndone),
+            end=newline)
 
       if nsubmit < njobs:
 
@@ -761,5 +774,18 @@ class EBSDIndexer():
 
 
 
-def __main__():
-  file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1'
+def __main__(file = None, ncpu=-1):
+  print('Hello')
+  if file is None:
+    file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1'
+
+  dat1, indxer =index_pats(filename = file,
+                                     patStart = 0, patEnd = 1,return_indexer_obj = True,
+                                     nTheta = 180, nRho=90,
+                                     tSigma = 1.0, rSigma = 1.2,rhoMaskFrac=0.1,nBands=9, \
+                                     phaselist = ['FCC'])
+
+  dat = index_pats_distributed(filename=file,patStart=0,patEnd=-1,
+                                          chunksize=1008,ncpu=ncpu,ebsd_indexer_obj=indxer)
+  imshape = (indxer.fID.nRows, indxer.fID.nCols)
+  ipfim = ipfcolor.ipf_color_cubic(dat['quat']).reshape(imshape[0],imshape[1],3); plt.imshow(ipfim)
