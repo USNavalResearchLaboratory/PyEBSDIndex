@@ -24,16 +24,22 @@ import traceback
 
 
 
-def index_pats(pats = None,filename=None,filenameout=None,phaselist=['FCC'], \
+def index_pats(patsIn = None,filename=None,filenameout=None,phaselist=['FCC'], \
                vendor=None,PC = None,sampleTilt=70.0,camElev = 5.3, \
                bandDetectPlan = None,nRho=90,nTheta=180,tSigma= None,rSigma=None,rhoMaskFrac=0.1,nBands=9, \
                patStart = 0,patEnd = -1, \
                return_indexer_obj = False,ebsd_indexer_obj = None, clparams = [None, None, None, None]):
-
-  if pats is None:
+  pats = None
+  if patsIn is None:
     pdim = None
   else:
+    if patsIn is ebsd_pattern.EBSDPatterns:
+      pats = patsIn.patterns
+    if type(patsIn) is np.ndarray:
+      pats = patsIn
     pdim = pats.shape[-2:]
+
+
   if ebsd_indexer_obj == None:
     indexer = EBSDIndexer(filename=filename,phaselist=phaselist, \
                           vendor=None,PC = PC,sampleTilt=sampleTilt,camElev = camElev, \
@@ -41,6 +47,13 @@ def index_pats(pats = None,filename=None,filenameout=None,phaselist=['FCC'], \
                           nRho=nRho,nTheta=nTheta,tSigma= tSigma,rSigma=rSigma,rhoMaskFrac=rhoMaskFrac,nBands=nBands,patDim = pdim)
   else:
     indexer = ebsd_indexer_obj
+
+  if filename is not None:
+    indexer.update_file(filename)
+  if pats is not None:
+    if not np.all(indexer.bandDetectPlan.patDim == np.array(pdim)):
+      indexer.update_file(patDim=pats.shape[-2:])
+
 
 
   dataout, indxstart, indxend = indexer.index_pats(patsin=pats, patStart=patStart, patEnd=patEnd, clparams = clparams)
@@ -199,7 +212,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
 
   ray.shutdown()
 
-  ray.init(num_cpus=n_cpu_nodes, num_gpus=ngpu )
+  ray.init(num_cpus=n_cpu_nodes, num_gpus=ngpu, _system_config={"maximum_gcs_destroyed_actor_cached_count": 3000} )
   pats = None
   if patsIn is None:
     pdim = None
@@ -268,10 +281,9 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
   dataout = np.zeros((npats),dtype=indexer.dataTemplate)
   ndone = 0
   nsubmit = 0
-  nread = 0
-  tic = timer()
+  tic0 = timer()
   npatsdone = 0.0
-  toc = 0.0
+
 
   if keep_log is True:
     newline = '\n'
@@ -310,11 +322,14 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       rateave += ratetemp
       # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
       ndone += 1
+      toc0 = timer() - tic0
       if keep_log is False:
         print('                                                                                             ',end='\r')
         time.sleep(0.0001)
-      print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp),'  ',np.int(rateave / ndone)
-            , end=newline)
+      print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',"{:.0f}".format(ratetemp)+';'+"{:.0f}".format(rateave / ndone),
+            '  ',"{:.0f}".format((ndone / njobs) * 100) + '%',
+            "{:.0f};".format(toc0) + "{:.0f}".format((njobs - ndone) / ndone * toc0) + ' running;remaining(s)',
+            end=newline)
 
       if nsubmit < njobs:
 
@@ -361,9 +376,14 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       rateave += ratetemp
       # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
       ndone += 1
+      toc0 = timer() - tic0
       if keep_log is False:
         print('                                                                                             ',end='\r')
-      print('Completed: ',str(indxstr),' -- ',str(indxend),'  ',np.int(ratetemp),'  ',np.int(rateave / ndone),
+        time.sleep(0.0001)
+      print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',
+            "{:.0f}".format(ratetemp) + ';' + "{:.0f}".format(rateave / ndone),
+            '  ',"{:.0f}".format((ndone / njobs) * 100) + '%',
+            "{:.0f};".format(toc0) + "{:.0f}".format((njobs - ndone) / ndone * toc0) + ' running;remaining(s)',
             end=newline)
 
       if nsubmit < njobs:

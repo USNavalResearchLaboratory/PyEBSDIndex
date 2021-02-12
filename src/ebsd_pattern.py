@@ -118,7 +118,8 @@ class UPFile(EBSDPatternFile):
       self.patternW = dat[0]
       self.patternH = dat[1]
       self.filePos = dat[2]
-      self.nPatterns = np.int((Path(self.path).expanduser().stat().st_size - 16) / (self.patternW * self.patternH))
+      self.nPatterns = np.int((Path(self.path).expanduser().stat().st_size - 16) /
+                              (self.patternW * self.patternH * self.bitdepth/8))
     elif self.version >= 3:
       dat = np.fromfile(f, dtype=np.uint32, count=3)
       self.patternW = dat[0]
