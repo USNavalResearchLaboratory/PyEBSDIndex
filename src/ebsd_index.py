@@ -277,8 +277,8 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
   if njobs < n_cpu_nodes:
     n_cpu_nodes = njobs
 
-
-  dataout = np.zeros((npats),dtype=indexer.dataTemplate)
+  nPhases = len(indexer.phaseLib)
+  dataout = np.zeros((nPhases+1, npats),dtype=indexer.dataTemplate)
   ndone = 0
   nsubmit = 0
   tic0 = timer()
@@ -316,7 +316,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
       jid = jobs.index(wrker[0])
       ticp = timers[jid]
-      dataout[indxstr-patStart:indxend-patStart] = wrkdataout
+      dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
       npatsdone += rate[1]
       ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
       rateave += ratetemp
@@ -370,7 +370,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
       jid = jobs.index(wrker[0])
       ticp = timers[jid]
-      dataout[indxstr-patStart:indxend-patStart] = wrkdataout
+      dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
       npatsdone += rate[1]
       ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
       rateave += ratetemp
@@ -704,11 +704,11 @@ class EBSDIndexer():
     if patEnd == -1:
       patEnd = npoints+1
 
-    indxData = np.zeros((npoints),dtype=self.dataTemplate)
+
     #time.sleep(10.0)
 
 
-    q = np.zeros((npoints, 4))
+
     #print(timer() - tic)
     tic = timer()
     bandData = self.bandDetectPlan.find_bands(pats, clparams = clparams)
@@ -728,8 +728,9 @@ class EBSDIndexer():
     #bv = []
     #for tl in self.phaseLib:
     #  bv.append(band_vote.BandVote(tl))
-
-
+    nPhases = len(self.phaseLib)
+    q = np.zeros((nPhases, npoints,4))
+    indxData = np.zeros((nPhases+1, npoints),dtype=self.dataTemplate)
 
     for i in range(npoints):
     #for i in range(10):
@@ -742,43 +743,32 @@ class EBSDIndexer():
       if whgood.size >= 3:
         bDat1 = bDat1[whgood]
         bandNorm1 = bandNorm1[whgood,:]
-        indxData['pq'][i] = np.sum(bDat1['max'],axis=0)
-        #avequat, fit, cm, bandmatch, nMatch = bv[0].tripvote(bandNorm[i,:,:], goNumba = True)
-        avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[0].tripvote(bandNorm1,goNumba=True)
+        indxData['pq'][0:nPhases,i] = np.sum(bDat1['max'],axis=0)
+        for j in range(len(self.phaseLib)):
+         avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].tripvote(bandNorm1,goNumba=True)
 
-        if nMatch > 0:
-          phase = 1
-          fitmetric = nMatch * cm
-
-        fitmetric1 = -1
-        for j in range(1, len(self.phaseLib)):
-
-          #avequat1,fit1,cm1,bandmatch1,nMatch1 = bv[j].tripvote(bandNorm[i,:,:], goNumba = True)
-          avequat1,fit1,cm1,bandmatch1,nMatch1, matchAttempts1 = self.phaseLib[j].tripvote(bandNorm1,goNumba=True)
-          if nMatch1 > 0:
-            fitmetric1 = nMatch1 * cm1
-          if fitmetric1 > fitmetric:
-            fitmetric = fitmetric1
-            avequat = avequat1
-            fit = fit1
-            cm = cm1
-            bandmatch = bandmatch1
-            nMatch = nMatch1
-            matchAttempts = matchAttempts1
-            phase = j+1
-
-        #indxData['quat'][i] = avequat
-        q[i,:] = avequat
-        indxData['fit'][i] = fit
-        indxData['cm'][i] = cm
-        indxData['phase'][i] = phase
-        indxData['nmatch'][i] = nMatch
-        indxData['matchattempts'][i] = matchAttempts
-
+         if nMatch >= 2:
+           fitmetric = nMatch * cm
+           q[j,i,:] = avequat
+           indxData['fit'][j,i] = fit
+           indxData['cm'][j,i] = cm
+           indxData['phase'][j,i] = j
+           indxData['nmatch'][j,i] = nMatch
+           indxData['matchattempts'][j,i] = matchAttempts
 
     qref2detect = self.refframe2detector()
+    q = q.reshape(nPhases * npoints,4)
     q = rotlib.quat_multiply(q,qref2detect)
-    indxData['quat'] = q
+    q = q.reshape(nPhases,npoints,4)
+    indxData['quat'][0:nPhases,:,:] = q
+    if nPhases > 1:
+      for j in range(nPhases-1):
+        indxData[-1,:] = np.where((indxData[j,:]['cm'] * indxData[j,:]['nmatch'] ) >
+                          ((indxData[j+1,:]['cm'] * indxData[j+1,:]['nmatch'] )),
+                          indxData[j,:], indxData[j+1,:])
+    else:
+        indxData[-1,:,:] = indxData[0,:]
+
     #print('bandvote: ',timer() - tic)
     return indxData, patStart, patEnd
 

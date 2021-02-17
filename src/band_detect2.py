@@ -116,7 +116,7 @@ class BandDetect():
       recalc_masks = True
 
     if (self.rSigma is None) and (self.dRho is not None):
-      self.rSigma = 0.4/np.float32(self.dRho)
+      self.rSigma = 0.25/np.float32(self.dRho)
       recalc_masks = True
 
     if recalc_masks == True:
