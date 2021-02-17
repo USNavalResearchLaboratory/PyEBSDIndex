@@ -755,7 +755,8 @@ class EBSDIndexer():
            indxData['phase'][j,i] = j
            indxData['nmatch'][j,i] = nMatch
            indxData['matchattempts'][j,i] = matchAttempts
-
+         if nMatch >= 6:
+           break
     qref2detect = self.refframe2detector()
     q = q.reshape(nPhases * npoints,4)
     q = rotlib.quat_multiply(q,qref2detect)
