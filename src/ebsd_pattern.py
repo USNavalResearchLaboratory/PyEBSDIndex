@@ -173,7 +173,7 @@ class UPFile(EBSDPatternFile):
 
     nPatToRead = int(patEnd - patStart)
     nPerPat = self.patternW * self.patternH
-    f.seek(nPerPat * patStart, 1)
+    f.seek(int(nPerPat * patStart * bitD/8), 1)
 
     if convertToFloat == True:
       typeout = np.float32
