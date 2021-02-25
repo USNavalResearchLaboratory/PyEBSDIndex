@@ -6,7 +6,7 @@ RADEG = 180.0/np.pi
 
 
 class BandVote():
-  def __init__(self, tripLib, angTol = 2.0):
+  def __init__(self, tripLib, angTol = 3.0):
     self.tripLib = tripLib
     self.phaseName = self.tripLib.phaseName
     self.phaseSym = self.tripLib.symmetry
@@ -77,7 +77,7 @@ class BandVote():
     #print(bandRank)
     #print(tvotes, band_cm, mxvote)
     #print('vote loops: ', timer() - tic)
-    tic = timer()
+    #tic = timer()
 
     # avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam, angTol = self.angTol)
     # if nMatch == 0:
@@ -91,42 +91,54 @@ class BandVote():
     #       break
     #print('refinement: ', timer() - tic)
     #print('tripvote: ',timer() - tic0)
+    tic = timer()
     bandRank_arg = np.argsort(bandRank)
     test  = 0
     fit = 1000.0
     nMatch = -1
-    bandmatch = n_bands-1
     avequat = np.zeros(4, dtype=np.float32)
+    polematch = np.array([-1])
+    whGood = -1
     for i in range(n_bands-1):
       for j in range(i+1,n_bands):
-        avequat1,fit1,bandmatch1,nMatch1 = self.band_vote_refine2(bandnorms, bandRank_arg[-1-i], bandRank_arg[-1-j] ,bandFam,angTol=self.angTol)
+        #avequat1,fit1,bandmatch1,nMatch1 = self.band_vote_refine2(bandnorms, bandRank_arg[-1-i], bandRank_arg[-1-j] ,bandFam,angTol=self.angTol)
+        fit1, nMatch1, whGood1, polematch1 = self.band_index(bandnorms,bandRank_arg[-1 - i],bandRank_arg[-1 - j],bandFam,angTol=self.angTol)
         test += 1
-        if nMatch1 >= 6: #going to make the judgement that if you have matched 6 bands, this is highly likely to be right
-          avequat = avequat1
+        if nMatch1 >= 5: #going to make the judgement that if you have matched n bands, this is highly likely to be right
           fit = fit1
-          bandmatch = bandmatch1
           nMatch = nMatch1
+          whGood = whGood1
+          polematch = polematch1
           break
         else:
-          if nMatch <= nMatch1:
+          if nMatch < nMatch1:
+            fit = fit1
+            nMatch = nMatch1
+            whGood = whGood1
+            polematch = polematch1
+          elif nMatch == nMatch1:
             if fit > fit1:
-              avequat = avequat1
               fit = fit1
-              bandmatch = bandmatch1
               nMatch = nMatch1
-      if nMatch >= 6:
+              whGood = whGood1
+              polematch = polematch1
+      if nMatch >= 5:
         break
-
-    whmatch = np.nonzero(bandmatch >= 0)[0]
-    if len(whmatch > 0):
+    #print('band index: ',timer() - tic)
+    tic = timer()
+    cm = 0.0
+    cm2 = 0.0
+    if nMatch >=2:
+      avequat, fit = self.refine_orientation(bandnorms,whGood,polematch)
+      whmatch = np.nonzero(polematch >= 0)[0]
       cm = np.mean(band_cm[whmatch])
-    else:
-      cm = 0.0
-    # print('refinement: ', timer() - tic)
-    # print('tripvote: ',timer() - tic0)
+      whfam = self.tripLib.completelib['poleFamID'][polematch[whmatch]]
+      cm2 = np.sum(accumulator[[whfam], [whmatch]])
+      cm2 /= np.sum(accumulator)
 
-
-    return avequat, fit, cm, bandmatch, nMatch, (i,j)
+    #print('refinement: ', timer() - tic)
+    #print('all: ',timer() - tic0)
+    return avequat, fit, cm2, polematch, nMatch, (i,j)
 
   def band_vote_refine(self,bandnorms,bandRank,familyLabel,angTol=3.0):
     tic = timer()
@@ -209,18 +221,15 @@ class BandVote():
     #print('averaging: ',timer() - tic)
     return (avequat, fit, polematch, nGood )
 
-  def band_vote_refine2(self,bandnorms,bnd1,bnd2,familyLabel,angTol=3.0):
+  def band_index(self,bandnorms,bnd1,bnd2,familyLabel,angTol=3.0):
     tic = timer()
     nBands = np.int(bandnorms.size/3)
     angTable = self.tripLib.completelib['angTable']
     sztable = angTable.shape
-
+    whGood = -1
     famIndx = self.tripLib.completelib['famIndex']
     nFam = self.tripLib.completelib['nFamily']
     poles = self.tripLib.completelib['polesCart']
-    nPoles = np.int(poles.size / 3)
-    v0indx = bnd1
-    v1indx = bnd2
     ang01 = 0.0
     # need to check that the two selected bands are not parallel.
     v0 = bandnorms[bnd1, :]
@@ -230,13 +239,13 @@ class BandVote():
     ang01 = np.clip(np.dot(v0, v1), -1.0, 1.0)
     ang01 = np.arccos(ang01)*RADEG
     if ang01 < angTol: # the two poles are parallel, send in another two poles if available.
-      return (np.array([1.0,0,0,0]),360.0,nBands - 1,0)
+      return 360.0, 0, whGood, -1
 
     wh01 = np.nonzero(np.abs(angTable[famIndx[f0], famIndx[f1]:np.int(famIndx[f1]+nFam[f1])] - ang01) < angTol)[0]
 
     n01 = wh01.size
     if  n01 == 0:
-      return (np.array([1.0, 0, 0, 0]), 360.0, nBands-1, 0)
+      return 360.0, 0, whGood, -1
 
     wh01 += famIndx[f1]
     p0 = poles[famIndx[f0], :]
@@ -248,39 +257,37 @@ class BandVote():
     whGood = np.nonzero(angFit < angTol)[0]
     nGood = np.int64(whGood.size)
     if nGood < 3:
-      return (np.array([1.0,0,0,0]),360.0,nBands - 1,0)
-    whNoGood = np.nonzero(angFit >= angTol)[0]
-    nNoGood = whNoGood.size
+      return 360.0, -1, -1, -1
 
-    if nNoGood > 0:
-      polematch[whNoGood] = -1
-    #print('first loop: ',timer() - tic)
-    # do a n choose 2 of the rest of the poles
-    # n choose k combinations --> C = n! / (k!(n-k)! == product(lindgen(k)+(n-k+1)) / factorial(k)
-    # N Choose K with N = good band poles and K = 2
+    fit = np.mean(angFit[whGood])
+    return fit, nGood, whGood, polematch
+
+  def refine_orientation(self,bandnorms, whGood, polematch):
     tic = timer()
+    poles = self.tripLib.completelib['polesCart']
+    nGood = whGood.size
     n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int(2))
     whGood = np.asarray(whGood,dtype=np.int64)
-    #qweight = np.zeros(n2Fit)
-    AB = self.band_vote_refine_loops2(nGood,whGood,poles,bandnorms,polematch,n2Fit)
+    AB, ABgood = self.band_vote_refine_loops2(nGood,whGood,poles,bandnorms,polematch,n2Fit)
 
-    #print('2nd looping: ',timer() - tic)
+    #print(timer()-tic)
     tic = timer()
-    quats = rotlib.om2qu(AB)
-    sign0 = np.sum(quats[0,:] * quats, axis = 1)
-    sign = ((sign0 >= 0).astype(np.float32) - (sign0 < 0).astype(np.float32)).reshape(n2Fit,1)
-    quats *= sign
-    avequat = np.mean(quats, axis = 0)
-    avequat = rotlib.quatnorm(avequat)
-    #if avequat[0] < 0:
-    #  avequat *= -1.0
+    quats = rotlib.om2qu(AB[ABgood.nonzero()[0], :, :])
+
+    #sign0 = np.sum(quats[0,:] * quats, axis = 1)
+    #sign = ((sign0 >= 0).astype(np.float32) - (sign0 < 0).astype(np.float32)).reshape(n2Fit,1)
+    #quats *= sign
+    #avequat = np.mean(quats, axis = 0)
+    avequat = rotlib.quatave(quats)
+    #avequat = rotlib.quatnorm(avequat)
 
     test = rotlib.quat_vector(avequat,bandnorms[whGood,:])
+
     test = np.sum(test * poles[polematch[whGood], :], axis = 1)
     test = np.arccos(np.clip(test, -1.0, 1.0))*RADEG
     fit = np.mean(test)
     #print('averaging: ',timer() - tic)
-    return (avequat, fit, polematch, nGood )
+    return avequat, fit
 
   @staticmethod
   @numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
@@ -411,6 +418,7 @@ class BandVote():
     A = np.zeros((3,3), dtype = np.float32)
     B = np.zeros((3,3), dtype = np.float32)
     AB = np.zeros((n2Fit, 3,3), dtype= np.float32)
+    whgood = np.zeros((n2Fit), dtype = np.int32)
     for i in range(nGood):
       v0 = bandnorms[whGood[i],:]
       p0 = poles[polematch[whGood[i]],:]
@@ -426,26 +434,31 @@ class BandVote():
         for ii in range(3):
           norm += v0v1c[ii] * v0v1c[ii]
         norm = np.sqrt(norm) + 1.0e-35
-        for ii in range(3):
-          v0v1c[ii] = v0v1c[ii] / norm
+        #print(norm)
+        if norm > (0.087): # these vectors are not parallel (greater than 5 degrees)
+          for ii in range(3):
+            v0v1c[ii] = v0v1c[ii] / norm
 
-        p0p1c = np.cross(p0,p1)
-        # p0p1c /= (np.linalg.norm(p0p1c))+1.0e-35
-        #p0p1c = vectnorm(p0p1c) # faster to inline these functions
-        norm = numba.float32(0.0)
-        for ii in range(3):
-          norm += p0p1c[ii] * p0p1c[ii]
-        norm = np.sqrt(norm) + 1.0e-35
-        for ii in range(3):
-          p0p1c[ii] = p0p1c[ii] / norm
+          p0p1c = np.cross(p0,p1)
+          # p0p1c /= (np.linalg.norm(p0p1c))+1.0e-35
+          #p0p1c = vectnorm(p0p1c) # faster to inline these functions
+          norm = numba.float32(0.0)
+          for ii in range(3):
+            norm += p0p1c[ii] * p0p1c[ii]
+          norm = np.sqrt(norm) + 1.0e-35
+          for ii in range(3):
+            p0p1c[ii] = p0p1c[ii] / norm
 
-        A[:,1] = p0p1c
-        B[1,:] = v0v1c
-        A[:,2] = np.cross(p0,p0p1c)
-        B[2,:] = np.cross(v0,v0v1c)
-        AB[counter, :,:] = A.dot(B)
-        #AB = np.reshape(AB, (1,3,3))
-        #quats[counter,:] = rotlib.om2quL(AB)
-        counter += 1
-
-    return AB
+          A[:,1] = p0p1c
+          B[1,:] = v0v1c
+          A[:,2] = np.cross(p0,p0p1c)
+          B[2,:] = np.cross(v0,v0v1c)
+          AB[counter, :,:] = A.dot(B)
+          whgood[counter] = 1
+          #AB = np.reshape(AB, (1,3,3))
+          #quats[counter,:] = rotlib.om2quL(AB)
+          counter += 1
+        else: # the two are parallel - throwout the result.
+          whgood[counter] = 0
+          counter +=1
+    return AB, whgood

@@ -56,8 +56,8 @@ class triplib():
     sympoles = []
     sympolesN = []
     sympolesComplete = []
-    nFamComplete = np.zeros(npoles)
-    nFamily = np.zeros(npoles)
+    nFamComplete = np.zeros(npoles, dtype = np.int32)
+    nFamily = np.zeros(npoles, dtype = np.int32)
     polesFlt = np.array(poles, dtype=np.float32)
 
     for i in range(npoles):
@@ -150,9 +150,14 @@ class triplib():
     famindx0 = ((np.concatenate( ([0],np.cumsum(nFamComplete)) ))[0:-1]).astype(dtype=np.int)
     cartPoles = self.xstalplane2cart(sympolesComplete)
     cartPoles /= np.linalg.norm(cartPoles, axis = 1).reshape(np.int(cartPoles.size/3),1)
+    completePoleFamId = np.zeros(sympolesComplete.shape[0], dtype=np.int32)
+    for i in range(npoles):
+      for j in range(nFamComplete[i]):
+        completePoleFamId[j+famindx0[i]] = i
     self.completelib = {
                    'poles' : sympolesComplete,
                    'polesCart': cartPoles,
+                   'poleFamID': completePoleFamId,
                    'angTable' : angTable,
                    'nFamily'  : nFamComplete,
                    'famIndex' : famindx0

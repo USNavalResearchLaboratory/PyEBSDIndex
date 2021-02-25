@@ -12,7 +12,7 @@ import multiprocessing
 import queue
 import ebsd_pattern
 import band_detect2
-import band_vote
+import band_vote2 as band_vote
 import rotlib
 import tripletlib
 from timeit import default_timer as timer
@@ -704,18 +704,10 @@ class EBSDIndexer():
     if patEnd == -1:
       patEnd = npoints+1
 
-
-    #time.sleep(10.0)
-
-
-
     #print(timer() - tic)
     tic = timer()
     bandData = self.bandDetectPlan.find_bands(pats, clparams = clparams)
 
-
-
-    #indxData['iq'] = np.sum(bandData['pqmax'], axis = 1)
     if PC[0] is None:
       PC_0 = self.PC
     else:
@@ -732,10 +724,9 @@ class EBSDIndexer():
     q = np.zeros((nPhases, npoints,4))
     indxData = np.zeros((nPhases+1, npoints),dtype=self.dataTemplate)
 
+    indxData['phase'] = -1
+    indxData['fit'] = 180.0
     for i in range(npoints):
-    #for i in range(10):
-      phase = 0
-      fitmetric = -1
 
       bandNorm1 = bandNorm[i,:,:]
       bDat1 = bandData[i,:]
@@ -744,10 +735,11 @@ class EBSDIndexer():
         bDat1 = bDat1[whgood]
         bandNorm1 = bandNorm1[whgood,:]
         indxData['pq'][0:nPhases,i] = np.sum(bDat1['max'],axis=0)
+
         for j in range(len(self.phaseLib)):
          avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].tripvote(bandNorm1,goNumba=True)
 
-         if nMatch >= 2:
+         if nMatch >= 3:
            fitmetric = nMatch * cm
            q[j,i,:] = avequat
            indxData['fit'][j,i] = fit
@@ -755,7 +747,7 @@ class EBSDIndexer():
            indxData['phase'][j,i] = j
            indxData['nmatch'][j,i] = nMatch
            indxData['matchattempts'][j,i] = matchAttempts
-         if nMatch >= 6:
+         if nMatch >= 9:
            break
     qref2detect = self.refframe2detector()
     q = q.reshape(nPhases * npoints,4)
@@ -768,7 +760,7 @@ class EBSDIndexer():
                           ((indxData[j+1,:]['cm'] * indxData[j+1,:]['nmatch'] )),
                           indxData[j,:], indxData[j+1,:])
     else:
-        indxData[-1,:,:] = indxData[0,:]
+        indxData[-1,:] = indxData[0,:]
 
     #print('bandvote: ',timer() - tic)
     return indxData, patStart, patEnd
