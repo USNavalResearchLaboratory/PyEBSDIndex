@@ -1478,6 +1478,31 @@ def quatconjL(quin,unitNorm=True):
       qout[i,j+1] = -1.0*qu[i,j+1]
   return qout
 
+def quatave(qu):
+  '''Provides a quaternion average. Assumes quaterions are closely clustered'''
+  qout = quataveL(np.require(qu,requirements=['C','A']))
+  qout = np.squeeze(qout)
+  return qout
+
+
+@numba.jit(nopython=True,fastmath=nbFastmath,cache=nbcache,parallel=nbParallel)
+def quataveL(quin,unitNorm=True):
+  qu,m,n,intype = prepIn(quin)
+  qout = np.zeros((4),dtype=intype)
+  q0 = qu[0,:]
+  qout += q0
+  for i in numba.prange(n-1):
+    sign = q0[0]*qu[i+1,0]
+    for j in range(3):
+      sign += q0[j+1]*qu[i+1,j+1]
+    if sign >= 0.0:
+      s = 1.0
+    else:
+      s = -1.0
+    qout += s*qu[i+1,:]
+  qout /= numba.float32(n)
+  return qout
+
 def quat_multiply(q1,q2,p=P):
   '''quaternion multiplication. Can be q1(Nx4) x q2(N x4) or q1(4) x q2(Nx4)'''
   q1q2 = quat_multiplyL(np.require(q1,requirements=['C','A']),np.require(q2,requirements=['C','A']),p=p)
@@ -1700,7 +1725,10 @@ def quat_vector1(q,v,p=P):
 
   return vout
 
-
+def randomquat(n=1):
+  aprime = np.pi**(2.0/3.0)
+  cu_ran = (np.random.random((n, 3))-0.5)*aprime
+  return cu2qu(cu_ran)
 # 
 def axnorm(ax):
   '''axis-angle normalization -- unit vector length, corrects negative angles and angles over 2Pi'''
