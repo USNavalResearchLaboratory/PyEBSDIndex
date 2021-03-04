@@ -133,8 +133,8 @@ class BandVote():
       whmatch = np.nonzero(polematch >= 0)[0]
       cm = np.mean(band_cm[whmatch])
       whfam = self.tripLib.completelib['poleFamID'][polematch[whmatch]]
-      cm2 = np.sum(accumulator[[whfam], [whmatch]])
-      cm2 /= np.sum(accumulator)
+      cm2 = np.sum(accumulator[[whfam], [whmatch]]).astype(np.float32)
+      cm2 /= np.sum(accumulator.clip(1))
 
     #print('refinement: ', timer() - tic)
     #print('all: ',timer() - tic0)
