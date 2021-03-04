@@ -1,4 +1,25 @@
 
+//Do a background subtract on the pattern
+__kernel void backSub( __global float16 *im1, __global const float *back,
+                        const unsigned long int nImChunk)
+  {
+  const unsigned long int xy = get_global_id(0);
+  //const unsigned long int szim = get_global_size(0);
+  unsigned long i;
+  float16 imVal;
+
+  const float b1 = back[xy];
+
+  const unsigned long indx = nImChunk * xy;
+  for(i = 0; i<= nImChunk; ++i){
+    imVal =  im1[indx+i];
+    imVal -= b1;   
+    im1[indx+i] = imVal;
+  }
+  
+}
+
+
 __kernel void radonSum(
       __global const unsigned long int *rdnIndx, __global const float16 *images, __global float16 *radon,
       const unsigned long int imstep, const unsigned long int indxstep,

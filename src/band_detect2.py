@@ -34,6 +34,8 @@ class BandDetect():
 
     self.nBands = nBands
     self.EDAXIQ = False
+    self.backgroundsub = None
+
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
                     ('pqmax', np.float32)])
@@ -135,6 +137,59 @@ class BandDetect():
     if nBands is not None:
       self.nBands = nBands
 
+  def collect_background(self, fileobj = None, patsIn = None, nsample = None, method = 'randomStride', sigma=None):
+
+    back = None # default value
+    # we got an array of patterns
+
+    if patsIn is not None:
+      ndim = patsIn.ndim
+      if ndim == 2:
+        patsIn = np.expand_dims(patsIn,axis=0)
+      else:
+        patsIn = patsIn
+      npats = patsIn.shape[0]
+      if nsample is None:
+        nsample = npats
+      pshape = patsIn.shape
+      if npats <= nsample:
+        back = np.mean(patsIn, axis = 0)
+        back = np.expand_dims(back,axis=0)
+      else:
+        if method.upper() == 'RANDOMSTRIDE':
+          stride = np.random.choice(npats, size = nsample, replace = False )
+          stride = np.sort(stride)
+          back = np.mean(patsIn[stride,:,:],axis=0)
+        elif method.upper() == 'EVENSTRIDE':
+          stride = np.arange(0, npats, int(npats/nsample)) # not great, but maybe good enough.
+          back = np.mean(patsIn[stride, :, :], axis=0)
+
+    if (back is None) and (fileobj is not None):
+      if fileobj.version is None:
+        fileobj.read_header()
+      npats = fileobj.nPatterns
+      if nsample is None:
+        nsample = npats
+
+      if method.upper() == 'RANDOMSTRIDE':
+        stride = np.random.choice(npats, size = nsample, replace = False )
+        stride = np.sort(stride)
+      elif method.upper() == 'EVENSTRIDE':
+        step = int(npats / nsample) # not great, but maybe good enough.
+        stride = np.arange(0,npats, step, dypte = np.uint64)
+      pat1 = fileobj.read_data(convertToFloat=True,patStartEnd=[stride[0],stride[0] + 1],returnArrayOnly=True)
+      for i in stride[1:]:
+        pat1 += fileobj.read_data(convertToFloat=True,patStartEnd=[i,i + 1],returnArrayOnly=True)
+      back = pat1 / float(len(stride))
+      pshape = pat1.shape
+    # a bit of image processing.
+    if back is not None:
+      if sigma is None:
+       sigma = 2.0 * float(pshape[-1]) / 80.0
+      #back[0,:,:] = gaussian_filter(back[0,:,:], sigma = sigma )
+      back -= np.mean(back)
+    self.backgroundsub = back
+
   def find_bands(self, patternsIn, faster=False, verbose=False, clparams = [None, None, None, None, None]):
     tic0 = timer()
     tic = timer()
@@ -200,9 +255,16 @@ class BandDetect():
       print('Band Label Time:', blabeltime)
       print('Total Band Find Time:',timer() - tic0)
       plt.clf()
-      plt.imshow(rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], nPats-1], origin='lower', cmap='gray')
+      im2show = rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], nPats-1]
+      rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
+
+      im2show[0:rhoMaskTrim,:] = 0
+      im2show[-rhoMaskTrim:,:] = 0
+      plt.imshow(im2show, origin='lower', cmap='gray')
       #plt.scatter(y = bandData['aveloc'][-1,:,0], x = bandData['aveloc'][-1,:,1]+self.peakPad[1], c ='r', s=5)
       plt.scatter(y=bandData['aveloc'][-1,:,0],x=bandData['aveloc'][-1,:,1],c='r',s=5)
+      plt.xlim(0,self.nTheta)
+      plt.ylim(0,self.nRho)
       plt.show()
 
 
@@ -334,14 +396,15 @@ class BandDetect():
   def calc_rdn(self, patterns, clparams = [None, None, None, None], use_gpu=False):
     rdnNorm_gpu = None
     if use_gpu == False:
-      rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True)
+      rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True, background = self.backgroundsub)
     else:
       try:
-        rdnNorm, clparams, rdnNorm_gpu = self.radonPlan.radon_fasterCL(patterns, self.padding, fixArtifacts=True,
+        rdnNorm, clparams, rdnNorm_gpu = self.radonPlan.radon_fasterCL(patterns, self.padding,
+                                                                     fixArtifacts=True,background = self.backgroundsub,
                                                                      returnBuff = self.CLOps[1], clparams = clparams)
       except Exception as e:
         print(e)
-        rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True)
+        rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True, background = self.backgroundsub)
 
     return rdnNorm, clparams, rdnNorm_gpu
 
@@ -404,7 +467,8 @@ class BandDetect():
     if use_gpu == True: # perform this operation on the GPU
       try:
         return self.rdn_local_maxCL(rdn, clparams, radonIn_gpu = rdn_gpu)
-      except:
+      except Exception as e:
+        print(e)
         if isinstance(rdn_gpu, cl.Buffer):
           nT = self.nTheta
           nTp = nT + 2 * self.padding[1]

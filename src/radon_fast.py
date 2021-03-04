@@ -88,16 +88,22 @@ class Radon():
       self.indexPlan.sort(axis = -1)
 
 
-  def radon_fast(self, image, padding = np.array([0,0]), fixArtifacts = False):
+  def radon_fast(self, imageIn, padding = np.array([0,0]), fixArtifacts = False, background = None):
     tic = timer()
-    shapeIm = np.shape(image)
-    if image.ndim == 2:
+    shapeIm = np.shape(imageIn)
+    if imageIn.ndim == 2:
       nIm = 1
-      image = image[np.newaxis, : ,:]
+      image = imageIn[np.newaxis, : ,:]
       reform = True
     else:
       nIm = shapeIm[0]
       reform = False
+
+    if background is None:
+      image = imageIn.reshape(-1)
+    else:
+      image = imageIn - background
+      image = image.reshape(-1)
 
     nPx = shapeIm[-1]*shapeIm[-2]
     im = np.zeros(nPx+1, dtype=np.float32)
@@ -121,10 +127,10 @@ class Radon():
     #print(timer()-tic)
     return radon
 
-  def radon_faster(self,image,padding = np.array([0,0]), fixArtifacts = False):
+  def radon_faster(self,imageIn,padding = np.array([0,0]), fixArtifacts = False, background = None):
     tic = timer()
-    shapeIm = np.shape(image)
-    if image.ndim == 2:
+    shapeIm = np.shape(imageIn)
+    if imageIn.ndim == 2:
       nIm = 1
       #image = image[np.newaxis, : ,:]
       #reform = True
@@ -132,7 +138,11 @@ class Radon():
       nIm = shapeIm[0]
     #  reform = False
 
-    image = image.reshape(-1)
+    if background is None:
+      image = imageIn.reshape(-1)
+    else:
+      image = imageIn - background
+      image = image.reshape(-1)
 
     nPx = shapeIm[-1]*shapeIm[-2]
     indxDim = np.asarray(self.indexPlan.shape)
@@ -177,7 +187,7 @@ class Radon():
             count += 1.0
           radon[ip,jp,q] = sum/(count + 1.0e-12)
 
-  def radon_fasterCL(self,image,padding = np.array([0,0]),fixArtifacts = False, returnBuff = False, clparams=[None, None, None, None, None] ):
+  def radon_fasterCL(self,image,padding = np.array([0,0]),fixArtifacts = False, background = None, returnBuff = False, clparams=[None, None, None, None, None] ):
 
     tic = timer()
     if isinstance(clparams[1],cl.Context):
@@ -233,6 +243,14 @@ class Radon():
     tic = timer()
 
     nImChunk = np.uint64(nImCL/clvtypesize)
+
+    if background is not None:
+      back_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=background.astype(np.float32))
+      prg.backSub(queue,(imstep, 1, 1),None,image_gpu,back_gpu,nImChunk)
+      imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
+      cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
+
+
     prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
                   imstep, indxstep,
                  shpRdn[0], shpRdn[1],
