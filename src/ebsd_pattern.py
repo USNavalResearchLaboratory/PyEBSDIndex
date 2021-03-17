@@ -43,7 +43,8 @@ class EBSDPatterns():
 
 
 
-
+# a class template for any EBSD pattern file type.
+# Any EBSD file class should inheret this class.
 class EBSDPatternFile():
   def __init__(self,path, file_type=None):
     self.path = path
@@ -78,14 +79,6 @@ class UPFile(EBSDPatternFile):
     EBSDPatternFile.__init__(self, path)
     self.file_type = 'UP'
     self.vendor = 'EDAX'
-    self.version = None
-    self.nCols = None
-    self.nRows = None
-    self.nPatterns = None
-    self.patternW = None
-    self.patternH = None
-    self.xStep = None
-    self.yStep = None
     #UP only attributes
     self.bitdepth = None
     self.filePos = None  # file location in bytes where pattern data starts

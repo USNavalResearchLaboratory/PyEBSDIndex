@@ -208,7 +208,7 @@ class Radon():
         kernel_location = path.dirname(__file__)
         prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
       except:
-        return self.radon_faster(image,padding=padding,fixArtifacts = fixArtifacts)
+        return self.radon_faster(image,padding=padding,fixArtifacts = fixArtifacts), [None, None, None, None, None], None
 
     shapeIm = np.shape(image)
     if image.ndim == 2:
