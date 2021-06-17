@@ -11,8 +11,8 @@ import sys
 import multiprocessing
 import queue
 import ebsd_pattern
-import band_detect2
-import band_vote2 as band_vote
+import band_detect
+import band_vote
 import rotlib
 import tripletlib
 from timeit import default_timer as timer
@@ -91,11 +91,15 @@ class IndexerRay():
 
 
   def index_chunk_ray(self, pats = None, indexer = None, patStart = 0, patEnd = -1 ):
-    tic = timer()
-    dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd, clparams = self.openCLParams)
-    rate = np.array([timer()-tic, indxend-indxstart])
-    return dataout, indxstart,indxend, rate
-
+    try:
+      tic = timer()
+      dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd, clparams = self.openCLParams)
+      rate = np.array([timer()-tic, indxend-indxstart])
+      return dataout, indxstart,indxend, rate
+    except:
+      indxstart = patStart
+      indxend = patEnd
+      return None, indxstart,indxend, [-1, -1]
   # def readdata(self):
   #   return self.dataout, self.indxstart,self.indxend, self.rate
   #
@@ -212,7 +216,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
 
   ray.shutdown()
 
-  ray.init(num_cpus=n_cpu_nodes, num_gpus=ngpu, _system_config={"maximum_gcs_destroyed_actor_cached_count": 3000} )
+  ray.init(num_cpus=n_cpu_nodes, num_gpus=ngpu, _system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes} )
   pats = None
   if patsIn is None:
     pdim = None
@@ -271,9 +275,13 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
   remote_indexer = ray.put(indexer)
   # set up the jobs
   njobs = (np.ceil(npats/chunksize)).astype(np.long)
-  p_indx_start = [i*chunksize+patStart for i in range(njobs)]
-  p_indx_end = [(i+1)*chunksize+patStart for i in range(njobs)]
-  p_indx_end[-1] = npats+patStart
+  #p_indx_start = [i*chunksize+patStart for i in range(njobs)]
+  #p_indx_end = [(i+1)*chunksize+patStart for i in range(njobs)]
+  #p_indx_end[-1] = npats+patStart
+  p_indx_start_end = [[i*chunksize+patStart, (i+1)*chunksize+patStart] for i in range(njobs)]
+  p_indx_start_end[-1][1] = npats+patStart
+
+
   if njobs < n_cpu_nodes:
     n_cpu_nodes = njobs
 
@@ -294,15 +302,18 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
     workers = []
     jobs = []
     timers = []
+    jobs_indx = []
     rateave = 0.0
     for i in range(n_cpu_nodes):
-
+      job_pstart_end = p_indx_start_end.pop(0)
       workers.append(IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote())
       jobs.append(workers[i].index_chunk_ray.remote(pats = None, indexer = remote_indexer, \
-                                        patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
+                                        patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
       nsubmit += 1
       timers.append(timer())
       time.sleep(0.01)
+      jobs_indx.append(job_pstart_end[:])
+
 
 
     #workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
@@ -313,50 +324,77 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       wrker,busy = ray.wait(jobs,num_returns=1,timeout=None)
 
       # print("waittime: ",timer() - toc)
-      wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
       jid = jobs.index(wrker[0])
-      ticp = timers[jid]
-      dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
-      npatsdone += rate[1]
-      ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
-      rateave += ratetemp
-      # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
-      ndone += 1
-      toc0 = timer() - tic0
-      if keep_log is False:
-        print('                                                                                             ',end='\r')
-        time.sleep(0.0001)
-      print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',"{:.0f}".format(ratetemp)+';'+"{:.0f}".format(rateave / ndone),
-            '  ',"{:.0f}".format((ndone / njobs) * 100) + '%',
-            "{:.0f};".format(toc0) + "{:.0f}".format((njobs - ndone) / ndone * toc0) + ' running;remaining(s)',
-            end=newline)
+      try:
+        wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
+      except:
+        #print('a death has occured')
+        indxstr = jobs_indx[jid][0]
+        indxend = jobs_indx[jid][1]
+        rate = [-1, -1]
+      if rate[0] >= 0:
 
-      if nsubmit < njobs:
+        ticp = timers[jid]
+        dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
+        npatsdone += rate[1]
+        ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
+        rateave += ratetemp
+        # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
+        ndone += 1
+        toc0 = timer() - tic0
+        if keep_log is False:
+          print('                                                                                             ',end='\r')
+          time.sleep(0.0001)
+        print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',"{:.0f}".format(ratetemp)+';'+"{:.0f}".format(rateave / ndone),
+              '  ',"{:.0f}".format((ndone / njobs) * 100) + '%',
+              "{:.0f};".format(toc0) + "{:.0f}".format((njobs - ndone) / ndone * toc0) + ' running;remaining(s)',
+              end=newline)
 
-        jobs[jid] = workers[jid].index_chunk_ray.remote(pats=None,indexer=remote_indexer,
-                                                    patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit])
-        nsubmit += 1
-        timers[jid] = timer()
-      else: #start destroying workers, jobs, etc...
+        if len(p_indx_start_end) > 0:
+          job_pstart_end = p_indx_start_end.pop(0)
+          jobs[jid] = workers[jid].index_chunk_ray.remote(pats=None,indexer=remote_indexer,
+                                                          patStart=job_pstart_end[0],patEnd=job_pstart_end[1])
+          nsubmit += 1
+          timers[jid] = timer()
+          jobs_indx[jid] = job_pstart_end[:]
+        else:
+          del jobs[jid]
+          del workers[jid]
+          del timers[jid]
+          del jobs_indx[jid]
+
+      else:# something bad happened.  Put the job back on the queue and kill this worker
+        p_indx_start_end.append([indxstr,indxend])
         del jobs[jid]
         del workers[jid]
         del timers[jid]
-
-
+        del jobs_indx[jid]
+        if len(workers) < 1: # rare case that we have killed all workers...
+          job_pstart_end = p_indx_start_end.pop(0)
+          workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote())
+          jobs.append(workers[i].index_chunk_ray.remote(pats=None,indexer=remote_indexer, \
+                                                        patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
+          nsubmit += 1
+          timers.append(timer())
+          time.sleep(0.01)
+          jobs_indx.append(job_pstart_end[:])
 
 
   if mode == 'memorymode':
     workers = []
     jobs = []
     timers = []
+    jobs_indx = []
     rateave = 0.0
     for i in range(n_cpu_nodes):
+      job_pstart_end = p_indx_start_end.pop(0)
       workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote())
-      jobs.append(workers[i].index_chunk_ray.remote(pats=pats[p_indx_start[i]:p_indx_end[i],:,:],
+      jobs.append(workers[i].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:],
                                                     indexer=remote_indexer, \
-                                                    patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit]))
+                                                    patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
       nsubmit += 1
       timers.append(timer())
+      jobs_indx.append(job_pstart_end)
       time.sleep(0.01)
 
     # workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
@@ -365,38 +403,64 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
     while ndone < njobs:
       toc = timer()
       wrker,busy = ray.wait(jobs,num_returns=1,timeout=None)
-
-      # print("waittime: ",timer() - toc)
-      wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
       jid = jobs.index(wrker[0])
-      ticp = timers[jid]
-      dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
-      npatsdone += rate[1]
-      ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
-      rateave += ratetemp
-      # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
-      ndone += 1
-      toc0 = timer() - tic0
-      if keep_log is False:
-        print('                                                                                             ',end='\r')
-        time.sleep(0.0001)
-      print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',
-            "{:.0f}".format(ratetemp) + ';' + "{:.0f}".format(rateave / ndone),
-            '  ',"{:.0f}".format((ndone / njobs) * 100) + '%',
-            "{:.0f};".format(toc0) + "{:.0f}".format((njobs - ndone) / ndone * toc0) + ' running;remaining(s)',
-            end=newline)
+      # print("waittime: ",timer() - toc)
+      try:
+        wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
+      except:
+        indxstr = jobs_indx[jid][0]
+        indxend = jobs_indx[jid][1]
+        rate = [-1,-1]
+      if rate[0] >= 0:
+        ticp = timers[jid]
+        dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
+        npatsdone += rate[1]
+        ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
+        rateave += ratetemp
+        # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
+        ndone += 1
+        toc0 = timer() - tic0
+        if keep_log is False:
+          print('                                                                                             ',end='\r')
+          time.sleep(0.0001)
+        print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',
+              "{:.0f}".format(ratetemp) + ';' + "{:.0f}".format(rateave / ndone),
+              '  ',"{:.0f}".format((ndone / njobs) * 100) + '%',
+              "{:.0f};".format(toc0) + "{:.0f}".format((njobs - ndone) / ndone * toc0) + ' running;remaining(s)',
+              end=newline)
 
-      if nsubmit < njobs:
-
-        jobs[jid] = workers[jid].index_chunk_ray.remote(pats=pats[p_indx_start[nsubmit]:p_indx_end[nsubmit]]
-                                                        ,indexer=remote_indexer,
-                                                        patStart=p_indx_start[nsubmit],patEnd=p_indx_end[nsubmit])
-        nsubmit += 1
-        timers[jid] = timer()
-      else:  # start destroying workers, jobs, etc...
+        if len(p_indx_start_end) > 0:
+          job_pstart_end = p_indx_start_end.pop(0)
+          jobs[jid] = workers[jid].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:]
+                                                          ,indexer=remote_indexer,
+                                                          patStart=job_pstart_end[0],patEnd=job_pstart_end[1])
+          nsubmit += 1
+          timers[jid] = timer()
+          jobs_indx[jid] = job_pstart_end
+        else:
+          del jobs[jid]
+          del workers[jid]
+          del timers[jid]
+          del jobs_indx[jid]
+      else:# something bad happened.  Put the job back on the queue and kill this worker
+        p_indx_start_end.append([indxstr,indxend])
         del jobs[jid]
         del workers[jid]
         del timers[jid]
+        del jobs_indx[jid]
+        if len(workers) < 1: # rare case that we have killed all workers...
+          job_pstart_end = p_indx_start_end.pop(0)
+          workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote())
+          jobs.append(workers[i].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:],
+                                                        indexer=remote_indexer, \
+                                                        patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
+          nsubmit += 1
+          timers.append(timer())
+          jobs_indx.append(job_pstart_end)
+
+    del jobs
+    del workers
+    del timers
     # # send out the first batch
     # workers = [index_chunk_ray.remote(pats=pats[p_indx_start[i]:p_indx_end[i],:,:],indexer=remote_indexer,patStart=p_indx_start[i],patEnd=p_indx_end[i]) for i
     #            in range(n_cpu_nodes)]
@@ -651,7 +715,7 @@ class EBSDIndexer():
 
 
     if bandDetectPlan is None:
-        self.bandDetectPlan = band_detect2.BandDetect(nRho=nRho,nTheta=nTheta, \
+        self.bandDetectPlan = band_detect.BandDetect(nRho=nRho,nTheta=nTheta, \
                                                       tSigma=tSigma,rSigma=rSigma, \
                                                       rhoMaskFrac=rhoMaskFrac,nBands=nBands)
     else:
