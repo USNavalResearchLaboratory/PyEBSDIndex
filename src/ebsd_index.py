@@ -337,7 +337,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
         ticp = timers[jid]
         dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
         npatsdone += rate[1]
-        ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
+        ratetemp = len(workers) * (rate[1]) / (timer() - ticp)
         rateave += ratetemp
         # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
         ndone += 1
@@ -802,7 +802,7 @@ class EBSDIndexer():
 
         for j in range(len(self.phaseLib)):
          avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].tripvote(bandNorm1,goNumba=True)
-
+         #avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].pairVoteOrientation(bandNorm1,goNumba=True)
          if nMatch >= 3:
            fitmetric = nMatch * cm
            q[j,i,:] = avequat

@@ -11,5 +11,5 @@ dependencies:
   #- ocl-icd-system
   - pip
   - pip:
-    - ray
+    - 'ray[default]'
  

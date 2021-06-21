@@ -55,7 +55,7 @@ P = 1
 eps = 1.0e-12 # used for "closeto" approximations in Numba code
 PI = np.pi
 PI2 = 2.0 * np.pi
-nbcache = True # switch to false for debugging.
+nbcache = False # switch to false for debugging.
 nbParallel = False # decide if parallelism is desired.
 # Once the JIT compiler runs over the code, changing this will not change the parallelism.  
 # The package will need to be reimported
@@ -71,7 +71,7 @@ def prepIn(a):
   intype = a.dtype
   m = shape[-1]
   n = numba.int64(a.size / m)
-  aout = a.reshape(n,m)
+  aout = a.reshape((n,m))
   return (aout,m,n,intype)
 
 
@@ -182,7 +182,7 @@ def om2eu(om,p=P):
   if om.ndim == 3:
     omIn = np.require(om,requirements=['C','A'])
   elif om.ndim == 2:
-    omIn = np.require(om,requirements=['C','A']).reshape(1,3,3)
+    omIn = np.require(om,requirements=['C','A']).reshape((1,3,3))
   else:
     return -1
   eu = om2euL(omIn,p=p)
@@ -560,7 +560,7 @@ def om2ax_old(om,p=P):
   if om.ndim == 3:
     omIn = np.require(om,requirements=['C','A'])
   elif om.ndim == 2:
-    omIn = np.require(om,requirements=['C','A']).reshape(1,3,3)
+    omIn = np.require(om,requirements=['C','A']).reshape((1,3,3))
   else:
     return -1
   ax = om2axL(omIn,p=p)
@@ -665,7 +665,7 @@ def om2qu(om,p=P):
   if om.ndim == 3:
     omIn = np.require(om,requirements=['C','A'])
   elif om.ndim == 2:
-    omIn = np.require(om,requirements=['C','A']).reshape(1,3,3)
+    omIn = np.require(om,requirements=['C','A']).reshape((1,3,3))
   else:
     return -1
   qu = om2quL(omIn,p=p)

@@ -298,6 +298,7 @@ class BandVote():
     ntrip = int(tshape[0])
     count  = 0.0
     #angTest2 = np.zeros(ntrip, dtype=numba.boolean)
+    #angTest2 = np.empty(ntrip,dtype=numba.boolean)
     for i in range(n_bands):
       for j in range(i + 1,n_bands):
         for k in range(j + 1,n_bands):
@@ -307,20 +308,37 @@ class BandVote():
           unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
           angtriSRT = np.asarray(angtri[srt])
           angTest = (np.abs(tripAngles - angtriSRT)) <= angTol
-          angTest2 = np.zeros(ntrip, dtype=numba.boolean)
+
           for q in range(ntrip):
-            #angTest2[q] = np.all(angTest[q,:])
-            angTest2[q] = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
-
-          wh = angTest2.nonzero()[0]
-
-
-          for q in wh:
-            f = tripID[q,:]
-            f = f[unsrtFID]
-            accumulator[f[0],i] += 1
-            accumulator[f[1],j] += 1
-            accumulator[f[2],k] += 1
+            angTest2 = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
+            if angTest2:
+              f = tripID[q,:]
+              f = f[unsrtFID]
+              accumulator[f[0],i] += 1
+              accumulator[f[1],j] += 1
+              accumulator[f[2],k] += 1
+              t1 = False
+              t2 = False
+              t3 = False
+              if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
+                accumulator[f[0],i] += 1
+                accumulator[f[1],k] += 1
+                accumulator[f[2],j] += 1
+                t1 = True
+              if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
+                accumulator[f[0],j] += 1
+                accumulator[f[1],i] += 1
+                accumulator[f[2],k] += 1
+                t2 = True
+              if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
+                accumulator[f[0],k] += 1
+                accumulator[f[1],j] += 1
+                accumulator[f[2],i] += 1
+                t3 = True
+              if (t1 and t2 and t3):
+                accumulator[f[0],k] += 1
+                accumulator[f[1],i] += 1
+                accumulator[f[2],j] += 1
 
     mxvote = np.zeros(n_bands, dtype = np.int32)
     tvotes = np.zeros(n_bands, dtype = np.int32)
@@ -418,7 +436,7 @@ class BandVote():
     A = np.zeros((3,3), dtype = np.float32)
     B = np.zeros((3,3), dtype = np.float32)
     AB = np.zeros((n2Fit, 3,3), dtype= np.float32)
-    whgood = np.zeros((n2Fit), dtype = np.int32)
+    whgood2 = np.zeros((n2Fit), dtype = np.int32)
     for i in range(nGood):
       v0 = bandnorms[whGood[i],:]
       p0 = poles[polematch[whGood[i]],:]
@@ -454,11 +472,208 @@ class BandVote():
           A[:,2] = np.cross(p0,p0p1c)
           B[2,:] = np.cross(v0,v0v1c)
           AB[counter, :,:] = A.dot(B)
-          whgood[counter] = 1
+          whgood2[counter] = 1
           #AB = np.reshape(AB, (1,3,3))
           #quats[counter,:] = rotlib.om2quL(AB)
           counter += 1
         else: # the two are parallel - throwout the result.
-          whgood[counter] = 0
+          whgood2[counter] = 0
           counter +=1
-    return AB, whgood
+    return AB, whgood2
+
+  def pairVoteOrientation(self,bandnormsIN,goNumba=True):
+    tic0 = timer()
+    nfam = self.tripLib.family.shape[0]
+    bandnorms = np.squeeze(bandnormsIN)
+    n_bands = np.int(bandnorms.size / 3)
+
+    bandangs = np.abs(bandnorms.dot(bandnorms.T))
+    bandangs = np.clip(bandangs,-1.0,1.0)
+    bandangs = np.arccos(bandangs) * RADEG
+
+    angTable = self.tripLib.completelib['angTable']
+    sztable = angTable.shape
+    whGood = -1
+    famIndx = self.tripLib.completelib['famIndex']
+    nFam = self.tripLib.completelib['nFamily']
+    poles = self.tripLib.completelib['polesCart']
+    angTableReduce = angTable[famIndx,:]
+    polesReduce = poles[famIndx,:]
+    qsym = self.tripLib.qsymops
+    tic = timer()
+
+
+    if goNumba == True:
+      solutions, nsolutions, solutionVotes, solSrt = self.pairVoteOrientationNumba(bandnorms,bandangs,qsym,angTableReduce,poles,polesReduce, self.angTol)
+    else:
+      solutions = np.empty((500, 24, 4), dtype=np.float32)
+      solutions[0,:,:] = rotlib.quat_multiply(qsym, np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32))
+      solutionVotes = np.zeros(500, dtype=np.int32)
+      nsolutions = 1
+      soltol = np.cos(5.0/RADEG/2.0)
+
+      A = np.zeros((3,3), dtype=np.float32)
+      B = np.zeros((3,3), dtype=np.float32) # used for TRIAD calculations
+
+      for i in range(n_bands):
+        for j in range(i + 1,n_bands):
+
+            angPair = bandangs[i,j]
+            if angPair > 10.0:
+              angTest = (np.abs(angTableReduce - angPair)) <= self.angTol
+              wh = angTest.nonzero()
+              if len(wh[0] > 0):
+
+                v0 = bandnorms[i,:]
+                v1 = bandnorms[j,:]
+                v0v1c = np.cross(v0,v1)
+                v0v1c /= np.linalg.norm(v0v1c)
+                B[0,:] = v0
+                B[1,:] = v0v1c
+                B[2,:] = np.cross(v0,v0v1c)
+                for k in range(len(wh[0])):
+
+                  p0 = polesReduce[wh[0][k],:]
+                  p1 = poles[wh[1][k],:]
+                  p0p1c = np.cross(p0,p1)
+                  p0p1c /= np.linalg.norm(v0v1c)
+                  A[:,0] = p0
+                  A[:,1] = p0p1c
+                  A[:,2] = np.cross(p0,p0p1c)
+                  AB = A.dot(B)
+
+                  qAB = rotlib.om2qu(AB)
+                  qABinv = rotlib.quatconj(qAB)
+                  #qABsym = rotlib.quat_multiply(qsym, qAB)
+
+                  solutionFound = False
+                  for q in range(nsolutions):
+                    #rotlib.quat_multiplyLNN(q1,q2,n,intype,p=P)
+
+                    soltest = np.max( np.abs( (rotlib.quat_multiply((solutions[q,:,:]), qABinv))[:,0] ))
+
+                    if soltest >= soltol:
+                      solutionVotes[q] += 1
+                      solutionFound = True
+                  if solutionFound == False:
+                    solutions[nsolutions, :, :] = rotlib.quat_multiply(qsym, qAB)
+                    solutionVotes[nsolutions] += 1
+                    nsolutions += 1
+
+      solSrt = np.argsort(solutionVotes)
+    #print(nsolutions, solutionVotes[solSrt[-10:]])
+    mxvote = np.max(solutionVotes)
+    #print(timer()-tic)
+    tic = timer()
+    if mxvote > 0:
+      whmxvotes = np.nonzero(solutionVotes == mxvote)
+      nmxvote = len(whmxvotes[0])
+      fit = np.zeros(nmxvote, dtype=np.float32)
+      avequat = np.zeros((nmxvote,4),dtype=np.float32)
+      nMatch = np.zeros((nmxvote),dtype=np.float32)
+      poleMatch = np.zeros((nmxvote,n_bands), dtype = np.int32)-1
+      #cm = (mxvote-solutionVotes[solSrt[-nmxvote-1]])/np.sum(solutionVotes)
+      cm = mxvote/np.sum(solutionVotes)
+      for q in range(nmxvote):
+        testbands = rotlib.quat_vector(solutions[whmxvotes[0][q], 0, : ], bandnorms)
+        fittest = (testbands.dot(poles.T)).clip(-1.0, 1.0)
+        poleMatch1 = np.argmax(fittest, axis = 1)
+        fittemp = np.arccos(np.max(fittest,axis=1)) * RADEG
+
+        whGood = np.nonzero(fittemp < self.angTol)
+        nMatch[q] = len(whGood[0])
+        poleMatch[q,whGood[0]] = poleMatch1[whGood[0]]
+
+        avequat1, fit1 = self.refine_orientation(bandnorms,whGood[0],poleMatch1)
+
+        fit[q] = fit1
+        avequat[q,:] = avequat1
+
+      keep = np.argmax(nMatch)
+      #print(timer() - tic)
+      return avequat[keep,:],fit[keep],cm,poleMatch[keep,:],nMatch[keep],(0,0)
+
+    else: # no solutions
+      fit = 1000.0
+      nMatch = -1
+      avequat = np.zeros(4,dtype=np.float32)
+      polematch = np.array([-1])
+      whGood = -1
+      print(timer() - tic)
+      return avequat,fit,-1,polematch,nMatch,(0,0)
+
+
+  @staticmethod
+  @numba.jit(nopython=True,cache=True,fastmath=True,parallel=False)
+  def pairVoteOrientationNumba(bandnorms,bandangs, qsym, angTableReduce, poles, polesReduce, angTol):
+    n_bands = bandnorms.shape[0]
+    nsym = qsym.shape[0]
+    solutions = np.empty((500,24,4),dtype=np.float32)
+    solutions[0,:,:] = rotlib.quat_multiplyL(qsym,np.array([1.0,0.0,0.0,0.0],dtype=np.float32))
+    solutionVotes = np.zeros(500,dtype=np.int32)
+    nsolutions = 1
+    soltol = np.cos(5.0 / RADEG / 2.0)
+
+    A = np.empty((3,3),dtype=np.float32)
+    B = np.empty((3,3),dtype=np.float32)  # used for TRIAD calculations
+    AB = np.empty((1,3,3), dtype=np.float32)
+    qAB = np.empty((1,4), dtype=np.float32)
+    qABinv = np.empty((1,4),dtype=np.float32)
+    soltemp = np.empty((nsym,4), dtype=np.float32)
+
+    for i in range(n_bands):
+      for j in range(i + 1,n_bands):
+
+        angPair = bandangs[i,j]
+        if angPair > 10.0:
+          angTest = (np.abs(angTableReduce - angPair)) <= angTol
+          wh = angTest.nonzero()
+          if len(wh[0] > 0):
+
+            v0 = bandnorms[i,:]
+            v1 = bandnorms[j,:]
+            v0v1c = np.cross(v0,v1)
+            v0v1c /= np.linalg.norm(v0v1c)
+            B[0,:] = v0
+            B[1,:] = v0v1c
+            B[2,:] = np.cross(v0,v0v1c)
+            for k in range(len(wh[0])):
+
+              p0 = polesReduce[wh[0][k],:]
+              p1 = poles[wh[1][k],:]
+              p0p1c = np.cross(p0,p1)
+              p0p1c /= np.linalg.norm(v0v1c)
+              A[:,0] = p0
+              A[:,1] = p0p1c
+              A[:,2] = np.cross(p0,p0p1c)
+              AB[0,:,:] = A.dot(B)
+
+              qAB = rotlib.om2quL(AB)
+              qABinv = rotlib.quatconjL(qAB)
+              #print(qABinv.shape)
+              # qABsym = rotlib.quat_multiply(qsym, qAB)
+
+              solutionFound = False
+              for q in range(nsolutions):
+                # rotlib.quat_multiplyLNN(q1,q2,n,intype,p=P)
+
+                soltemp = np.copy(solutions[q,:,:])
+                #print(soltemp.shape)
+                soltemp =  rotlib.quat_multiplyL(soltemp,qABinv)
+
+                soltest = -1.0
+                for qq in range(nsym):
+                  if soltemp[qq,0] > soltest:
+                    soltest = soltemp[qq,0]
+
+                if soltest >= soltol:
+                  solutionVotes[q] += 1
+                  solutionFound = True
+              if solutionFound == False:
+                solutions[nsolutions,:,:] = rotlib.quat_multiplyL(qsym,qAB)
+                solutionVotes[nsolutions] += 1
+                nsolutions += 1
+
+    solSrt = np.argsort(solutionVotes)
+
+    return solutions, nsolutions, solutionVotes, solSrt
