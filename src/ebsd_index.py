@@ -27,8 +27,8 @@ import traceback
 def index_pats(patsIn = None,filename=None,filenameout=None,phaselist=['FCC'], \
                vendor=None,PC = None,sampleTilt=70.0,camElev = 5.3, \
                bandDetectPlan = None,nRho=90,nTheta=180,tSigma= None,rSigma=None,rhoMaskFrac=0.1,nBands=9, \
-               patStart = 0,patEnd = -1, \
-               return_indexer_obj = False,ebsd_indexer_obj = None, clparams = [None, None, None, None]):
+               backgroundSub = False, patStart = 0,patEnd = -1, \
+               return_indexer_obj = False,ebsd_indexer_obj = None, clparams = [None, None, None, None], verbose=False):
   pats = None
   if patsIn is None:
     pdim = None
@@ -54,9 +54,11 @@ def index_pats(patsIn = None,filename=None,filenameout=None,phaselist=['FCC'], \
     if not np.all(indexer.bandDetectPlan.patDim == np.array(pdim)):
       indexer.update_file(patDim=pats.shape[-2:])
 
+  if backgroundSub == True:
+    indexer.bandDetectPlan.collect_background(fileobj = indexer.fID, patsIn = pats, nsample = 1000)
 
-
-  dataout, indxstart, indxend = indexer.index_pats(patsin=pats, patStart=patStart, patEnd=patEnd, clparams = clparams)
+  dataout, indxstart, indxend = indexer.index_pats(patsin=pats, patStart=patStart, patEnd=patEnd, \
+                                                   clparams = clparams, verbose=verbose)
 
   if return_indexer_obj == False:
     return dataout
@@ -742,7 +744,7 @@ class EBSDIndexer():
       self.bandDetectPlan.band_detect_setup(patDim=[self.fID.patternW,self.fID.patternH])
 
 
-  def index_pats(self, patsin=None, patStart = 0, patEnd = -1,clparams = [None, None, None, None, None], PC=[None, None, None]):
+  def index_pats(self, patsin=None, patStart = 0, patEnd = -1,clparams = [None, None, None, None, None], PC=[None, None, None], verbose=False):
     tic = timer()
 
     if patsin is None:
@@ -770,7 +772,7 @@ class EBSDIndexer():
 
     #print(timer() - tic)
     tic = timer()
-    bandData = self.bandDetectPlan.find_bands(pats, clparams = clparams)
+    bandData = self.bandDetectPlan.find_bands(pats, clparams = clparams, verbose=verbose)
 
     if PC[0] is None:
       PC_0 = self.PC

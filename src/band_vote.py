@@ -77,7 +77,7 @@ class BandVote():
     #print(bandRank)
     #print(tvotes, band_cm, mxvote)
     #print('vote loops: ', timer() - tic)
-    #tic = timer()
+    tic = timer()
 
     # avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam, angTol = self.angTol)
     # if nMatch == 0:
@@ -104,7 +104,7 @@ class BandVote():
         #avequat1,fit1,bandmatch1,nMatch1 = self.band_vote_refine2(bandnorms, bandRank_arg[-1-i], bandRank_arg[-1-j] ,bandFam,angTol=self.angTol)
         fit1, nMatch1, whGood1, polematch1 = self.band_index(bandnorms,bandRank_arg[-1 - i],bandRank_arg[-1 - j],bandFam,angTol=self.angTol)
         test += 1
-        if nMatch1 >= 5: #going to make the judgement that if you have matched n bands, this is highly likely to be right
+        if nMatch1 >= n_bands-1: #going to make the judgement that if you have matched n-1 bands, this is highly likely to be right
           fit = fit1
           nMatch = nMatch1
           whGood = whGood1
@@ -122,7 +122,7 @@ class BandVote():
               nMatch = nMatch1
               whGood = whGood1
               polematch = polematch1
-      if nMatch >= 5:
+      if nMatch >= n_bands-1:
         break
     #print('band index: ',timer() - tic)
     tic = timer()
@@ -201,7 +201,7 @@ class BandVote():
     n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int(2))
     whGood = np.asarray(whGood,dtype=np.int64)
     #qweight = np.zeros(n2Fit)
-    AB = self.band_vote_refine_loops2(nGood,whGood,poles,bandnorms,polematch,n2Fit)
+    AB = self.band_vote_refine_loops3(nGood,whGood,poles,bandnorms,polematch,n2Fit)
 
     #print('2nd looping: ',timer() - tic)
     tic = timer()
@@ -268,12 +268,13 @@ class BandVote():
     nGood = whGood.size
     n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int(2))
     whGood = np.asarray(whGood,dtype=np.int64)
-    AB, ABgood = self.band_vote_refine_loops2(nGood,whGood,poles,bandnorms,polematch,n2Fit)
+    AB, ABgood = self.band_vote_refine_loops3(nGood,whGood,poles,bandnorms,polematch,n2Fit)
 
-    #print(timer()-tic)
+    #print("triad", timer()-tic)
     tic = timer()
-    quats = rotlib.om2qu(AB[ABgood.nonzero()[0], :, :])
-
+    quats = rotlib.om2quL(AB[ABgood.nonzero()[0], :, :])
+    #print("om2qu", timer() - tic)
+    tic = timer()
     #sign0 = np.sum(quats[0,:] * quats, axis = 1)
     #sign = ((sign0 >= 0).astype(np.float32) - (sign0 < 0).astype(np.float32)).reshape(n2Fit,1)
     #quats *= sign
@@ -281,12 +282,13 @@ class BandVote():
     avequat = rotlib.quatave(quats)
     #avequat = rotlib.quatnorm(avequat)
 
-    test = rotlib.quat_vector(avequat,bandnorms[whGood,:])
-
+    test = rotlib.quat_vectorL(avequat,bandnorms[whGood,:])
+    #print('averaging: ',timer() - tic)
+    tic = timer()
     test = np.sum(test * poles[polematch[whGood], :], axis = 1)
     test = np.arccos(np.clip(test, -1.0, 1.0))*RADEG
     fit = np.mean(test)
-    #print('averaging: ',timer() - tic)
+    #print('fitting: ',timer() - tic)
     return avequat, fit
 
   @staticmethod
@@ -480,6 +482,77 @@ class BandVote():
           whgood2[counter] = 0
           counter +=1
     return AB, whgood2
+
+  @staticmethod
+  @numba.jit(nopython=True,cache=True,fastmath=True,parallel=False)
+  def band_vote_refine_loops3(nGood,whGood,poles,bandnorms,polematch,n2Fit):
+    # this uses the method laid out by Morawiec 2020 Eq.4
+    counter = 0
+    A = np.zeros((3,3),dtype=np.float32)
+    B = np.zeros((3,3),dtype=np.float32)
+    AB = np.zeros((n2Fit,3,3),dtype=np.float32)
+    whgood2 = np.zeros((n2Fit),dtype=np.int32)
+    for i in range(nGood):
+      v0 = bandnorms[whGood[i],:]
+      p0 = poles[polematch[whGood[i]],:]
+
+      for j in range(i + 1,nGood):
+        v1 = bandnorms[whGood[j],:]
+        p1 = poles[polematch[whGood[j]],:]
+        v0v1c = np.cross(v0,v1)
+        p0p1c = np.cross(p0,p1)
+        p0p1add = p0 + p1
+        v0v1add = v0 + v1
+        p0p1sub = p0 - p1
+        v0v1sub = v0 - v1
+
+        normPCross = numba.float32(0.0)
+        normVCross = numba.float32(0.0)
+        normPAdd = numba.float32(0.0)
+        normVAdd = numba.float32(0.0)
+        normPSub = numba.float32(0.0)
+        normVSub = numba.float32(0.0)
+
+        for ii in range(3):
+          normPCross += p0p1c[ii] * p0p1c[ii]
+          normVCross += v0v1c[ii] * v0v1c[ii]
+          normPAdd += p0p1add[ii] * p0p1add[ii]
+          normVAdd += v0v1add[ii] * v0v1add[ii]
+          normPSub += p0p1sub[ii] * p0p1sub[ii]
+          normVSub += v0v1sub[ii] * v0v1sub[ii]
+
+        normPCross = np.sqrt(normPCross) + 1.0e-35
+        normVCross = np.sqrt(normVCross) + 1.0e-35
+        normPAdd = np.sqrt(normPAdd) + 1.0e-35
+        normVAdd = np.sqrt(normVAdd) + 1.0e-35
+        normPSub = np.sqrt(normPSub) + 1.0e-35
+        normVSub = np.sqrt(normVSub) + 1.0e-35
+
+        # print(norm)
+        if normVCross > (0.087):  # these vectors are not parallel (greater than 5 degrees)
+          for ii in range(3):
+            v0v1c[ii] /= normVCross
+            p0p1c[ii] /= normPCross
+            v0v1add[ii] /= normVAdd
+            p0p1add[ii] /= normPAdd
+            v0v1sub[ii] /= normVSub
+            p0p1sub[ii] /= normPSub
+
+          A[:,0] = p0p1c
+          B[0,:] = v0v1c
+
+          A[:,1] = p0p1add
+          B[1,:] = v0v1add
+
+          A[:,2] = p0p1sub
+          B[2,:] = v0v1sub
+          AB[counter,:,:] = A.dot(B)
+          whgood2[counter] = 1
+          counter += 1
+        else:  # the two are parallel - throwout the result.
+          whgood2[counter] = 0
+          counter += 1
+    return AB,whgood2
 
   def pairVoteOrientation(self,bandnormsIN,goNumba=True):
     tic0 = timer()

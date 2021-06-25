@@ -170,6 +170,8 @@ class BandDetect():
       npats = fileobj.nPatterns
       if nsample is None:
         nsample = npats
+      if npats <= nsample:
+        nsample = npats
 
       if method.upper() == 'RANDOMSTRIDE':
         stride = np.random.choice(npats, size = nsample, replace = False )
@@ -256,10 +258,17 @@ class BandDetect():
       print('Total Band Find Time:',timer() - tic0)
       plt.clf()
       im2show = rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], nPats-1]
-      rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
 
+      rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
+      mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+      stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+
+      im2show -= mean
+      im2show /= stdv
+      im2show += 4
       im2show[0:rhoMaskTrim,:] = 0
       im2show[-rhoMaskTrim:,:] = 0
+
       plt.imshow(im2show, origin='lower', cmap='gray')
       #plt.scatter(y = bandData['aveloc'][-1,:,0], x = bandData['aveloc'][-1,:,1]+self.peakPad[1], c ='r', s=5)
       plt.scatter(y=bandData['aveloc'][-1,:,0],x=bandData['aveloc'][-1,:,1],c='r',s=5)
