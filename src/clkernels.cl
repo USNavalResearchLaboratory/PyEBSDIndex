@@ -11,7 +11,7 @@ __kernel void backSub( __global float16 *im1, __global const float *back,
   const float b1 = back[xy];
 
   const unsigned long indx = nImChunk * xy;
-  for(i = 0; i<= nImChunk; ++i){
+  for(i = 0; i< nImChunk; ++i){
     imVal =  im1[indx+i];
     imVal -= b1;   
     im1[indx+i] = imVal;
