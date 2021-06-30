@@ -265,7 +265,7 @@ class BandDetect():
 
       im2show -= mean
       im2show /= stdv
-      im2show += 4
+      im2show += 7
       im2show[0:rhoMaskTrim,:] = 0
       im2show[-rhoMaskTrim:,:] = 0
 
@@ -379,10 +379,10 @@ class BandDetect():
     nnx = np.array([-2,-1,0,1,2,-2,-1,0,1,2,-2,-1,0,1,2],dtype=np.float32)
     nny = np.array([-1,-1,-1,-1,-1,0,0,0,0,0,1,1,1,1,1],dtype=np.float32)
 
-    for q in range(nPats):
-      rdnConv_q = rdnConv[:,:,q]
-      rdnPad_q = rdnPad[:,:,q]
-      lMaxRdn_q = lMaxRdn[:,:,q]
+    for q in numba.prange(nPats):
+      rdnConv_q = np.copy(rdnConv[:,:,q])
+      rdnPad_q = np.copy(rdnPad[:,:,q])
+      lMaxRdn_q = np.copy(lMaxRdn[:,:,q])
       #peakLoc = np.nonzero((lMaxRdn_q == rdnPad_q) & (rdnPad_q > 1.0e-6))
       peakLoc = np.nonzero(lMaxRdn_q)
       indx1D = peakLoc[1] + peakLoc[0] * shp[1]
