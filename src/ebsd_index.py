@@ -709,9 +709,13 @@ class EBSDIndexer():
         self.vendor = vendor
 
     if PC is None:
-      self.PC = np.array([0.471659,0.675044,0.630139])
+      self.PC = np.array([0.471659,0.675044,0.630139]) # a default value
     else:
       self.PC = np.asarray(PC)
+
+    self.PCcorrectMethod = None
+    self.PCcorrectParam = None
+
     self.sampleTilt = sampleTilt
     self.camElev = camElev
 
@@ -839,6 +843,11 @@ class EBSDIndexer():
         quatref2detect = rotlib.quat_multiply(q1,q0)
 
       return quatref2detect
+
+  def pcCorrect(self,xy=[0.0, 0.0]): # at somepoint we will put some methods here for correcting the PC
+    # depending on the location within the scan.  Need to correct band_detect.radon2pole to accept mulitple
+    # PC for each point
+    pass
 
 
 
