@@ -6,7 +6,7 @@ if ray.__version__ < '1.1.0': # this fixes an issue when runnning locally on a V
 else:
   ray._private.services.get_node_ip_address = lambda: '127.0.0.1'
 from pathlib import Path
-from os import path
+from os import path, environ
 import sys
 import multiprocessing
 import queue
@@ -76,13 +76,19 @@ class IndexerRay():
     #self.rate = None
     self.openCLParams = [None, None, None, None, None]
     try:
-      self.openCLParams[0] = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-      self.openCLParams[1] = cl.Context(devices = {self.openCLParams[0][0]})
-      self.openCLParams[2] = None
-      kernel_location = path.dirname(__file__)
-      self.openCLParams[3] = cl.Program(self.openCLParams[1] ,
-                                        open(path.join(kernel_location,'clkernels.cl')).read()).build()
-      self.openCLParams[4] = cl.mem_flags
+      if sys.platform != 'darwin': # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a
+        # cl.contex thus, we make a context for each process.
+        self.openCLParams[0] = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
+        self.openCLParams[1] = cl.Context(devices = {self.openCLParams[0][0]})
+        self.openCLParams[2] = None
+        kernel_location = path.dirname(__file__)
+        self.openCLParams[3] = cl.Program(self.openCLParams[1] ,
+                                  open(path.join(kernel_location,'clkernels.cl')).read()).build()
+
+        self.openCLParams[4] = cl.mem_flags
+      else: #MacOS handles GPU memory conflicts much better when the context is destroyed between each
+        # run, and has very low overhead for making the context. 
+        pass
     except:
       self.openCLParams[0] = None
       self.openCLParams[1] = None
@@ -199,7 +205,7 @@ def index_chunk_MP2(pats = None, queues = None,lock=None, id = None):
 def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phaselist=['FCC'], \
                vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
                peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9,
-               patStart = 0, patEnd = -1, chunksize = 1000, ncpu=-1,
+               patStart = 0, patEnd = -1, chunksize = 256, ncpu=-1,
                return_indexer_obj = False, ebsd_indexer_obj = None, keep_log = False):
 
 
@@ -317,10 +323,6 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       jobs_indx.append(job_pstart_end[:])
 
 
-
-    #workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
-    #nsubmit += n_cpu_nodes
-
     while ndone < njobs:
       toc = timer()
       wrker,busy = ray.wait(jobs,num_returns=1,timeout=None)
@@ -340,14 +342,15 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
         dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
         npatsdone += rate[1]
         ratetemp = len(workers) * (rate[1]) / (timer() - ticp)
-        rateave += ratetemp
+        #rateave += ratetemp
+        rateave = npatsdone / (timer() - tic0)
         # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
         ndone += 1
         toc0 = timer() - tic0
         if keep_log is False:
           print('                                                                                             ',end='\r')
           time.sleep(0.0001)
-        print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',"{:.0f}".format(ratetemp)+';'+"{:.0f}".format(rateave / ndone),
+        print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',"{:.0f}".format(ratetemp)+';'+"{:.0f}".format(rateave),
               '  ',"{:.0f}".format((ndone / njobs) * 100) + '%',
               "{:.0f};".format(toc0) + "{:.0f}".format((njobs - ndone) / ndone * toc0) + ' running;remaining(s)',
               end=newline)
@@ -418,7 +421,8 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
         dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
         npatsdone += rate[1]
         ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
-        rateave += ratetemp
+        #rateave += ratetemp
+        rateave = npatsdone/(timer()-tic0)
         # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
         ndone += 1
         toc0 = timer() - tic0
@@ -426,7 +430,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
           print('                                                                                             ',end='\r')
           time.sleep(0.0001)
         print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',
-              "{:.0f}".format(ratetemp) + ';' + "{:.0f}".format(rateave / ndone),
+              "{:.0f}".format(ratetemp) + ';' + "{:.0f}".format(rateave),
               '  ',"{:.0f}".format((ndone / njobs) * 100) + '%',
               "{:.0f};".format(toc0) + "{:.0f}".format((njobs - ndone) / ndone * toc0) + ' running;remaining(s)',
               end=newline)

@@ -225,7 +225,7 @@ class Radon():
     # is a exact multiple of the max group size (typically 256)
     mxGroupSz = gpu[0].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
     nImCL += np.int(16 * (1 - np.int(np.mod(nImCL, mxGroupSz ) > 0)))
-    image_align = np.zeros((shapeIm[1], shapeIm[2], nImCL), dtype = np.float32)
+    image_align = np.ones((shapeIm[1], shapeIm[2], nImCL), dtype = np.float32)
     image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()
     shpRdn = np.asarray( ((self.nRho+2*padding[0]), (self.nTheta+2*padding[1]), nImCL),dtype=np.uint64)
     radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=int((self.nRho+2*padding[0])*(self.nTheta+2*padding[1])*nImCL*4))
@@ -262,8 +262,7 @@ class Radon():
                        shpRdn[0],shpRdn[1],padTheta)
 
 
-    rdnIndx_gpu.release()
-    image_gpu.release()
+
 
     if returnBuff == False:
       radon = np.zeros([self.nRho + 2 * padding[0],self.nTheta + 2 * padding[1],nImCL],dtype=np.float32)
@@ -275,6 +274,9 @@ class Radon():
     else:
       radon = None
       clparams = [gpu,ctx,queue,prg,mf]
+
+    rdnIndx_gpu.release()
+    image_gpu.release()
 
     return radon, clparams, radon_gpu
 

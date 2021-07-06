@@ -7,6 +7,7 @@ import radon_fast
 from timeit import default_timer as timer
 import matplotlib.pyplot as plt
 import pyopencl as cl
+
 #from os import environ
 #environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
@@ -230,6 +231,8 @@ class BandDetect():
     lmaxtime =  timer()-tic1
     tic1 = timer()
     # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
+    if isinstance(clparams[2],cl.CommandQueue):
+      clparams[2].finish()
     clparams[2] = None
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
 
@@ -427,6 +430,7 @@ class BandDetect():
                                                                      returnBuff = self.CLOps[1], clparams = clparams)
       except Exception as e:
         print(e)
+        clparams[2] = None
         rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True, background = self.backgroundsub)
 
     return rdnNorm, clparams, rdnNorm_gpu
@@ -450,6 +454,7 @@ class BandDetect():
           radonTry = np.zeros(shp, dtype=np.float32)
           cl.enqueue_copy(clparams[2],radonTry,radonIn_gpu,is_blocking=True)
         else:
+          clparams[2] = None
           radonTry = radonIn
         return self.rdn_conv(radonTry, use_gpu=False)
     else: # perform on the CPU
@@ -502,6 +507,7 @@ class BandDetect():
           radonTry = np.zeros(shp, dtype=np.float32)
           cl.enqueue_copy(clparams[2],radonTry,rdn_gpu,is_blocking=True)
         else:
+          clparams[2] = None
           radonTry = rdn
         return self.rdn_local_max(radonTry, use_gpu=False)
     else: # perform on the CPU
@@ -778,8 +784,9 @@ class BandDetect():
                  np.uint64(shp[1]),np.uint64(shp[0]),
                  np.uint64(self.padding[1]),np.uint64(self.padding[0]))
 
-
+    queue.flush()
     cl.enqueue_copy(queue,out,out_gpu,is_blocking=True)
+    queue.flush()
     rdn_gpu.release()
     lmaxX.release()
     lmaxXY.release()
