@@ -24,17 +24,18 @@ class BandVote():
 
 
 
-  def tripvote(self, bandnormsIN, goNumba = True):
+  def tripvote(self, bandnormsIN, goNumba = True, verbose=0):
     tic0 = timer()
     nfam = self.tripLib.family.shape[0]
     bandnorms = np.squeeze(bandnormsIN)
     n_bands = np.int(bandnorms.size/3)
 
+    tic = timer()
     bandangs = np.abs(bandnorms.dot(bandnorms.T))
     bandangs = np.clip(bandangs, -1.0, 1.0)
     bandangs  = np.arccos(bandangs)*RADEG
 
-    tic = timer()
+
     if goNumba == True:
       accumulator, bandFam, bandRank, band_cm = self.tripvote_numba(bandangs, self.LUT, self.angTol, self.tripLib.tripAngles, self.tripLib.tripID, nfam, n_bands)
     else:
@@ -63,6 +64,7 @@ class BandVote():
       band_cm = np.zeros(n_bands)
 
 
+
       for i in range(n_bands):
         if tvotes[i] < 1:
           band_cm[i] = 0.0
@@ -77,6 +79,8 @@ class BandVote():
     #print(bandRank)
     #print(tvotes, band_cm, mxvote)
     #print('vote loops: ', timer() - tic)
+    if verbose > 1:
+      print('band Vote time:',timer() - tic)
     tic = timer()
 
     # avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam, angTol = self.angTol)
@@ -91,7 +95,7 @@ class BandVote():
     #       break
     #print('refinement: ', timer() - tic)
     #print('tripvote: ',timer() - tic0)
-    tic = timer()
+
     bandRank_arg = np.argsort(bandRank)
     test  = 0
     fit = 1000.0
@@ -124,7 +128,8 @@ class BandVote():
               polematch = polematch1
       if nMatch >= n_bands-1:
         break
-    #print('band index: ',timer() - tic)
+    if verbose > 1:
+      print('band index: ',timer() - tic)
     tic = timer()
     cm = 0.0
     cm2 = 0.0
@@ -136,8 +141,9 @@ class BandVote():
       cm2 = np.sum(accumulator[[whfam], [whmatch]]).astype(np.float32)
       cm2 /= np.sum(accumulator.clip(1))
 
-    #print('refinement: ', timer() - tic)
-    #print('all: ',timer() - tic0)
+    if verbose > 1:
+      print('refinement: ', timer() - tic)
+      print('all: ',timer() - tic0)
     return avequat, fit, cm2, polematch, nMatch, (i,j)
 
   def band_vote_refine(self,bandnorms,bandRank,familyLabel,angTol=3.0):

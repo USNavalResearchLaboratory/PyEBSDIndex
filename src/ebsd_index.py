@@ -28,7 +28,7 @@ def index_pats(patsIn = None,filename=None,filenameout=None,phaselist=['FCC'], \
                vendor=None,PC = None,sampleTilt=70.0,camElev = 5.3, \
                bandDetectPlan = None,nRho=90,nTheta=180,tSigma= None,rSigma=None,rhoMaskFrac=0.1,nBands=9, \
                backgroundSub = False, patStart = 0,patEnd = -1, \
-               return_indexer_obj = False,ebsd_indexer_obj = None, clparams = [None, None, None, None], verbose=False):
+               return_indexer_obj = False,ebsd_indexer_obj = None, clparams = [None, None, None, None], verbose=0):
   pats = None
   if patsIn is None:
     pdim = None
@@ -311,7 +311,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
     jobs = []
     timers = []
     jobs_indx = []
-    rateave = 0.0
+    #rateave = 0.0
     for i in range(n_cpu_nodes):
       job_pstart_end = p_indx_start_end.pop(0)
       workers.append(IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote())
@@ -324,10 +324,10 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
 
 
     while ndone < njobs:
-      toc = timer()
+      #toc = timer()
       wrker,busy = ray.wait(jobs,num_returns=1,timeout=None)
 
-      # print("waittime: ",timer() - toc)
+      #print("waittime: ",timer() - toc)
       jid = jobs.index(wrker[0])
       try:
         wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
@@ -336,20 +336,22 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
         indxstr = jobs_indx[jid][0]
         indxend = jobs_indx[jid][1]
         rate = [-1, -1]
-      if rate[0] >= 0:
+      if rate[0] >= 0: # job finished as expected
 
         ticp = timers[jid]
         dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
         npatsdone += rate[1]
+        ndone += 1
+
         ratetemp = len(workers) * (rate[1]) / (timer() - ticp)
         #rateave += ratetemp
         rateave = npatsdone / (timer() - tic0)
         # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
-        ndone += 1
+
         toc0 = timer() - tic0
         if keep_log is False:
           print('                                                                                             ',end='\r')
-          time.sleep(0.0001)
+          time.sleep(0.00001)
         print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',"{:.0f}".format(ratetemp)+';'+"{:.0f}".format(rateave),
               '  ',"{:.0f}".format((ndone / njobs) * 100) + '%',
               "{:.0f};".format(toc0) + "{:.0f}".format((njobs - ndone) / ndone * toc0) + ' running;remaining(s)',
@@ -752,7 +754,7 @@ class EBSDIndexer():
       self.bandDetectPlan.band_detect_setup(patDim=[self.fID.patternW,self.fID.patternH])
 
 
-  def index_pats(self, patsin=None, patStart = 0, patEnd = -1,clparams = [None, None, None, None, None], PC=[None, None, None], verbose=False):
+  def index_pats(self, patsin=None, patStart = 0, patEnd = -1,clparams = [None, None, None, None, None], PC=[None, None, None], verbose=0):
     tic = timer()
 
     if patsin is None:
@@ -823,6 +825,8 @@ class EBSDIndexer():
            indxData['matchattempts'][j,i] = matchAttempts
          if nMatch >= 9:
            break
+
+
     qref2detect = self.refframe2detector()
     q = q.reshape(nPhases * npoints,4)
     q = rotlib.quat_multiply(q,qref2detect)
@@ -836,7 +840,8 @@ class EBSDIndexer():
     else:
         indxData[-1,:] = indxData[0,:]
 
-    #print('bandvote: ',timer() - tic)
+    if verbose > 0:
+      print('Band Vote Time: ',timer() - tic)
     return indxData, patStart, patEnd
 
   def refframe2detector(self):

@@ -193,7 +193,7 @@ class BandDetect():
       back -= np.mean(back)
     self.backgroundsub = back
 
-  def find_bands(self, patternsIn, faster=False, verbose=False, clparams = [None, None, None, None, None]):
+  def find_bands(self, patternsIn, faster=False, verbose=0, clparams = [None, None, None, None, None]):
     tic0 = timer()
     tic = timer()
     ndim = patternsIn.ndim
@@ -253,12 +253,13 @@ class BandDetect():
     blabeltime = timer() - tic1
 
 
-    if verbose == True:
+    if verbose > 0:
       print('Radon Time:',rdntime)
       print('Convolution Time:', convtime)
       print('Peak ID Time:', lmaxtime)
       print('Band Label Time:', blabeltime)
       print('Total Band Find Time:',timer() - tic0)
+    if verbose > 1:
       plt.clf()
       im2show = rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], nPats-1]
 
@@ -380,10 +381,9 @@ class BandDetect():
   def band_label(nBands, nPats, nRho, nTheta, rdnConv, rdnPad,  lMaxRdn ):
     nB = np.int(nBands)
     nP = np.int(nPats)
-    nR = np.int(nRho)
-    nT = np.int(nTheta)
+
     shp  = rdnPad.shape
-    #print(shp)
+
     bandData_max = np.zeros((nP,nB), dtype = np.float32) - 2.0e6 # max of the convolved peak value
     bandData_avemax = np.zeros((nP,nB), dtype = np.float32) - 2.0e6 # mean of the nearest neighborhood values around the max
     bandData_maxloc = np.zeros((nP,nB,2), dtype = np.float32) # location of the max within the radon transform
@@ -393,22 +393,23 @@ class BandDetect():
     nnr = np.array([-1,-1,-1,-1,-1, 0, 0,0,0,0, 1, 1,1,1,1],dtype=np.float32)
     nnN = numba.float32(15)
 
-    for q in numba.prange(nPats):
-      rdnConv_q = np.copy(rdnConv[:,:,q])
-      rdnPad_q = np.copy(rdnPad[:,:,q])
-      lMaxRdn_q = np.copy(lMaxRdn[:,:,q])
+    for q in range(nPats):
+      #rdnConv_q = np.copy(rdnConv[:,:,q])
+      #rdnPad_q = np.copy(rdnPad[:,:,q])
+      #lMaxRdn_q = np.copy(lMaxRdn[:,:,q])
       #peakLoc = np.nonzero((lMaxRdn_q == rdnPad_q) & (rdnPad_q > 1.0e-6))
-      peakLoc = np.nonzero(lMaxRdn_q)
+      peakLoc = lMaxRdn[:,:,q].nonzero()
       indx1D = peakLoc[1] + peakLoc[0] * shp[1]
-      temp = (rdnConv_q.ravel())[indx1D]
+      temp = (rdnConv[:,:,q].ravel())[indx1D]
       srt = np.argsort(temp)
       nBq = nB if (len(srt) > nB) else len(srt)
       for i in range(nBq):
         r = np.int32(peakLoc[0][srt[-1 - i]])
         c = np.int32(peakLoc[1][srt[-1 - i]])
         bandData_maxloc[q,i,:] = np.array([r,c])
-        bandData_max[q,i] = rdnPad_q[r,c]
-        nn = rdnPad_q[r - 1:r + 2,c - 2:c + 3].ravel()
+        bandData_max[q,i] = rdnPad[r,c, q]
+        #nn = rdnPad_q[r - 1:r + 2,c - 2:c + 3].ravel()
+        nn = rdnPad[r - 1:r + 2,c - 2:c + 3, q].ravel()
         sumnn = (np.sum(nn) + 1.e-12)
         nn /= sumnn
         bandData_avemax[q,i] = sumnn/nnN
