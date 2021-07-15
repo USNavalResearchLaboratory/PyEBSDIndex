@@ -284,6 +284,130 @@ __kernel void im1EQim2( __global const float *im1, __global const float *im2, __
   
 }
 
+//this is a dirty little sort for getting the max locations ordered.  Will order accending.  
+// Keeping only the top nmax points.  Need to have maxval1d primed so that maxval1d[nmax] is larger 
+// than anything that will occur on its own.  
+void dirtsort( __private float *maxval1d, __private long int *maxloc1d,
+                long int newloc, float newmax, unsigned long nmax);
+
+void dirtsort( __private float *maxval1d, __private long int *maxloc1d,
+                long int newloc, float newmax, unsigned long nmax){
+
+  unsigned long int i;
+  if (newmax < maxval1d[0]){
+    return;
+  }
+
+  for (i=1; i<=nmax; ++i){
+    if (newmax > maxval1d[i]){
+      maxval1d[i-1] = maxval1d[i];
+      maxloc1d[i-1] = maxloc1d[i];
+    }
+    else{
+      maxval1d[i-1]  = newmax;
+      maxloc1d[i-1]  = newloc;
+      break;
+    }
+  }
+  return;
+}
+
+
+// Is image1 (can be a stack of images)
+__kernel void maxlabel( __global const uchar *maxlocin,__global const float *maxvalin,
+                        __global float2 *maxloc,__global float *maxval,
+                        __global float2 *aveloc,__global float *aveval,
+                        const long imszx, const long imszy, 
+                        const long padx, const long pady, const long nmax)
+{
+  // IDs of work-item represent x and y coordinates in image
+  //const unsigned long x = get_global_id(0) + padx;
+  //const unsigned long y = get_global_id(1) + pady;
+  const unsigned long int z = get_global_id(0);
+  const unsigned long int nImChunk = get_global_size(0);
+  uchar imVal1;
+  float imVal2; 
+  const long lnmax = (long) nmax; 
+  long int indy, indxy,i, j,k;
+  long int maxloc1d[21] = {0};
+  float maxval1d[21] = {-1e12f};
+  long int x,y;
+  float  avetempweight;
+  float2  avetempxy;
+
+
+  // first find all the local max points identified and sort them
+  maxval1d[lnmax] = 1.0e12f; // prime the pump for sorting 
+  for(j = pady; j< imszy - pady; ++j){
+    indy = j*imszx;
+    for(i = padx; i< imszx - padx; ++i){
+        indxy = indy+i;
+
+        imVal1 = maxlocin[(indxy)*nImChunk+z];
+        if (imVal1 == 0){
+          continue;
+        }
+        else{
+          imVal2 = maxvalin[(indxy)*nImChunk+z];
+          
+          dirtsort(maxval1d, maxloc1d, indxy, imVal2, lnmax);
+        }
+        
+      
+    }   
+  }
+
+  // now place them in the output arrays
+  for (i=0; i< lnmax; ++i){
+    if (maxval[lnmax-i-1] > -2.0e6){
+      maxval[z*lnmax + i] = maxval1d[lnmax-i-1];
+      indxy = maxloc1d[lnmax-i-1];
+      x =  ( indxy % imszx );
+      y =  (indxy / imszx );
+      maxloc[z*lnmax + i] = (float2) (y,x);
+      //maxloc[(z*lnmax + i)+1] = (float) y;
+      avetempxy = (float2) (0.0);
+      avetempweight = 1.0e-12;
+      // really basic 9-neighbor peak interpolation
+      for (k=-1; k<=1;++k){
+        indy = (y+k)*imszx;
+        for (j=-1; j<=1;++j){
+          indxy = indy+(x+j);
+          imVal2 = maxvalin[(indxy)*nImChunk+z];
+          avetempxy += ((float2) (y+k, x+j))*imVal2;
+          //avetempx += (x+j)*imVal2;
+          avetempweight += imVal2;
+        }
+      }
+      avetempxy /= avetempweight;
+      //avetempy /= avetempweight;
+      //aveloc[z*nmax + i] = (float2) (avetempx,avetempy);
+      aveloc[z*lnmax + i] = avetempxy;
+      aveval[z*lnmax + i] = avetempweight/9.0;
+
+    }
+    else{
+      break; // no more detected peaks
+    }
+
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// These never quite worked.  Not the biggest time penalty anyway. 
+
 void morphDilateKernel(const unsigned long winsz, const unsigned long winsz2,
                       __local float16 *s,  __local float16 *r,  __local float16 *w);
 

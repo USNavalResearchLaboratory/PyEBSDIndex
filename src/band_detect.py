@@ -17,7 +17,7 @@ RADEG = 180.0/np.pi
 
 class BandDetect():
   def __init__(self, patterns=None, patDim = None, nTheta = 180, nRho=90,\
-      tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9, clOps = [True, True, True]):
+      tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9, clOps = [True, True, True, True]):
     self.patDim = None
     self.nTheta = nTheta
     self.nRho = nRho
@@ -41,7 +41,7 @@ class BandDetect():
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
                     ('pqmax', np.float32)])
 
-    self.CLOps = [False, False, False]
+    self.CLOps = [False, False, False, False]
     if clOps is not None:
       self.CLOps =  clOps
 
@@ -227,38 +227,34 @@ class BandDetect():
       clparams = [None,None,None,None,None]
     convtime = timer()-tic1
     tic1 = timer()
-    lMaxRdn = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu, use_gpu=self.CLOps[2])
+    lMaxRdn, lMaxRdn_gpu = self.rdn_local_max(rdnConv, clparams, rdnConv_gpu, use_gpu=self.CLOps[2])
     lmaxtime =  timer()-tic1
     tic1 = timer()
+
+
+    bandData, rdnConv = self.band_label(nPats, rdnConv, rdnNorm, lMaxRdn,
+                                        rdnConv_gpu,rdnConv_gpu,lMaxRdn_gpu,
+                                        use_gpu = self.CLOps[3], clparams=clparams )
+
     # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
     if isinstance(clparams[2],cl.CommandQueue):
       clparams[2].finish()
     clparams[2] = None
-    bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
 
-    if self.EDAXIQ == True:
-      bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnConv,rdnNorm,lMaxRdn)
-    else:
-      bdat = self.band_label(np.int(self.nBands),np.int(nPats),np.int(self.nRho),np.int(self.nTheta),rdnConv,rdnConv,lMaxRdn)
-    bandData['max'] = bdat[0]
-    bandData['avemax'] = bdat[1]
-    bandData['maxloc'] = bdat[2]
-    bandData['aveloc'] = bdat[3]
-    bandData['maxloc'] -= self.padding.reshape(1,1,2)
-    bandData['aveloc'] -= self.padding.reshape(1, 1, 2)
+
     # for j in range(nPats):
     #   bandData['pqmax'][j,:] = \
     #     rdnNorm[(bandData['aveloc'][j,:,0]).astype(int),(bandData['aveloc'][j,:,1]).astype(int), j]
 
     blabeltime = timer() - tic1
-
+    tottime = timer() - tic0
 
     if verbose > 0:
       print('Radon Time:',rdntime)
       print('Convolution Time:', convtime)
       print('Peak ID Time:', lmaxtime)
       print('Band Label Time:', blabeltime)
-      print('Total Band Find Time:',timer() - tic0)
+      print('Total Band Find Time:',tottime)
     if verbose > 1:
       plt.clf()
       im2show = rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], nPats-1]
@@ -376,49 +372,7 @@ class BandDetect():
     n = n.reshape(nPats, nBands, 3)
     return n
 
-  @staticmethod
-  @numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
-  def band_label(nBands, nPats, nRho, nTheta, rdnConv, rdnPad,  lMaxRdn ):
-    nB = np.int(nBands)
-    nP = np.int(nPats)
 
-    shp  = rdnPad.shape
-
-    bandData_max = np.zeros((nP,nB), dtype = np.float32) - 2.0e6 # max of the convolved peak value
-    bandData_avemax = np.zeros((nP,nB), dtype = np.float32) - 2.0e6 # mean of the nearest neighborhood values around the max
-    bandData_maxloc = np.zeros((nP,nB,2), dtype = np.float32) # location of the max within the radon transform
-    bandData_aveloc = np.zeros((nP,nB,2), dtype = np.float32) # location of the max based on the nearest neighbor interpolation
-
-    nnc = np.array([-2,-1, 0, 1, 2,-2,-1,0,1,2,-2,-1,0,1,2],dtype=np.float32)
-    nnr = np.array([-1,-1,-1,-1,-1, 0, 0,0,0,0, 1, 1,1,1,1],dtype=np.float32)
-    nnN = numba.float32(15)
-
-    for q in range(nPats):
-      #rdnConv_q = np.copy(rdnConv[:,:,q])
-      #rdnPad_q = np.copy(rdnPad[:,:,q])
-      #lMaxRdn_q = np.copy(lMaxRdn[:,:,q])
-      #peakLoc = np.nonzero((lMaxRdn_q == rdnPad_q) & (rdnPad_q > 1.0e-6))
-      peakLoc = lMaxRdn[:,:,q].nonzero()
-      indx1D = peakLoc[1] + peakLoc[0] * shp[1]
-      temp = (rdnConv[:,:,q].ravel())[indx1D]
-      srt = np.argsort(temp)
-      nBq = nB if (len(srt) > nB) else len(srt)
-      for i in range(nBq):
-        r = np.int32(peakLoc[0][srt[-1 - i]])
-        c = np.int32(peakLoc[1][srt[-1 - i]])
-        bandData_maxloc[q,i,:] = np.array([r,c])
-        bandData_max[q,i] = rdnPad[r,c, q]
-        #nn = rdnPad_q[r - 1:r + 2,c - 2:c + 3].ravel()
-        nn = rdnPad[r - 1:r + 2,c - 2:c + 3, q].ravel()
-        sumnn = (np.sum(nn) + 1.e-12)
-        nn /= sumnn
-        bandData_avemax[q,i] = sumnn/nnN
-        rnn = np.sum(nn*(np.float32(r) + nnr))
-        cnn = np.sum(nn*(np.float32(c) + nnc))
-
-        bandData_aveloc[q,i,:] = np.array([rnn,cnn])
-
-    return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc
 
   def calc_rdn(self, patterns, clparams = [None, None, None, None], use_gpu=False):
     rdnNorm_gpu = None
@@ -495,7 +449,7 @@ class BandDetect():
 
     if use_gpu == True: # perform this operation on the GPU
       try:
-        return self.rdn_local_maxCL(rdn, clparams, radonIn_gpu = rdn_gpu)
+        return self.rdn_local_maxCL(rdn, clparams, radonIn_gpu = rdn_gpu, returnBuff=self.CLOps[3])
       except Exception as e:
         print(e)
         if isinstance(rdn_gpu, cl.Buffer):
@@ -531,7 +485,7 @@ class BandDetect():
 
 
       #print("Traditional:",timer() - tic)
-      return lMaxRdn
+      return lMaxRdn, None
 
   def rdn_convCL2(self, radonIn, clparams=[None, None, None, None, None], radonIn_gpu = None, separableKernel=True, returnBuff = False):
     # this will run (eventually sequential) convolutions and identify the peaks in the convolution
@@ -675,7 +629,7 @@ class BandDetect():
 
     return resultConv, clparams, rdnConv_gpu
 
-  def rdn_local_maxCL(self,radonIn,clparams=[None,None,None,None,None],radonIn_gpu=None,):
+  def rdn_local_maxCL(self,radonIn,clparams=[None,None,None,None,None],radonIn_gpu=None,  returnBuff = False):
     # this will run a morphological max kernel over the convolved radon array
     # the local max identifies the location of the peak max within
     # the window size.
@@ -702,7 +656,8 @@ class BandDetect():
         kernel_location = path.dirname(__file__)
         prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
         mf = cl.mem_flags
-      except: # fall back to CPU
+      except Exception as e: # fall back to CPU
+        print(e)
         return self.rdn_local_max(radonIn, clparams=[None, None, None, None, None], rdn_gpu=None)
 
     clparams = [gpu,ctx,queue,prg,mf]
@@ -786,19 +741,242 @@ class BandDetect():
                  np.uint64(self.padding[1]),np.uint64(self.padding[0]))
 
     queue.flush()
-    cl.enqueue_copy(queue,out,out_gpu,is_blocking=True)
-    queue.flush()
-    rdn_gpu.release()
-    lmaxX.release()
-    lmaxXY.release()
-    out_gpu.release()
-    rhoMaskTrim = np.int32((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
-    out[0:rhoMaskTrim,:, :] = 0
-    out[-rhoMaskTrim:,:,:] = 0
-    out[:,0:self.padding[1],:] = 0
-    out[:,-self.padding[1]:,:] = 0
 
-    return out
+
+    if returnBuff == False:
+      cl.enqueue_copy(queue,out,out_gpu,is_blocking=True)
+      queue.flush()
+      rdn_gpu.release()
+      lmaxX.release()
+      lmaxXY.release()
+      out_gpu.release()
+      out_gpu = None
+      rhoMaskTrim = np.int32((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
+      out[0:rhoMaskTrim,:, :] = 0
+      out[-rhoMaskTrim:,:,:] = 0
+      out[:,0:self.padding[1],:] = 0
+      out[:,-self.padding[1]:,:] = 0
+    else:
+      out = None
+    return out, out_gpu
+
+  def band_label(self,nPats,rdnConvIn,rdnNormIn,lMaxRdnIn,
+                 rdnConvIn_gpu,rdnNormIn_gpu,lMaxRdnIn_gpu,
+                 use_gpu = False, clparams=[None,None,None,None,None] ):
+    bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
+
+    if use_gpu == True:
+      try:
+        if isinstance(rdnConvIn_gpu, cl.Buffer):
+          rdnConv = rdnConvIn_gpu
+        else:
+          rdnConv = rdnConvIn
+
+        if isinstance(lMaxRdnIn_gpu, cl.Buffer):
+          lMaxRdn = lMaxRdnIn_gpu
+        else:
+          lMaxRdn = lMaxRdnIn
+
+        bdat, rdnConv_out = self.band_labelCL(rdnConv, rdnConv, lMaxRdn, clparams=clparams )
+      except Exception as e:
+
+        if isinstance(rdnConvIn, cl.Buffer):
+          nT = self.nTheta
+          nTp = nT + 2 * self.padding[1]
+          nR = self.nRho
+          nRp = nR + 2 * self.padding[0]
+          nImCL = np.int(rdnConvIn.size / (nTp * nRp * 4))
+          shp = (nRp,nTp,nImCL)
+          rdnConv = np.zeros(shp,dtype=np.float32)
+          cl.enqueue_copy(clparams[2],rdnConv,rdnConvIn,is_blocking=True)
+        else:
+          rdnConv = rdnConvIn
+
+        if isinstance(lMaxRdnIn, cl.Buffer):
+          nT = self.nTheta
+          nTp = nT + 2 * self.padding[1]
+          nR = self.nRho
+          nRp = nR + 2 * self.padding[0]
+
+          nImCL = np.int(lMaxRdnIn.size / (nTp * nRp))
+          shp = (nRp,nTp,nImCL)
+          lMaxRdn = np.zeros(shp,dtype=np.uchar)
+          cl.enqueue_copy(clparams[2],lMaxRdn,lMaxRdnIn,is_blocking=True)
+        else:
+          lMaxRdn = lMaxRdnIn
+
+        bdat = self.band_label_numba(np.int(self.nBands),np.int(nPats),np.int(self.nRho),
+                                     np.int(self.nTheta),rdnConv,rdnConv,lMaxRdn)
+        rdnConv_out = rdnConv
+    else:
+
+      if self.EDAXIQ == True:
+        bdat = self.band_label_numba(np.int(self.nBands),np.int(nPats),np.int(self.nRho),
+                             np.int(self.nTheta),rdnConvIn,rdnNormIn,lMaxRdnIn)
+      else:
+        bdat = self.band_label_numba(np.int(self.nBands),np.int(nPats),np.int(self.nRho),
+                                   np.int(self.nTheta),rdnConvIn,rdnConvIn, lMaxRdnIn)
+      rdnConv_out = rdnConvIn
+
+    bandData['max'] = bdat[0][0:nPats,:]
+    bandData['avemax'] = bdat[1][0:nPats,:]
+    bandData['maxloc'] = bdat[2][0:nPats, :, :]
+    bandData['aveloc'] = bdat[3][0:nPats, :, :]
+    bandData['maxloc'] -= self.padding.reshape(1,1,2)
+    bandData['aveloc'] -= self.padding.reshape(1,1,2)
+
+    return bandData, rdnConv_out
+
+  @staticmethod
+  @numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
+  def band_label_numba(nBands,nPats,nRho,nTheta,rdnConv,rdnPad,lMaxRdn):
+    nB = np.int(nBands)
+    nP = np.int(nPats)
+
+    shp = rdnPad.shape
+
+    bandData_max = np.zeros((nP,nB),dtype=np.float32) - 2.0e6  # max of the convolved peak value
+    bandData_avemax = np.zeros((nP,nB),
+                               dtype=np.float32) - 2.0e6  # mean of the nearest neighborhood values around the max
+    bandData_maxloc = np.zeros((nP,nB,2),dtype=np.float32)  # location of the max within the radon transform
+    bandData_aveloc = np.zeros((nP,nB,2),
+                               dtype=np.float32)  # location of the max based on the nearest neighbor interpolation
+
+    nnc = np.array([-2,-1,0,1,2,-2,-1,0,1,2,-2,-1,0,1,2],dtype=np.float32)
+    nnr = np.array([-1,-1,-1,-1,-1,0,0,0,0,0,1,1,1,1,1],dtype=np.float32)
+    nnN = numba.float32(15)
+
+    for q in range(nPats):
+      # rdnConv_q = np.copy(rdnConv[:,:,q])
+      # rdnPad_q = np.copy(rdnPad[:,:,q])
+      # lMaxRdn_q = np.copy(lMaxRdn[:,:,q])
+      # peakLoc = np.nonzero((lMaxRdn_q == rdnPad_q) & (rdnPad_q > 1.0e-6))
+      peakLoc = lMaxRdn[:,:,q].nonzero()
+      indx1D = peakLoc[1] + peakLoc[0] * shp[1]
+      temp = (rdnConv[:,:,q].ravel())[indx1D]
+      srt = np.argsort(temp)
+      nBq = nB if (len(srt) > nB) else len(srt)
+      for i in range(nBq):
+        r = np.int32(peakLoc[0][srt[-1 - i]])
+        c = np.int32(peakLoc[1][srt[-1 - i]])
+        bandData_maxloc[q,i,:] = np.array([r,c])
+        bandData_max[q,i] = rdnPad[r,c,q]
+        # nn = rdnPad_q[r - 1:r + 2,c - 2:c + 3].ravel()
+        nn = rdnConv[r - 1:r + 2,c - 2:c + 3,q].ravel()
+        sumnn = (np.sum(nn) + 1.e-12)
+        nn /= sumnn
+        bandData_avemax[q,i] = sumnn / nnN
+        rnn = np.sum(nn * (np.float32(r) + nnr))
+        cnn = np.sum(nn * (np.float32(c) + nnc))
+
+        bandData_aveloc[q,i,:] = np.array([rnn,cnn])
+
+    return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc
+
+  def band_labelCL(self,rdnConvIn, rdnPadIn, lMaxRdnIn,clparams=[None,None,None,None,None]):
+
+    # an attempt to to run the band label on the GPU
+
+    tic = timer()
+    mf = cl.mem_flags
+    if isinstance(clparams[1],cl.Context):
+      gpu = clparams[0]
+      ctx = clparams[1]
+      prg = clparams[3]
+      if isinstance(clparams[2],cl.CommandQueue):
+        queue = clparams[2]
+      else:
+        queue = cl.CommandQueue(ctx)
+      mf = clparams[4]
+    else:
+      try:
+        gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
+        ctx = cl.Context(devices={gpu[0]})
+        queue = cl.CommandQueue(ctx)
+        kernel_location = path.dirname(__file__)
+        prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+        mf = cl.mem_flags
+      except: # fall back to CPU
+        return self.band_label(rdnConvIn, rdnPadIn, lMaxRdnIn, clparams=[None, None, None, None, None])
+
+    clparams = [gpu,ctx,queue,prg,mf]
+    nT = self.nTheta
+    nTp = nT + 2 * self.padding[1]
+    nR = self.nRho
+    nRp = nR + 2 * self.padding[0]
+
+    if isinstance(rdnConvIn,cl.Buffer):
+      rdnConv_gpu = rdnConvIn
+      nIm = np.int(rdnConv_gpu.size / (nTp * nRp * 4))
+      shp = (nRp,nTp,nIm)
+    else:
+      shp = rdnConvIn.shape
+      if len(shp) == 2:
+        radonConv = rdnConvIn.reshape(shp[0],shp[1],1)
+      else:
+        radonConv = rdnConvIn
+      shp = radonConv.shape
+      nIm = shp[2]
+
+      radonConvCL = np.zeros((nRp,nTp,nIm),dtype=np.float32)
+      radonConvCL[:,:,0:shp[2]] = radonConv
+      rdnConv_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radonConvCL)
+      shp = (nRp,nTp,nIm)
+
+    if isinstance(lMaxRdnIn,cl.Buffer):
+      lMaxRdn_gpu = lMaxRdnIn
+      nIm = np.int(lMaxRdn_gpu.size / (nTp * nRp))
+      shp = (nRp,nTp,nIm)
+    else:
+      shp = lMaxRdnIn.shape
+      if len(shp) == 2:
+        lMaxRdn = lMaxRdnIn.reshape(shp[0],shp[1],1)
+      else:
+        lMaxRdn = lMaxRdnIn
+      shp = lMaxRdnIn.shape
+      nIm = shp[2]
+
+      lMaxRdnCL = np.zeros((nRp,nTp,nIm),dtype=np.float32)
+      lMaxRdnCL[:,:,0:shp[2]] = lMaxRdn
+      lMaxRdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=lMaxRdnCL)
+      shp = (nRp,nTp,nIm)
+
+
+    maxval = np.zeros((nIm, self.nBands),dtype=np.float32)-2.0e6
+    maxval_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=maxval.nbytes)
+    maxloc = np.zeros((nIm, self.nBands, 2),dtype=np.float32)
+    maxloc_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=maxloc.nbytes)
+    aveval = np.zeros((nIm,self.nBands),dtype=np.float32) - 2.0e6
+    aveval_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=aveval.nbytes)
+    aveloc = np.zeros((nIm,self.nBands,2),dtype=np.float32)
+    aveloc_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=aveloc.nbytes)
+    rhoMaskTrim = np.int64((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
+
+
+    prg.maxlabel(queue,(nIm, 1,1),None,
+                 lMaxRdn_gpu,rdnConv_gpu,
+                 maxloc_gpu, maxval_gpu,
+                 aveloc_gpu,aveval_gpu,
+                 np.int64(shp[1]),np.int64(shp[0]),
+                 np.int64(self.padding[1]),rhoMaskTrim,np.int64(self.nBands) )
+
+    queue.flush()
+    cl.enqueue_copy(queue,maxval,maxval_gpu,is_blocking=True)
+    cl.enqueue_copy(queue,maxloc,maxloc_gpu,is_blocking=True)
+    cl.enqueue_copy(queue,aveval,aveval_gpu,is_blocking=True)
+    cl.enqueue_copy(queue,aveloc,aveloc_gpu,is_blocking=True)
+
+    rdnConv_out = np.zeros((nRp,nTp,nIm),dtype=np.float32)
+    cl.enqueue_copy(queue,rdnConv_out,rdnConv_gpu,is_blocking=True)
+
+    #rdnConv_gpu.release()
+    maxval_gpu.release()
+    maxloc_gpu.release()
+    aveval_gpu.release()
+    aveloc_gpu.release()
+    queue.flush()
+
+    return (maxval,aveval,maxloc,aveloc), rdnConv_out
 
 
 
