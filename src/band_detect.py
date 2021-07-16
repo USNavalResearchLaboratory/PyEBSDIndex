@@ -960,15 +960,15 @@ class BandDetect():
                  np.int64(shp[1]),np.int64(shp[0]),
                  np.int64(self.padding[1]),rhoMaskTrim,np.int64(self.nBands) )
 
-    queue.flush()
-    cl.enqueue_copy(queue,maxval,maxval_gpu,is_blocking=True)
-    cl.enqueue_copy(queue,maxloc,maxloc_gpu,is_blocking=True)
-    cl.enqueue_copy(queue,aveval,aveval_gpu,is_blocking=True)
-    cl.enqueue_copy(queue,aveloc,aveloc_gpu,is_blocking=True)
+    queue.finish()
+    cl.enqueue_copy(queue,maxval,maxval_gpu,is_blocking=False)
+    cl.enqueue_copy(queue,maxloc,maxloc_gpu,is_blocking=False)
+    cl.enqueue_copy(queue,aveval,aveval_gpu,is_blocking=False)
+    cl.enqueue_copy(queue,aveloc,aveloc_gpu,is_blocking=False)
 
     rdnConv_out = np.zeros((nRp,nTp,nIm),dtype=np.float32)
     cl.enqueue_copy(queue,rdnConv_out,rdnConv_gpu,is_blocking=True)
-
+    queue.finish()
     #rdnConv_gpu.release()
     maxval_gpu.release()
     maxloc_gpu.release()

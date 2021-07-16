@@ -287,10 +287,10 @@ __kernel void im1EQim2( __global const float *im1, __global const float *im2, __
 //this is a dirty little sort for getting the max locations ordered.  Will order accending.  
 // Keeping only the top nmax points.  Need to have maxval1d primed so that maxval1d[nmax] is larger 
 // than anything that will occur on its own.  
-void dirtsort( __private float *maxval1d, __private long int *maxloc1d,
+void dirtsort( __local float *maxval1d, __local long int *maxloc1d,
                 long int newloc, float newmax, unsigned long nmax);
 
-void dirtsort( __private float *maxval1d, __private long int *maxloc1d,
+void dirtsort( __local float *maxval1d, __local long int *maxloc1d,
                 long int newloc, float newmax, unsigned long nmax){
 
   unsigned long int i;
@@ -329,14 +329,21 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
   float imVal2; 
   const long lnmax = (long) nmax; 
   long int indy, indxy,i, j,k;
-  long int maxloc1d[21] = {0};
-  float maxval1d[21] = {-1e12f};
+  __local long int maxloc1d[32];// = {0};
+  __local float maxval1d[32];// = {-1e12f};
   long int x,y;
   float  avetempweight;
   float2  avetempxy;
 
 
+
   // first find all the local max points identified and sort them
+  for (i=0;i<32;++i){
+    maxval1d[i] = 0;
+    maxval1d[i] = -1.0e12f;
+  }
+
+
   maxval1d[lnmax] = 1.0e12f; // prime the pump for sorting 
   for(j = pady; j< imszy - pady; ++j){
     indy = j*imszx;
