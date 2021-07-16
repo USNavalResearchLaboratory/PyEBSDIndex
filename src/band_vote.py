@@ -3,7 +3,8 @@ import numba
 import rotlib
 from timeit import default_timer as timer
 RADEG = 180.0/np.pi
-
+from os import environ
+environ["NUMBA_CACHE_DIR"] = '/tmp/numba'
 
 class BandVote():
   def __init__(self, tripLib, angTol = 3.0):

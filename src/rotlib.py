@@ -50,12 +50,14 @@
 
 import numpy as np
 import numba
+from os import environ
+environ["NUMBA_CACHE_DIR"] = '/tmp/numba'
 
 P = 1
 eps = 1.0e-12 # used for "closeto" approximations in Numba code
 PI = np.pi
 PI2 = 2.0 * np.pi
-nbcache = False # switch to false for debugging.
+nbcache = True # switch to false for debugging.
 nbParallel = False # decide if parallelism is desired.
 # Once the JIT compiler runs over the code, changing this will not change the parallelism.  
 # The package will need to be reimported

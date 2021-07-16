@@ -1,5 +1,5 @@
 import numpy as np
-from os import path#, environ
+from os import path, environ
 import numba
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage.morphology import grey_dilation as scipy_grey_dilation
@@ -10,7 +10,7 @@ import pyopencl as cl
 
 #from os import environ
 #environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
-
+environ["NUMBA_CACHE_DIR"] = '/tmp/numba'
 RADEG = 180.0/np.pi
 
 
