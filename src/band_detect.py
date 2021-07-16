@@ -944,7 +944,7 @@ class BandDetect():
 
     maxval = np.zeros((nIm, self.nBands),dtype=np.float32)-2.0e6
     maxval_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=maxval.nbytes)
-    maxloc = np.zeros((nIm, self.nBands, 2),dtype=np.float32)
+    maxloc = np.zeros((nIm, self.nBands),dtype=np.int64)
     maxloc_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=maxloc.nbytes)
     aveval = np.zeros((nIm,self.nBands),dtype=np.float32) - 2.0e6
     aveval_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=aveval.nbytes)
@@ -976,7 +976,12 @@ class BandDetect():
     aveloc_gpu.release()
     queue.flush()
 
-    return (maxval,aveval,maxloc,aveloc), rdnConv_out
+    maxlocxy = np.zeros((nIm, self.nBands, 2),dtype=np.float32)
+    temp = np.asarray(np.unravel_index(maxloc, (shp[0], shp[1])), dtype = np.float32)
+    maxlocxy[:,:,0] = temp[0,:,:]
+    maxlocxy[:,:,1] = temp[1,:,:]
+
+    return (maxval,aveval,maxlocxy,aveloc), rdnConv_out
 
 
 

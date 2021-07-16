@@ -287,35 +287,40 @@ __kernel void im1EQim2( __global const float *im1, __global const float *im2, __
 //this is a dirty little sort for getting the max locations ordered.  Will order accending.  
 // Keeping only the top nmax points.  Need to have maxval1d primed so that maxval1d[nmax] is larger 
 // than anything that will occur on its own.  
-void dirtsort( __private float *maxval1d, __private long int *maxloc1d,
+void dirtsort( __global float *maxval1d, __global long int *maxloc1d,
                 long int newloc, float newmax, unsigned long nmax);
 
-void dirtsort( __private float *maxval1d, __private long int *maxloc1d,
+void dirtsort( __global float *maxval1d, __global long int *maxloc1d,
                 long int newloc, float newmax, unsigned long nmax){
 
-  unsigned long int i;
-  if (newmax < maxval1d[0]){
+  unsigned long int i, istop;
+  if (newmax < maxval1d[nmax-1]){
     return;
   }
-
-  for (i=1; i<=nmax; ++i){
-    if (newmax > maxval1d[i]){
-      maxval1d[i-1] = maxval1d[i];
-      maxloc1d[i-1] = maxloc1d[i];
+  else{
+    istop = 0; 
+    for (i=1; i<nmax; ++i){
+      if (newmax > maxval1d[nmax-1-i]){
+        maxval1d[nmax-i] = maxval1d[nmax-1-i];
+        maxloc1d[nmax-i] = maxloc1d[nmax-1-i];
+        istop = i;
+      }
+      else{
+        //maxval1d[i-1]  = newmax;
+        //maxloc1d[i-1]  = newloc;
+        break;
+      }
     }
-    else{
-      maxval1d[i-1]  = newmax;
-      maxloc1d[i-1]  = newloc;
-      break;
-    }
+    maxval1d[nmax-1-istop] = newmax;
+    maxloc1d[nmax-1-istop]  = newloc;
+    return;
   }
-  return;
 }
 
 
 // Is image1 (can be a stack of images)
 __kernel void maxlabel( __global const uchar *maxlocin,__global const float *maxvalin,
-                        __global float2 *maxloc,__global float *maxval,
+                        __global long int *maxloc,__global float *maxval,
                         __global float2 *aveloc,__global float *aveval,
                         const long imszx, const long imszy, 
                         const long padx, const long pady, const long nmax)
@@ -329,8 +334,8 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
   float imVal2; 
   const long lnmax = (long) nmax; 
   long int indy, indxy,i, j,k;
-  long int maxloc1d[32] = {0};
-  float maxval1d[32] = {-1e12f};
+  //__global long int maxloc1d[32];// = {0};
+  //__global float maxval1d[32];// = {-1e12f};
   long int x,y;
   float  avetempweight;
   float2  avetempxy;
@@ -338,13 +343,13 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
 
 
   // first find all the local max points identified and sort them
-  //for (i=0;i<32;++i){
-  //  maxval1d[i] = 0;
-  //  maxval1d[i] = -1.0e12f;
-  //}
+  for (i=0;i<lnmax;++i){
+    maxloc[i+lnmax*z] = 0;
+    maxval[i+lnmax*z] = -1.0e12f;
+  }
 
 
-  maxval1d[lnmax] = 1.0e12f; // prime the pump for sorting 
+  //maxval1d[lnmax] = 1.0e12f; // prime the pump for sorting 
   for(j = pady; j< imszy - pady; ++j){
     indy = j*imszx;
     for(i = padx; i< imszx - padx; ++i){
@@ -357,7 +362,7 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
         else{
           imVal2 = maxvalin[(indxy)*nImChunk+z];
           
-          dirtsort(maxval1d, maxloc1d, indxy, imVal2, lnmax);
+          dirtsort(&(maxval[z*lnmax]), &(maxloc[z*lnmax]), indxy, imVal2, lnmax);
         }
         
       
@@ -366,12 +371,12 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
 
   // now place them in the output arrays
   for (i=0; i< lnmax; ++i){
-    if (maxval[lnmax-i-1] > -2.0e6){
-      maxval[z*lnmax + i] = maxval1d[lnmax-i-1];
-      indxy = maxloc1d[lnmax-i-1];
+    if (maxval[z*lnmax+i] > -2.0e6){
+      //maxval[z*lnmax + i] = maxval1d[lnmax-i-1];
+      indxy = maxloc[z*lnmax+i];
       x =  ( indxy % imszx );
       y =  (indxy / imszx );
-      maxloc[z*lnmax + i] = (float2) (y,x);
+      //maxloc[z*lnmax + i] = (float2) (y,x);
       //maxloc[(z*lnmax + i)+1] = (float) y;
       avetempxy = (float2) (0.0);
       avetempweight = 1.0e-12;
