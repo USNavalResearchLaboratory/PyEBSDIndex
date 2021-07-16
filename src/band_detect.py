@@ -779,29 +779,29 @@ class BandDetect():
 
         bdat, rdnConv_out = self.band_labelCL(rdnConv, rdnConv, lMaxRdn, clparams=clparams )
       except Exception as e:
-
-        if isinstance(rdnConvIn, cl.Buffer):
+        print(e)
+        if isinstance(rdnConvIn_gpu, cl.Buffer):
           nT = self.nTheta
           nTp = nT + 2 * self.padding[1]
           nR = self.nRho
           nRp = nR + 2 * self.padding[0]
-          nImCL = np.int(rdnConvIn.size / (nTp * nRp * 4))
+          nImCL = np.int(rdnConvIn_gpu.size / (nTp * nRp * 4))
           shp = (nRp,nTp,nImCL)
           rdnConv = np.zeros(shp,dtype=np.float32)
-          cl.enqueue_copy(clparams[2],rdnConv,rdnConvIn,is_blocking=True)
+          cl.enqueue_copy(clparams[2],rdnConv,rdnConvIn_gpu,is_blocking=True)
         else:
           rdnConv = rdnConvIn
 
-        if isinstance(lMaxRdnIn, cl.Buffer):
+        if isinstance(lMaxRdnIn_gpu, cl.Buffer):
           nT = self.nTheta
           nTp = nT + 2 * self.padding[1]
           nR = self.nRho
           nRp = nR + 2 * self.padding[0]
 
-          nImCL = np.int(lMaxRdnIn.size / (nTp * nRp))
+          nImCL = np.int(lMaxRdnIn_gpu.size / (nTp * nRp))
           shp = (nRp,nTp,nImCL)
-          lMaxRdn = np.zeros(shp,dtype=np.uchar)
-          cl.enqueue_copy(clparams[2],lMaxRdn,lMaxRdnIn,is_blocking=True)
+          lMaxRdn = np.zeros(shp,dtype=np.ubyte)
+          cl.enqueue_copy(clparams[2],lMaxRdn,lMaxRdnIn_gpu,is_blocking=True)
         else:
           lMaxRdn = lMaxRdnIn
 
