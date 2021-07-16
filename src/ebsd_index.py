@@ -311,7 +311,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
     jobs = []
     timers = []
     jobs_indx = []
-    #rateave = 0.0
+    chunkave = 0.0
     for i in range(n_cpu_nodes):
       job_pstart_end = p_indx_start_end.pop(0)
       workers.append(IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote())
@@ -344,15 +344,16 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
         ndone += 1
 
         ratetemp = len(workers) * (rate[1]) / (timer() - ticp)
-        #rateave += ratetemp
-        rateave = npatsdone / (timer() - tic0)
+        chunkave += ratetemp
+        totalave = npatsdone / (timer() - tic0)
         # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
 
         toc0 = timer() - tic0
         if keep_log is False:
           print('                                                                                             ',end='\r')
           time.sleep(0.00001)
-        print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',"{:.0f}".format(ratetemp)+';'+"{:.0f}".format(rateave),
+        print('Completed: ',str(indxstr),' -- ',str(indxend),'  PPS:',"{:.0f}".format(ratetemp)+';'+
+              "{:.0f}".format(chunkave/ndone)+';'+"{:.0f}".format(totalave),
               '  ',"{:.0f}".format((ndone / njobs) * 100) + '%',
               "{:.0f};".format(toc0) + "{:.0f}".format((njobs - ndone) / ndone * toc0) + ' running;remaining(s)',
               end=newline)
