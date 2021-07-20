@@ -51,7 +51,12 @@
 import numpy as np
 import numba
 from os import environ
-environ["NUMBA_CACHE_DIR"] = '/tmp/numba'
+import tempfile
+from pathlib import PurePath
+import platform
+tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
+tempdir = tempdir.joinpath('numba')
+environ["NUMBA_CACHE_DIR"] = str(tempdir)
 
 P = 1
 eps = 1.0e-12 # used for "closeto" approximations in Numba code

@@ -4,7 +4,12 @@ import rotlib
 from timeit import default_timer as timer
 RADEG = 180.0/np.pi
 from os import environ
-environ["NUMBA_CACHE_DIR"] = '/tmp/numba'
+import tempfile
+from pathlib import PurePath
+import platform
+tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
+tempdir = tempdir.joinpath('numba')
+environ["NUMBA_CACHE_DIR"] = str(tempdir)
 
 class BandVote():
   def __init__(self, tripLib, angTol = 3.0):

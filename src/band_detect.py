@@ -10,7 +10,13 @@ import pyopencl as cl
 
 #from os import environ
 #environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
-environ["NUMBA_CACHE_DIR"] = '/tmp/numba'
+import tempfile
+from pathlib import PurePath
+import platform
+tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
+tempdir = tempdir.joinpath('numba')
+environ["NUMBA_CACHE_DIR"] = str(tempdir)
+
 RADEG = 180.0/np.pi
 
 
