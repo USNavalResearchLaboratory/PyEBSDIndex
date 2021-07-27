@@ -23,7 +23,7 @@ def optimzie(pats, indexer):
 
   PCopts = np.zeros((nPats,3), dtype = np.float32)
   clops = indexer.bandDetectPlan.CLOps
-  indexer.bandDetectPlan.CLOps = [False, False, False]
+  indexer.bandDetectPlan.CLOps = [False, False, False, False]
   for i in range(nPats):
     PC0 = indexer.PC
     PCopt = opt.minimize(optfunction, PC0, args =(indexer,patterns), method = 'Nelder-Mead'  )

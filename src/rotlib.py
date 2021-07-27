@@ -36,7 +36,7 @@
 #
 # This implementation is dependant on the Numba Python package, which gives a significant increase in 
 # speed (other than the first time called due to compilation time). The numba implmentation is very non-Numpy-like in that
-# Loops are not discouraged.  
+# loops are not discouraged.
 # No guarantee - but this library is typically numerically accurate to around 5e-6 degrees or better.
 # The rotations.py is typically more accurate at the cost of being about 2-10x slower.
 
