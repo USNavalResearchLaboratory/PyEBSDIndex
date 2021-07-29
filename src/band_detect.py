@@ -199,7 +199,7 @@ class BandDetect():
       back -= np.mean(back)
     self.backgroundsub = back
 
-  def find_bands(self, patternsIn, faster=False, verbose=0, clparams = [None, None, None, None, None]):
+  def find_bands(self, patternsIn, verbose=0, clparams = [None, None, None, None, None]):
     tic0 = timer()
     tic = timer()
     ndim = patternsIn.ndim
