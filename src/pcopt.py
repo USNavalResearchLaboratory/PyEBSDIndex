@@ -11,7 +11,7 @@ def optfunction(PC_i,indexer,pats):
   dat, start, end = indexer.index_pats(patsin=pats, PC=PC_i)
   return dat['fit'][0]
 
-def optimzie(pats, indexer):
+def optimize(pats, indexer):
   ndim = pats.ndim
   if ndim == 2:
     patterns = np.expand_dims(pats,axis=0)
