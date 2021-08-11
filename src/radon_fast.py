@@ -10,6 +10,8 @@ environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 RADDEG = 180.0/np.pi
 DEGRAD = np.pi/180.0
 
+GPUID = 0
+
 class Radon():
   def __init__(self, image=None, imageDim = None, nTheta = 180, nRho=90,rhoMax = None):
     self.nTheta = nTheta
@@ -202,7 +204,7 @@ class Radon():
     else:
       try:
         gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-        ctx = cl.Context(devices={gpu[0]})
+        ctx = cl.Context(devices={gpu[GPUID]})
         queue = cl.CommandQueue(ctx)
         mf = cl.mem_flags
         kernel_location = path.dirname(__file__)
@@ -223,7 +225,7 @@ class Radon():
     nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm/clvtypesize))))
     # there is something very strange that happens if the number of images
     # is a exact multiple of the max group size (typically 256)
-    mxGroupSz = gpu[0].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
+    mxGroupSz = gpu[GPUID].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
     nImCL += np.int(16 * (1 - np.int(np.mod(nImCL, mxGroupSz ) > 0)))
     image_align = np.ones((shapeIm[1], shapeIm[2], nImCL), dtype = np.float32)
     image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()

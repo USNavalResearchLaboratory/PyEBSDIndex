@@ -18,7 +18,7 @@ tempdir = tempdir.joinpath('numba')
 environ["NUMBA_CACHE_DIR"] = str(tempdir)
 
 RADEG = 180.0/np.pi
-
+GPUID = 0
 
 
 class BandDetect():
@@ -514,7 +514,7 @@ class BandDetect():
     else:
       try:
         gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-        ctx = cl.Context(devices={gpu[0]})
+        ctx = cl.Context(devices={gpu[GPUID]})
         queue = cl.CommandQueue(ctx)
         kernel_location = path.dirname(__file__)
         prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
@@ -544,7 +544,7 @@ class BandDetect():
       nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm / clvtypesize))))
       # there is something very strange that happens if the number of images
       # is a exact multiple of the max group size (typically 256)
-      mxGroupSz = gpu[0].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
+      mxGroupSz = GPUID.get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
       nImCL += np.int(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
       radonCL = np.zeros( (nRp , nTp, nImCL), dtype = np.float32)
       radonCL[:,:,0:shp[2]] = radon
@@ -657,7 +657,7 @@ class BandDetect():
     else:
       try:
         gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-        ctx = cl.Context(devices={gpu[0]})
+        ctx = cl.Context(devices={gpu[GPUID]})
         queue = cl.CommandQueue(ctx)
         kernel_location = path.dirname(__file__)
         prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
@@ -687,7 +687,7 @@ class BandDetect():
       nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm / clvtypesize))))
       # there is something very strange that happens if the number of images
       # is a exact multiple of the max group size (typically 256)
-      mxGroupSz = gpu[0].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
+      mxGroupSz = gpu[GPUID].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
       nImCL += np.int(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
       radonCL = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
       radonCL[:,:,0:shp[2]] = radon
@@ -739,10 +739,10 @@ class BandDetect():
                             np.int64(self.padding[1]),np.int64(self.padding[0]),
                             np.int64(self.peakPad[1]),np.int64(1))
 
-    out = np.zeros((shp),dtype=np.ubyte)
-    out_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=out.nbytes)
+    local_max = np.zeros((shp),dtype=np.ubyte)
+    local_max_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=local_max.nbytes)
 
-    prg.im1EQim2(queue,(np.uint32(nT),np.uint32(nR),nImCL),None, lmaxXY, rdn_gpu, out_gpu,
+    prg.im1EQim2(queue,(np.uint32(nT),np.uint32(nR),nImCL),None, lmaxXY, rdn_gpu, local_max_gpu,
                  np.uint64(shp[1]),np.uint64(shp[0]),
                  np.uint64(self.padding[1]),np.uint64(self.padding[0]))
 
@@ -750,21 +750,21 @@ class BandDetect():
 
 
     if returnBuff == False:
-      cl.enqueue_copy(queue,out,out_gpu,is_blocking=True)
+      cl.enqueue_copy(queue,local_max,local_max_gpu,is_blocking=True)
       queue.flush()
       rdn_gpu.release()
       lmaxX.release()
       lmaxXY.release()
-      out_gpu.release()
+      local_max_gpu.release()
       out_gpu = None
       rhoMaskTrim = np.int32((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
-      out[0:rhoMaskTrim,:, :] = 0
-      out[-rhoMaskTrim:,:,:] = 0
-      out[:,0:self.padding[1],:] = 0
-      out[:,-self.padding[1]:,:] = 0
+      local_max[0:rhoMaskTrim,:, :] = 0
+      local_max[-rhoMaskTrim:,:,:] = 0
+      local_max[:,0:self.padding[1],:] = 0
+      local_max[:,-self.padding[1]:,:] = 0
     else:
-      out = None
-    return out, out_gpu
+      local_max = None
+    return local_max, local_max_gpu
 
   def band_label(self,nPats,rdnConvIn,rdnNormIn,lMaxRdnIn,
                  rdnConvIn_gpu,rdnNormIn_gpu,lMaxRdnIn_gpu,
@@ -897,13 +897,13 @@ class BandDetect():
     else:
       try:
         gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-        ctx = cl.Context(devices={gpu[0]})
+        ctx = cl.Context(devices={gpu[GPUID]})
         queue = cl.CommandQueue(ctx)
         kernel_location = path.dirname(__file__)
         prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
         mf = cl.mem_flags
       except: # fall back to CPU
-        return self.band_label(rdnConvIn, rdnPadIn, lMaxRdnIn, clparams=[None, None, None, None, None])
+        return self.band_label(rdnConvIn, rdnPadIn, lMaxRdnIn, clparams=[None, None, None, None, None], use_gpu=False)
 
     clparams = [gpu,ctx,queue,prg,mf]
     nT = self.nTheta
@@ -980,7 +980,7 @@ class BandDetect():
     maxloc_gpu.release()
     aveval_gpu.release()
     aveloc_gpu.release()
-    queue.flush()
+    queue.finish()
 
     maxlocxy = np.zeros((nIm, self.nBands, 2),dtype=np.float32)
     temp = np.asarray(np.unravel_index(maxloc, (shp[0], shp[1])), dtype = np.float32)
