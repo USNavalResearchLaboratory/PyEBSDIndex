@@ -1,5 +1,6 @@
 import numpy as np
 import pyopencl as cl
+import openclparam
 import ray
 if ray.__version__ < '1.1.0': # this fixes an issue when runnning locally on a VPN
   ray.services.get_node_ip_address = lambda: '127.0.0.1'
@@ -74,27 +75,27 @@ class IndexerRay():
     #self.indxstart = None
     #self.indxend = None
     #self.rate = None
-    self.openCLParams = [None, None, None, None, None]
+    self.openCLParams = None
     try:
       if sys.platform != 'darwin': # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a
         # cl.contex thus, we make a context for each process.
-        self.openCLParams[0] = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-        self.openCLParams[1] = cl.Context(devices = {self.openCLParams[0][0]})
-        self.openCLParams[2] = None
-        kernel_location = path.dirname(__file__)
-        self.openCLParams[3] = cl.Program(self.openCLParams[1] ,
-                                  open(path.join(kernel_location,'clkernels.cl')).read()).build()
+        # self.openCLParams[0] = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
+        # self.openCLParams[1] = cl.Context(devices = {self.openCLParams[0][0]})
+        # self.openCLParams[2] = None
+        # kernel_location = path.dirname(__file__)
+        # self.openCLParams[3] = cl.Program(self.openCLParams[1] ,
+        #                           open(path.join(kernel_location,'clkernels.cl')).read()).build()
+        #
+        # self.openCLParams[4] = cl.mem_flags
+        self.openCLParams = openclparam.OpenClParam()
 
-        self.openCLParams[4] = cl.mem_flags
+
       else: #MacOS handles GPU memory conflicts much better when the context is destroyed between each
         # run, and has very low overhead for making the context. 
         pass
     except:
-      self.openCLParams[0] = None
-      self.openCLParams[1] = None
-      self.openCLParams[2] = None
-      self.openCLParams[3] = None
-      self.openCLParams[4] = None
+      self.openCLParams = None
+
 
 
 
@@ -214,10 +215,12 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
     n_cpu_nodes = ncpu
 
   try:
-    plat = cl.get_platforms()
-    gpu = plat[0].get_devices(device_type=cl.device_type.GPU)
-    ngpu = len(gpu)
-    ngpupnode = ngpu/n_cpu_nodes
+   clparam = openclparam.OpenClParam()
+   if clparam.gpu is None:
+     ngpu = 0
+     ngpupnode = 0
+   else:
+     ngpu = len(clparam.gpu)
   except:
     ngpu = 0
     ngpupnode = 0
