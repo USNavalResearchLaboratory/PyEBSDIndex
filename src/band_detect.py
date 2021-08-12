@@ -214,7 +214,7 @@ class BandDetect():
     eps = 1.e-6
     tic1 = timer()
     rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns, clparams, use_gpu=self.CLOps[0])
-    if self.EDAXIQ == True:
+    if (self.EDAXIQ == True):
       if rdnNorm is None:
         nTp = self.nTheta + 2 * self.padding[1]
         nRp = self.nRho + 2 * self.padding[0]
