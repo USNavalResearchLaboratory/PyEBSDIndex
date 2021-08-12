@@ -29,7 +29,7 @@ def index_pats(patsIn = None,filename=None,filenameout=None,phaselist=['FCC'], \
                vendor=None,PC = None,sampleTilt=70.0,camElev = 5.3, \
                bandDetectPlan = None,nRho=90,nTheta=180,tSigma= None,rSigma=None,rhoMaskFrac=0.1,nBands=9, \
                backgroundSub = False, patStart = 0,patEnd = -1, \
-               return_indexer_obj = False,ebsd_indexer_obj = None, clparams = [None, None, None, None], verbose=0):
+               return_indexer_obj = False,ebsd_indexer_obj = None, clparams = None, verbose=0):
   pats = None
   if patsIn is None:
     pdim = None
@@ -69,12 +69,13 @@ def index_pats(patsIn = None,filename=None,filenameout=None,phaselist=['FCC'], \
 
 @ray.remote(num_cpus=1, num_gpus=1)
 class IndexerRay():
-  def __init__(self):
+  def __init__(self, actorid = 0):
     #device, context, queue, program, mf
     #self.dataout = None
     #self.indxstart = None
     #self.indxend = None
     #self.rate = None
+    self.actorID = actorid
     self.openCLParams = None
     try:
       if sys.platform != 'darwin': # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a
@@ -88,16 +89,13 @@ class IndexerRay():
         #
         # self.openCLParams[4] = cl.mem_flags
         self.openCLParams = openclparam.OpenClParam()
-
+        self.openCLParams.gpu_id = 0# self.actorID % self.openCLParams.ngpu
 
       else: #MacOS handles GPU memory conflicts much better when the context is destroyed between each
         # run, and has very low overhead for making the context. 
         pass
     except:
       self.openCLParams = None
-
-
-
 
   def index_chunk_ray(self, pats = None, indexer = None, patStart = 0, patEnd = -1 ):
     try:
@@ -221,6 +219,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
      ngpupnode = 0
    else:
      ngpu = len(clparam.gpu)
+     ngpupnode = ngpu / n_cpu_nodes
   except:
     ngpu = 0
     ngpupnode = 0

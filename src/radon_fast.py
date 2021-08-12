@@ -3,6 +3,7 @@ from timeit import default_timer as timer
 from os import path
 from numba import jit, prange
 import pyopencl as cl
+import openclparam
 import matplotlib.pyplot as plt
 from os import environ
 environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
@@ -10,7 +11,7 @@ environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 RADDEG = 180.0/np.pi
 DEGRAD = np.pi/180.0
 
-GPUID = 0
+
 
 class Radon():
   def __init__(self, image=None, imageDim = None, nTheta = 180, nRho=90,rhoMax = None):
@@ -192,25 +193,28 @@ class Radon():
   def radon_fasterCL(self,image,padding = np.array([0,0]),fixArtifacts = False, background = None, returnBuff = False, clparams=[None, None, None, None, None] ):
 
     tic = timer()
-    if isinstance(clparams[1],cl.Context):
-      gpu = clparams[0]
-      ctx = clparams[1]
-      prg = clparams[3]
-      if isinstance(clparams[2], cl.CommandQueue):
-        queue = clparams[2]
-      else:
-        queue = cl.CommandQueue(ctx)
-      mf = clparams[4]
+    if clparams is not None:
+      if clparams.queue is None:
+        clparams.get_queue()
+      gpu = clparams.gpu
+      gpu_id = clparams.gpu_id
+      ctx = clparams.ctx
+      prg = clparams.prg
+      queue = clparams.queue
+      mf = clparams.memflags
     else:
       try:
-        gpu = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-        ctx = cl.Context(devices={gpu[GPUID]})
-        queue = cl.CommandQueue(ctx)
-        mf = cl.mem_flags
-        kernel_location = path.dirname(__file__)
-        prg = cl.Program(ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+        clparams = openclparam.OpenClParam()
+        clparams.get_queue()
+        gpu = clparams.gpu
+        gpu_id = clparams.gpu_id
+        ctx = clparams.ctx
+        prg = clparams.prg
+        queue = clparams.queue
+        mf = clparams.memflags
       except:
-        return self.radon_faster(image,padding=padding,fixArtifacts = fixArtifacts), [None, None, None, None, None], None
+        clparams = None
+        return self.radon_faster(image,padding=padding,fixArtifacts = fixArtifacts), None, None
 
     shapeIm = np.shape(image)
     if image.ndim == 2:
@@ -225,7 +229,7 @@ class Radon():
     nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm/clvtypesize))))
     # there is something very strange that happens if the number of images
     # is a exact multiple of the max group size (typically 256)
-    mxGroupSz = gpu[GPUID].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
+    mxGroupSz = gpu[gpu_id].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
     nImCL += np.int(16 * (1 - np.int(np.mod(nImCL, mxGroupSz ) > 0)))
     image_align = np.ones((shapeIm[1], shapeIm[2], nImCL), dtype = np.float32)
     image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()
@@ -272,10 +276,10 @@ class Radon():
       radon_gpu.release()
       radon = radon[:,:, 0:nIm]
       radon_gpu = None
-      clparams = [None, None, None, None, None]
+      clparams = None
     else:
       radon = None
-      clparams = [gpu,ctx,queue,prg,mf]
+
 
     rdnIndx_gpu.release()
     image_gpu.release()

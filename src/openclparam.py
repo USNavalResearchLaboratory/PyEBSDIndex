@@ -10,9 +10,11 @@ DEGRAD = np.pi/180.0
 
 
 class OpenClParam():
-  def __init__(self):
+  def __init__(self, gpu_id=0):
     self.platform = None
     self.gpu = None
+    self.ngpu = 0
+    self.gpu_id = gpu_id
     self.ctx = None
     self.prg = None
     self.queue = None
@@ -20,6 +22,7 @@ class OpenClParam():
 
     try:
       self.get_context()
+
     except Exception as e:
       if hasattr(e,'message'):
         print(e.message)
@@ -34,6 +37,9 @@ class OpenClParam():
       self.get_platform()
 
     self.gpu = self.platform.get_devices(device_type=cl.device_type.GPU)
+    self.ngpu = len(self.gpu)
+    if len(self.gpu)-1 < self.gpu_id:
+      self.gpu_id = len(self.gpu)-1
 
   def get_context(self):
     if self.gpu is None:
@@ -43,13 +49,18 @@ class OpenClParam():
     kernel_location = path.dirname(__file__)
     self.prg = cl.Program(self.ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
 
-  def get_queue(self, gpu_id=0, random_gpu=False):
+  def get_queue(self, gpu_id=None, random_gpu=False):
 
     if self.ctx is None:
       self.get_context()
 
+    if gpu_id is None:
+      gpu_id = self.gpu_id
+
     if random_gpu == True:
       gpu_id = np.random.randint(len(self.gpu))
-    self.queue = cl.CommandQueue(self.ctx, device=self.gpu[gpu_id])
+    gpuindx = min(len(self.gpu)-1, gpu_id)
+    self.gpu_id = gpuindx
+    self.queue = cl.CommandQueue(self.ctx, device=self.gpu[gpuindx])
 
 
