@@ -239,9 +239,18 @@ class BandDetect():
     tic1 = timer()
 
 
-    bandData, rdnConv = self.band_label(nPats, rdnConv, rdnNorm, lMaxRdn,
+    bandData, rdnConvBuf = self.band_label(nPats, rdnConv, rdnNorm, lMaxRdn,
                                         rdnConv_gpu,rdnConv_gpu,lMaxRdn_gpu,
                                         use_gpu = self.CLOps[3], clparams=clparams )
+    if verbose > 1: # need to pull the radonconv off the gpu
+      if isinstance(rdnConvBuf , cl.Buffer):
+        nTp = self.nTheta + 2 * self.padding[1]
+        nRp = self.nRho + 2 * self.padding[0]
+        nImCL = int(rdnConvBuf.size / (nTp * nRp * 4))
+        rdnConv = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
+        cl.enqueue_copy(clparams.queue,rdnConv,rdnConvBuf,is_blocking=True)
+      else:
+        rdnConv = rdnConvBuf
 
     # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
     if clparams is not None:
@@ -974,11 +983,11 @@ class BandDetect():
     cl.enqueue_copy(queue,maxval,maxval_gpu,is_blocking=False)
     cl.enqueue_copy(queue,maxloc,maxloc_gpu,is_blocking=False)
     cl.enqueue_copy(queue,aveval,aveval_gpu,is_blocking=False)
-    cl.enqueue_copy(queue,aveloc,aveloc_gpu,is_blocking=False)
+    cl.enqueue_copy(queue,aveloc,aveloc_gpu,is_blocking=True)
 
-    rdnConv_out = np.zeros((nRp,nTp,nIm),dtype=np.float32)
-    cl.enqueue_copy(queue,rdnConv_out,rdnConv_gpu,is_blocking=True)
-    queue.finish()
+    #rdnConv_out = np.zeros((nRp,nTp,nIm),dtype=np.float32)
+    #cl.enqueue_copy(queue,rdnConv_out,rdnConv_gpu,is_blocking=True)
+    #queue.finish()
     #rdnConv_gpu.release()
     maxval_gpu.release()
     maxloc_gpu.release()
@@ -991,7 +1000,7 @@ class BandDetect():
     maxlocxy[:,:,0] = temp[0,:,:]
     maxlocxy[:,:,1] = temp[1,:,:]
 
-    return (maxval,aveval,maxlocxy,aveloc), rdnConv_out
+    return (maxval,aveval,maxlocxy,aveloc), rdnConv_gpu
 
 
 

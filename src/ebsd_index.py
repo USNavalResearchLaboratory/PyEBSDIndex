@@ -79,21 +79,13 @@ class IndexerRay():
     self.openCLParams = None
     try:
       if sys.platform != 'darwin': # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a
-        # cl.contex thus, we make a context for each process.
-        # self.openCLParams[0] = cl.get_platforms()[0].get_devices(device_type=cl.device_type.GPU)
-        # self.openCLParams[1] = cl.Context(devices = {self.openCLParams[0][0]})
-        # self.openCLParams[2] = None
-        # kernel_location = path.dirname(__file__)
-        # self.openCLParams[3] = cl.Program(self.openCLParams[1] ,
-        #                           open(path.join(kernel_location,'clkernels.cl')).read()).build()
-        #
-        # self.openCLParams[4] = cl.mem_flags
         self.openCLParams = openclparam.OpenClParam()
-        self.openCLParams.gpu_id = 0# self.actorID % self.openCLParams.ngpu
+        self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
 
       else: #MacOS handles GPU memory conflicts much better when the context is destroyed between each
         # run, and has very low overhead for making the context. 
-        pass
+        self.openCLParams = openclparam.OpenClParam()
+        self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
     except:
       self.openCLParams = None
 
@@ -316,7 +308,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
     chunkave = 0.0
     for i in range(n_cpu_nodes):
       job_pstart_end = p_indx_start_end.pop(0)
-      workers.append(IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote())
+      workers.append(IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote(i))
       jobs.append(workers[i].index_chunk_ray.remote(pats = None, indexer = remote_indexer, \
                                         patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
       nsubmit += 1
@@ -381,8 +373,8 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
         del jobs_indx[jid]
         if len(workers) < 1: # rare case that we have killed all workers...
           job_pstart_end = p_indx_start_end.pop(0)
-          workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote())
-          jobs.append(workers[i].index_chunk_ray.remote(pats=None,indexer=remote_indexer, \
+          workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(jid))
+          jobs.append(workers[0].index_chunk_ray.remote(pats=None,indexer=remote_indexer, \
                                                         patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
           nsubmit += 1
           timers.append(timer())
@@ -398,7 +390,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
     chunkave = 0.0
     for i in range(n_cpu_nodes):
       job_pstart_end = p_indx_start_end.pop(0)
-      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote())
+      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(i))
       jobs.append(workers[i].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:],
                                                     indexer=remote_indexer, \
                                                     patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
@@ -461,8 +453,8 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
         del jobs_indx[jid]
         if len(workers) < 1: # rare case that we have killed all workers...
           job_pstart_end = p_indx_start_end.pop(0)
-          workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote())
-          jobs.append(workers[i].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:],
+          workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(jid))
+          jobs.append(workers[0].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:],
                                                         indexer=remote_indexer, \
                                                         patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
           nsubmit += 1
