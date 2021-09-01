@@ -28,7 +28,7 @@ import traceback
 def index_pats(patsIn = None,filename=None,filenameout=None,phaselist=['FCC'], \
                vendor=None,PC = None,sampleTilt=70.0,camElev = 5.3, \
                bandDetectPlan = None,nRho=90,nTheta=180,tSigma= None,rSigma=None,rhoMaskFrac=0.1,nBands=9, \
-               backgroundSub = False, patStart = 0,patEnd = -1, \
+               backgroundSub = False, patstart = 0,npats = -1, \
                return_indexer_obj = False,ebsd_indexer_obj = None, clparams = None, verbose=0):
   pats = None
   if patsIn is None:
@@ -58,7 +58,7 @@ def index_pats(patsIn = None,filename=None,filenameout=None,phaselist=['FCC'], \
   if backgroundSub == True:
     indexer.bandDetectPlan.collect_background(fileobj = indexer.fID, patsIn = pats, nsample = 1000)
 
-  dataout, indxstart, indxend = indexer.index_pats(patsin=pats, patStart=patStart, patEnd=patEnd, \
+  dataout, indxstart, indxend = indexer.index_pats(patsin=pats, patstart=patstart, npats=npats, \
                                                    clparams = clparams, verbose=verbose)
 
   if return_indexer_obj == False:
@@ -89,15 +89,15 @@ class IndexerRay():
     except:
       self.openCLParams = None
 
-  def index_chunk_ray(self, pats = None, indexer = None, patStart = 0, patEnd = -1 ):
+  def index_chunk_ray(self, pats = None, indexer = None, patstart = 0, npats = -1 ):
     try:
       tic = timer()
-      dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patStart=patStart,patEnd=patEnd, clparams = self.openCLParams)
-      rate = np.array([timer()-tic, indxend-indxstart])
-      return dataout, indxstart,indxend, rate
+      dataout,indxstart,npatsout = indexer.index_pats(patsin=pats,patstart=patstart,npats=npats, clparams = self.openCLParams)
+      rate = np.array([timer()-tic, npatsout])
+      return dataout, indxstart,indxstart+npatsout, rate
     except:
-      indxstart = patStart
-      indxend = patEnd
+      indxstart = patstart
+      indxend = patstart+npats
       return None, indxstart,indxend, [-1, -1]
   # def readdata(self):
   #   return self.dataout, self.indxstart,self.indxend, self.rate
@@ -193,11 +193,11 @@ def index_chunk_MP2(pats = None, queues = None,lock=None, id = None):
       time.sleep(0.01)
   return
 
-def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phaselist=['FCC'], \
-               vendor=None, PC = None, sampleTilt=70.0, camElev = 5.3,\
-               peakDetectPlan = None, nRho=90, nTheta=180, tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9,
-               patStart = 0, patEnd = -1, chunksize = 256, ncpu=-1,
-               return_indexer_obj = False, ebsd_indexer_obj = None, keep_log = False):
+def index_pats_distributed(patsIn = None,filename=None,filenameout=None,phaselist=['FCC'], \
+                           vendor=None,PC = None,sampleTilt=70.0,camElev = 5.3, \
+                           peakDetectPlan = None,nRho=90,nTheta=180,tSigma= None,rSigma=None,rhoMaskFrac=0.1,nBands=9,
+                           patstart = 0,npats = -1,chunksize = 256,ncpu=-1,
+                           return_indexer_obj = False,ebsd_indexer_obj = None,keep_log = False):
 
 
   n_cpu_nodes = int(multiprocessing.cpu_count()) #int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
@@ -249,46 +249,41 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
   mode = 'memorymode'
   if pats is None:
     mode = 'filemode'
-    temp, indexer = index_pats(patStart = 0, patEnd = 1,return_indexer_obj = True, ebsd_indexer_obj = indexer)
+    temp, indexer = index_pats(patstart = 0, npats = 1,return_indexer_obj = True, ebsd_indexer_obj = indexer)
 
   if mode == 'filemode':
-    npats = indexer.fID.nPatterns
+    npatsTotal = indexer.fID.nPatterns
   else:
     pshape = pats.shape
     if len(pshape) == 2:
-      npats = 1
+      npatsTotal = 1
       pats = pats.reshape([1,pshape[0],pshape[1]])
     else:
-      npats = pshape[0]
-    temp,indexer = index_pats(pats[0,:,:], patStart=0,patEnd=1,return_indexer_obj=True,ebsd_indexer_obj=indexer)
+      npatsTotal = pshape[0]
+    temp,indexer = index_pats(pats[0,:,:], patstart=0,npats=1,return_indexer_obj=True,ebsd_indexer_obj=indexer)
 
-  if patStart < 0:
-    patStart = npats - patStart
-  if patEnd <= 0:
-    patEnd = npats - patEnd + 1
-  if patEnd > npats:
-    patEnd = npats
-  if patEnd <= patStart:
-    patEnd = patStart +1
+  if patstart < 0:
+    patstart = npatsTotal - patstart
+  if npats <= 0:
+    npats = npatsTotal - patstart
 
-  npats = patEnd - patStart
 
   #place indexer obj in shared memory store so all workers can use it.
   remote_indexer = ray.put(indexer)
   # set up the jobs
-  njobs = (np.ceil(npats/chunksize)).astype(np.long)
+  njobs = (np.ceil(npats / chunksize)).astype(np.long)
   #p_indx_start = [i*chunksize+patStart for i in range(njobs)]
   #p_indx_end = [(i+1)*chunksize+patStart for i in range(njobs)]
   #p_indx_end[-1] = npats+patStart
-  p_indx_start_end = [[i*chunksize+patStart, (i+1)*chunksize+patStart] for i in range(njobs)]
-  p_indx_start_end[-1][1] = npats+patStart
-
+  p_indx_start_end = [[i*chunksize+patstart, (i+1)*chunksize+patstart, chunksize] for i in range(njobs)]
+  p_indx_start_end[-1][1] = npats + patstart
+  p_indx_start_end[-1][2] = p_indx_start_end[-1][1] - p_indx_start_end[-1][0]
 
   if njobs < n_cpu_nodes:
     n_cpu_nodes = njobs
 
   nPhases = len(indexer.phaseLib)
-  dataout = np.zeros((nPhases+1, npats),dtype=indexer.dataTemplate)
+  dataout = np.zeros((nPhases + 1,npats),dtype=indexer.dataTemplate)
   ndone = 0
   nsubmit = 0
   tic0 = timer()
@@ -310,7 +305,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       job_pstart_end = p_indx_start_end.pop(0)
       workers.append(IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote(i))
       jobs.append(workers[i].index_chunk_ray.remote(pats = None, indexer = remote_indexer, \
-                                        patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
+                                        patstart=job_pstart_end[0],npats=job_pstart_end[2]))
       nsubmit += 1
       timers.append(timer())
       time.sleep(0.01)
@@ -333,7 +328,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       if rate[0] >= 0: # job finished as expected
 
         ticp = timers[jid]
-        dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
+        dataout[:,indxstr-patstart:indxend-patstart] = wrkdataout
         npatsdone += rate[1]
         ndone += 1
 
@@ -355,7 +350,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
         if len(p_indx_start_end) > 0:
           job_pstart_end = p_indx_start_end.pop(0)
           jobs[jid] = workers[jid].index_chunk_ray.remote(pats=None,indexer=remote_indexer,
-                                                          patStart=job_pstart_end[0],patEnd=job_pstart_end[1])
+                                                          patstart=job_pstart_end[0],npats=job_pstart_end[2])
           nsubmit += 1
           timers[jid] = timer()
           jobs_indx[jid] = job_pstart_end[:]
@@ -366,7 +361,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
           del jobs_indx[jid]
 
       else:# something bad happened.  Put the job back on the queue and kill this worker
-        p_indx_start_end.append([indxstr,indxend])
+        p_indx_start_end.append([indxstr,indxend,indxend-indxstr ])
         del jobs[jid]
         del workers[jid]
         del timers[jid]
@@ -375,7 +370,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
           job_pstart_end = p_indx_start_end.pop(0)
           workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(jid))
           jobs.append(workers[0].index_chunk_ray.remote(pats=None,indexer=remote_indexer, \
-                                                        patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
+                                                        patstart=job_pstart_end[0],npats=job_pstart_end[2]))
           nsubmit += 1
           timers.append(timer())
           time.sleep(0.01)
@@ -393,7 +388,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
       workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(i))
       jobs.append(workers[i].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:],
                                                     indexer=remote_indexer, \
-                                                    patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
+                                                    patstart=job_pstart_end[0],npats=job_pstart_end[2]))
       nsubmit += 1
       timers.append(timer())
       jobs_indx.append(job_pstart_end)
@@ -415,7 +410,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
         rate = [-1,-1]
       if rate[0] >= 0:
         ticp = timers[jid]
-        dataout[:,indxstr-patStart:indxend-patStart] = wrkdataout
+        dataout[:,indxstr-patstart:indxend-patstart] = wrkdataout
         npatsdone += rate[1]
         ratetemp = len(workers) * (rate[1]) / (timer() - ticp)
         chunkave += ratetemp
@@ -436,7 +431,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
           job_pstart_end = p_indx_start_end.pop(0)
           jobs[jid] = workers[jid].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:]
                                                           ,indexer=remote_indexer,
-                                                          patStart=job_pstart_end[0],patEnd=job_pstart_end[1])
+                                                          patstart=job_pstart_end[0],npats=job_pstart_end[2])
           nsubmit += 1
           timers[jid] = timer()
           jobs_indx[jid] = job_pstart_end
@@ -446,7 +441,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
           del timers[jid]
           del jobs_indx[jid]
       else:# something bad happened.  Put the job back on the queue and kill this worker
-        p_indx_start_end.append([indxstr,indxend])
+        p_indx_start_end.append([indxstr,indxend,indxend-indxstr ])
         del jobs[jid]
         del workers[jid]
         del timers[jid]
@@ -456,7 +451,7 @@ def index_pats_distributed(patsIn = None, filename=None, filenameout=None, phase
           workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(jid))
           jobs.append(workers[0].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:],
                                                         indexer=remote_indexer, \
-                                                        patStart=job_pstart_end[0],patEnd=job_pstart_end[1]))
+                                                        patstart=job_pstart_end[0],npats=job_pstart_end[2]))
           nsubmit += 1
           timers.append(timer())
           jobs_indx.append(job_pstart_end)
@@ -749,11 +744,11 @@ class EBSDIndexer():
       self.bandDetectPlan.band_detect_setup(patDim=[self.fID.patternW,self.fID.patternH])
 
 
-  def index_pats(self, patsin=None, patStart = 0, patEnd = -1,clparams = [None, None, None, None, None], PC=[None, None, None], verbose=0):
+  def index_pats(self, patsin=None, patstart = 0, npats = -1,clparams = None, PC=[None, None, None], verbose=0):
     tic = timer()
 
     if patsin is None:
-      pats = self.fID.read_data(returnArrayOnly=True,patStartEnd=[patStart,patEnd], convertToFloat=True)
+      pats = self.fID.read_data(returnArrayOnly=True,patStartCount=[patstart,npats], convertToFloat=True)
     else:
       pshape = patsin.shape
       if len(pshape) == 2:
@@ -772,8 +767,8 @@ class EBSDIndexer():
       self.bandDetectPlan.band_detect_setup(patterns = pats)
 
     npoints = pats.shape[0]
-    if patEnd == -1:
-      patEnd = npoints+1
+    if npats == -1:
+      npats = npoints
 
     #print(timer() - tic)
     tic = timer()
@@ -837,7 +832,7 @@ class EBSDIndexer():
 
     if verbose > 0:
       print('Band Vote Time: ',timer() - tic)
-    return indxData, patStart, patEnd
+    return indxData, patstart, npats
 
   def refframe2detector(self):
       if self.vendor == 'EDAX':
@@ -861,12 +856,12 @@ def __main__(file = None, ncpu=-1):
     file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1'
 
   dat1, indxer =index_pats(filename = file,
-                                     patStart = 0, patEnd = 1,return_indexer_obj = True,
+                                     patstart = 0, npats = 1,return_indexer_obj = True,
                                      nTheta = 180, nRho=90,
                                      tSigma = 1.0, rSigma = 1.2,rhoMaskFrac=0.1,nBands=9, \
                                      phaselist = ['FCC'])
 
-  dat = index_pats_distributed(filename=file,patStart=0,patEnd=-1,
+  dat = index_pats_distributed(filename=file,patstart=0,npats=-1,
                                           chunksize=1008,ncpu=ncpu,ebsd_indexer_obj=indxer)
   imshape = (indxer.fID.nRows, indxer.fID.nCols)
   ipfim = ipfcolor.ipf_color_cubic(dat['quat']).reshape(imshape[0],imshape[1],3); plt.imshow(ipfim)

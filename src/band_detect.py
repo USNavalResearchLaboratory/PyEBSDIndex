@@ -808,7 +808,7 @@ class BandDetect():
           nImCL = np.int(rdnConvIn_gpu.size / (nTp * nRp * 4))
           shp = (nRp,nTp,nImCL)
           rdnConv = np.zeros(shp,dtype=np.float32)
-          cl.enqueue_copy(clparams[2],rdnConv,rdnConvIn_gpu,is_blocking=True)
+          cl.enqueue_copy(clparams.queue,rdnConv,rdnConvIn_gpu,is_blocking=True)
         else:
           rdnConv = rdnConvIn
 
@@ -876,7 +876,7 @@ class BandDetect():
       temp = (rdnConv[:,:,q].ravel())[indx1D]
       srt = np.argsort(temp)
       nBq = nB if (len(srt) > nB) else len(srt)
-      for i in range(nBq):
+      for i in numba.prange(nBq):
         r = np.int32(peakLoc[0][srt[-1 - i]])
         c = np.int32(peakLoc[1][srt[-1 - i]])
         bandData_maxloc[q,i,:] = np.array([r,c])
@@ -972,7 +972,7 @@ class BandDetect():
     rhoMaskTrim = np.int64((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
 
 
-    prg.maxlabel(queue,(nIm, 1,1),None,
+    prg.maxlabel(queue,(nIm, 1,1),(1,1,1),
                  lMaxRdn_gpu,rdnConv_gpu,
                  maxloc_gpu, maxval_gpu,
                  aveloc_gpu,aveval_gpu,

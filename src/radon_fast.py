@@ -190,7 +190,7 @@ class Radon():
             count += 1.0
           radon[ip,jp,q] = sum/(count + 1.0e-12)
 
-  def radon_fasterCL(self,image,padding = np.array([0,0]),fixArtifacts = False, background = None, returnBuff = False, clparams=[None, None, None, None, None] ):
+  def radon_fasterCL(self,image,padding = np.array([0,0]),fixArtifacts = False, background = None, returnBuff = False, clparams=None ):
 
     tic = timer()
     if clparams is not None:
