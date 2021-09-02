@@ -1,10 +1,12 @@
 import numpy as np
 from pathlib import Path
+import shutil
+import copy
+import os
 
 
 # this function will look at the path and return the correct EBSDPatterFile object
 # if file_type is not specified, then it will be guessed based off of the extension
-
 def get_pattern_file_obj(path,file_type=None,hdfDataPath=None):
   ebsdfileobj = None
 
@@ -23,6 +25,61 @@ def get_pattern_file_obj(path,file_type=None,hdfDataPath=None):
 
   ebsdfileobj.read_header()
   return ebsdfileobj
+
+def pat_flt2int(patterns, method='clip', scalvalue=0.98, bitdepth=None, maxScale=None):
+  if isinstance(EBSDPatterns):
+    pats = patterns.patterns
+    npats = patterns.nPatterns
+  elif isinstance(patterns,np.ndarray):
+    pats = patterns
+
+  shp = pats.shape
+  ndim = pats.ndim
+  if ndim == 2:
+    pats = pats.reshape(1,shp[0],shp[1])
+  elif ndim == 3:
+    pats = pats
+
+  shp = pats.shape
+  npats = shp[0]
+  max = pats.max()
+  min = pats.min()
+  type = pats.dtype
+  # make a guess if the bitdepth is not set
+  if bitdepth is None:
+    bitdepth = 8
+    if max > 258:
+     bitdepth = 16
+
+  outtype = np.uint8
+  minval = 0
+  maxval = 255
+  if bitdepth == 16:
+    outtype = np.uint16
+    minval = 0
+    maxval = 65535
+
+  patsout = np.zeros(shp, dtype=outtype)
+
+  if method=='clip':
+    patsout[:,:,:] = pats.clip(minval, maxval, dtype=outtype)
+  elif method=='fullscale':
+    temp = pats.astype(np.float32) - min
+    if maxScale is None:
+      maxScale = temp.max()
+    temp *= scalvalue*maxval/maxScale
+    temp = np.around(temp)
+    patsout[:,:,:] = temp.astype(outtype)
+  elif method=='scale': # here we assume that the min if not < 0 should not be scaled.
+    temp = pats.astype(np.float32)
+    if min < minval:
+      temp += minval  - min
+    if maxScale is None:
+      maxScale = temp.max()
+    temp *= scalvalue * maxval / maxScale
+    temp = np.around(temp)
+    patsout[:,:,:] = temp.astype(outtype)
+  return patsout
 
 class EBSDPatterns():
   def __init__(self, path=None):
@@ -71,6 +128,19 @@ class EBSDPatternFile():
 
   def write_data(self):
     pass
+
+  def copy_file(self, newpath):
+    src = Path(self.path)
+    dst = Path(newpath)
+    shutil.copyfile(src,dst)
+
+  def copy_obj(self):
+    return copy.deepcopy(self)
+
+  def set_scan_rc(self, rc=(0,0)):
+    self.nCols = rc[1]
+    self.nRows = rc[0]
+    self.nPatterns = self.nCols * self.nRows
 
 
 class UPFile(EBSDPatternFile):
@@ -209,7 +279,7 @@ class UPFile(EBSDPatternFile):
         if ncolread < 0:
           ncolread = self.nCols - colstart
         if nrowread < 0:
-          nrowread = self.nCols - colstart
+          nrowread = self.nRows - rowstart
 
         if (colstart+ncolread) > self.nCols:
           ncolread = self.nCols - colstart
@@ -244,7 +314,7 @@ class UPFile(EBSDPatternFile):
       patsout.patterns = patterns
       return patsout
 
-  def write_header(self, bitdepth = None, writeBlank=False):
+  def write_header(self, writeBlank=False, bitdepth=None):
 
     filepath = self.path
     extension = str.lower(Path(filepath).suffix)
@@ -298,12 +368,132 @@ class UPFile(EBSDPatternFile):
       for j in range(self.nRows):
         for i in range(self.nCols):
           blank.tofile(f)
-    return 0
+
+
+  def write_data(self, newpatterns=None, patStartCount = [0,-1], writeHead=True,
+                 flt2int='clip', scalevalue = 0.98, maxScale = None):
+    castscale = 0.98
+    writeblank = False
+    if patStartCount != [0,-1]:
+      writeblank = True
+
+    if not os.path.isfile(Path(self.path)):
+      writeHead=True
+
+    if writeHead==True:
+      self.write_header(writeBlank=writeblank)
+
+    bitD = self.bitdepth
+
+    if isinstance(EBSDPatterns):
+      pats = newpatterns.patterns
+      npats = newpatterns.nPatterns
+    elif isinstance(newpatterns, np.ndarray):
+      shp = newpatterns.shape
+      ndim = newpatterns.ndim
+      if ndim == 2:
+        pats = newpatterns.reshape(1,shp[0], shp[1])
+      elif ndim == 3:
+        pats = newpatterns
+      npats = pats.shape[0]
+    max = pats.max()
+    type = pats.dtype
+    if maxScale is not None:
+      max = maxScale
+
+    pStartEnd = np.asarray(patStartCount)
+    # npats == number of patterns in the newpatterns
+    # self.nPatterns == number of patterns in the file
+    # nPats to write == number of patterns to write out
+    if pStartEnd.ndim == 1:  # write a continuous set of patterns.
+      patStart = patStartCount[0]
+      nPatToWrite = patStartCount[-1]
+      if nPatToWrite == -1:
+        nPatToWrite = npats
+      if nPatToWrite == 0:
+        nPatToWrite = 1
+      if (patStart + nPatToWrite) > self.nPatterns:
+        nPatToWrite = self.nPatterns - patStart
+
+      try:
+        f = open(Path(self.path).expanduser(),'rb')
+      except:
+        print("File Not Found:",str(Path(self.path)))
+        return -1
+
+      f.seek(self.filePos)
+      nPerPat = self.patternW * self.patternH
+      nPerPatByte = nPerPat*bitD/8
+      f.seek(int(nPerPatByte*patStart),1)
+      for p in np.arange(int(nPatToWrite)):
+        onePat = pats[p, :, :]
+        onePatInt = pat_flt2int(onePat,method='clip',scalvalue=scalevalue,bitdepth=bitD,maxScale=max)
+        onePatInt.tofile(f)
+
+    elif pStartEnd.ndim == 2: # write a slab of patterns.
+        colstart = pStartEnd[0,0]
+        ncolwrite = pStartEnd[1,0]
+        rowstart = pStartEnd[0,1]
+        nrowwrite = pStartEnd[1,1]
+
+        patStart = [colstart, rowstart]
+        if ncolwrite < 0:
+          ncolwrite = self.nCols - colstart
+        if nrowwrite < 0:
+          nrowwrite = self.nRows - rowstart
+
+        if (colstart+ncolwrite) > self.nCols:
+          ncolwrite = self.nCols - colstart
+
+        if (rowstart+nrowwrite) > self.nRows:
+          nrowwrite = self.nRows - rowstart
+
+
+        for i in range(nrowwrite):
+          pstart = ((rowstart+i)*self.nCols)+colstart
+          self.write_data(newpatterns = pats[i*ncolwrite:(i+1)*ncolwrite, :, :], patStartCount=[pstart,ncolwrite],writeHead=False,
+                          flt2int=flt2int,scalevalue=0.98, maxScale = max)
+
+
+  def file_from_pattern_obj(self, patternobj, filepath=None, bitdepth = None):
+    if self.version is None:
+      self.version = 3
+    if self.xStep is None:
+      self.xStep = 1.0
+    if self.yStep is None:
+      self.yStep = 1.0
+
+
+    self.filePos = 42  # file location in bytes where pattern data starts
+    self.extraPatterns = 0
+    self.hexFlag = 0
+
+    if isinstance(patternobj, EBSDPatterns):
+      shp = (patternobj.nPaterns.prod(), patternobj.patternH, patternobj.patternW)
+      mx = patternobj.patterns.max()
+    elif isinstance(patternobj, np.ndarray):
+      shp = patternobj.shape
+      mx = patternobj.max()
+      ndim = patternobj.ndim
+      if ndim == 2: #
+        shp = (1,shp[0], shp[1])
+      elif ndim == 3:
+        shp = shp
+    self.patternH = shp[1]
+    self.patternW = shp[2]
+
+    self.nCols = shp[0]
+    self.nRows = 1
+    self.nPatterns = shp[0]
+
+    if bitdepth is None: #make a guess
+      self.bitdepth = 16
+      if mx <= 256:
+        self.bitdepth = 8
 
 
 
-  def write_data(self, newpatterns=None, patStartCount = [0,-1]):
-    pass
+
 
 
 if __name__ == "__main__":
