@@ -5,6 +5,7 @@ import copy
 import os
 
 
+
 # this function will look at the path and return the correct EBSDPatterFile object
 # if file_type is not specified, then it will be guessed based off of the extension
 def get_pattern_file_obj(path,file_type=None,hdfDataPath=None):
@@ -26,8 +27,8 @@ def get_pattern_file_obj(path,file_type=None,hdfDataPath=None):
   ebsdfileobj.read_header()
   return ebsdfileobj
 
-def pat_flt2int(patterns, method='clip', scalvalue=0.98, bitdepth=None, maxScale=None):
-  if isinstance(EBSDPatterns):
+def pat_flt2int(patterns,method='clip',scalevalue=0.98,bitdepth=None,maxScale=None):
+  if isinstance(patterns,EBSDPatterns):
     pats = patterns.patterns
     npats = patterns.nPatterns
   elif isinstance(patterns,np.ndarray):
@@ -62,12 +63,12 @@ def pat_flt2int(patterns, method='clip', scalvalue=0.98, bitdepth=None, maxScale
   patsout = np.zeros(shp, dtype=outtype)
 
   if method=='clip':
-    patsout[:,:,:] = pats.clip(minval, maxval, dtype=outtype)
+    patsout[:,:,:] = pats.clip(minval, maxval).astype(dtype=outtype)
   elif method=='fullscale':
     temp = pats.astype(np.float32) - min
     if maxScale is None:
       maxScale = temp.max()
-    temp *= scalvalue*maxval/maxScale
+    temp *= scalevalue * maxval / maxScale
     temp = np.around(temp)
     patsout[:,:,:] = temp.astype(outtype)
   elif method=='scale': # here we assume that the min if not < 0 should not be scaled.
@@ -76,7 +77,7 @@ def pat_flt2int(patterns, method='clip', scalvalue=0.98, bitdepth=None, maxScale
       temp += minval  - min
     if maxScale is None:
       maxScale = temp.max()
-    temp *= scalvalue * maxval / maxScale
+    temp *= scalevalue * maxval / maxScale
     temp = np.around(temp)
     patsout[:,:,:] = temp.astype(outtype)
   return patsout
@@ -90,11 +91,12 @@ class EBSDPatterns():
     self.patternH = None
     self.nFileCols = None
     self.nFileRows = None
-    self.nPaterns = None
+    self.nPatterns = None
     self.hexFlag = None
     self.xStep = None
     self.yStep = None
-    self.patStartEnd = None # the 1D index range of patterns that was read
+    self.patStart = [0,0] #starting point of the pattern location in the file. len==1
+    # if 2D, then it is the row/column starting points
     self.patterns = None
 
 
@@ -130,9 +132,12 @@ class EBSDPatternFile():
     pass
 
   def copy_file(self, newpath):
-    src = Path(self.path)
-    dst = Path(newpath)
-    shutil.copyfile(src,dst)
+    src = Path(self.path).expanduser()
+    if newpath is not None:
+      dst = Path(newpath).expanduser()
+    else:
+      dst = Path(str(src.expanduser())+'.copy')
+    shutil.copyfile(src.expanduser(),dst.expanduser())
 
   def copy_obj(self):
     return copy.deepcopy(self)
@@ -206,7 +211,7 @@ class UPFile(EBSDPatternFile):
       dat = np.fromfile(f, dtype=np.float64, count=2)
       self.xStep = dat[0]
       self.yStep = dat[1]
-    return 0
+    f.close()
 
   def read_data(self,path=None,convertToFloat=False,patStartCount = [0,-1],returnArrayOnly=False, bitdepth=None):  # readInterval=[0, -1], arrayOnly=False,
     if path is not None:
@@ -267,7 +272,7 @@ class UPFile(EBSDPatternFile):
         onePat = np.fromfile(f, dtype=type, count=nPerPat)
         onePat = onePat.reshape(self.patternH, self.patternW)
         patterns[p, :, :] = onePat.astype(typeout)
-
+      f.close()
 
     elif pStartEnd.ndim == 2: # read a slab of patterns.
         colstart = pStartEnd[0,0]
@@ -306,7 +311,7 @@ class UPFile(EBSDPatternFile):
       patsout.patternH = self.patternH
       patsout.nFileCols = self.nCols
       patsout.nFileRows = self.nRows
-      patsout.nPaterns = np.array(nPatToRead)
+      patsout.nPatterns = np.array(nPatToRead)
       patsout.hexFlag = self.hexFlag
       patsout.xStep = self.xStep
       patsout.yStep = self.yStep
@@ -336,27 +341,32 @@ class UPFile(EBSDPatternFile):
       return -1
 
     try:
-      f = open(Path(filepath).expanduser(), 'wb')
+      if os.path.isfile(Path(self.path).expanduser()):
+        f = open(Path(filepath).expanduser(), 'r+b')
+        f.seek(0)
+      else:
+        f = open(Path(filepath).expanduser(),'w+b')
+        f.seek(0)
     except:
       print("File Not Found:", str(Path(filepath)))
       return -1
 
-    np.asarray(self.version, dtype=np.uint32)[0].tofile(f)
+    np.asarray(self.version, dtype=np.uint32).tofile(f)
     if self.version == 1:
-      np.asarray(self.patternW,dtype=np.uint32)[0].tofile(f)
-      np.asarray(self.patternH,dtype=np.uint32)[0].tofile(f)
-      np.asarray(self.filePos,dtype=np.uint32)[0].tofile(f)
+      np.asarray(self.patternW,dtype=np.uint32).tofile(f)
+      np.asarray(self.patternH,dtype=np.uint32).tofile(f)
+      np.asarray(self.filePos,dtype=np.uint32).tofile(f)
 
     elif self.version >= 3:
-      np.asarray(self.patternW,dtype=np.uint32)[0].tofile(f)
-      np.asarray(self.patternH,dtype=np.uint32)[0].tofile(f)
-      np.asarray(self.filePos,dtype=np.uint32)[0].tofile(f)
-      np.asarray(self.extraPatterns,dtype=np.uint8)[0].tofile(f)
-      np.asarray(self.nCols,dtype=np.uint32)[0].tofile(f)
-      np.asarray(self.nRows,dtype=np.uint32)[0].tofile(f)
-      np.asarray(self.hexFlag,dtype=np.uint8)[0].tofile(f)
-      np.asarray(self.xStep,dtype=np.float64)[0].tofile(f)
-      np.asarray(self.yStep,dtype=np.float64)[0].tofile(f)
+      np.asarray(self.patternW,dtype=np.uint32).tofile(f)
+      np.asarray(self.patternH,dtype=np.uint32).tofile(f)
+      np.asarray(self.filePos,dtype=np.uint32).tofile(f)
+      np.asarray(self.extraPatterns,dtype=np.uint8).tofile(f)
+      np.asarray(self.nCols,dtype=np.uint32).tofile(f)
+      np.asarray(self.nRows,dtype=np.uint32).tofile(f)
+      np.asarray(self.hexFlag,dtype=np.uint8).tofile(f)
+      np.asarray(self.xStep,dtype=np.float64).tofile(f)
+      np.asarray(self.yStep,dtype=np.float64).tofile(f)
 
     if writeBlank == True:
       if self.bitdepth == 8:
@@ -368,16 +378,16 @@ class UPFile(EBSDPatternFile):
       for j in range(self.nRows):
         for i in range(self.nCols):
           blank.tofile(f)
+    f.close()
 
-
-  def write_data(self, newpatterns=None, patStartCount = [0,-1], writeHead=True,
+  def write_data(self, newpatterns=None, patStartCount = [0,-1], writeHead=False,
                  flt2int='clip', scalevalue = 0.98, maxScale = None):
-    castscale = 0.98
     writeblank = False
     if patStartCount != [0,-1]:
       writeblank = True
 
-    if not os.path.isfile(Path(self.path)):
+
+    if not os.path.isfile(Path(self.path).expanduser()):
       writeHead=True
 
     if writeHead==True:
@@ -385,7 +395,8 @@ class UPFile(EBSDPatternFile):
 
     bitD = self.bitdepth
 
-    if isinstance(EBSDPatterns):
+
+    if isinstance(newpatterns,EBSDPatterns):
       pats = newpatterns.patterns
       npats = newpatterns.nPatterns
     elif isinstance(newpatterns, np.ndarray):
@@ -416,19 +427,21 @@ class UPFile(EBSDPatternFile):
         nPatToWrite = self.nPatterns - patStart
 
       try:
-        f = open(Path(self.path).expanduser(),'rb')
+        f = open(Path(self.path).expanduser(),'br+')
+        f.seek(0,0)
       except:
         print("File Not Found:",str(Path(self.path)))
         return -1
 
-      f.seek(self.filePos)
+      #f.seek(self.filePos)
       nPerPat = self.patternW * self.patternH
       nPerPatByte = nPerPat*bitD/8
-      f.seek(int(nPerPatByte*patStart),1)
+      f.seek(int(nPerPatByte * (patStart) + self.filePos),0)
       for p in np.arange(int(nPatToWrite)):
         onePat = pats[p, :, :]
-        onePatInt = pat_flt2int(onePat,method='clip',scalvalue=scalevalue,bitdepth=bitD,maxScale=max)
+        onePatInt = pat_flt2int(onePat,method=flt2int,scalevalue=scalevalue,bitdepth=bitD,maxScale=max)
         onePatInt.tofile(f)
+      f.close()
 
     elif pStartEnd.ndim == 2: # write a slab of patterns.
         colstart = pStartEnd[0,0]
@@ -469,7 +482,7 @@ class UPFile(EBSDPatternFile):
     self.hexFlag = 0
 
     if isinstance(patternobj, EBSDPatterns):
-      shp = (patternobj.nPaterns.prod(), patternobj.patternH, patternobj.patternW)
+      shp = (patternobj.nPatterns.prod(),patternobj.patternH,patternobj.patternW)
       mx = patternobj.patterns.max()
     elif isinstance(patternobj, np.ndarray):
       shp = patternobj.shape

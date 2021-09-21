@@ -169,7 +169,7 @@ __kernel void convolution3d2d( __global const float16 *in, __constant float *ker
   out[(y*imszx + x) * nImChunk + z] = sum;
 }
 
-//Brute force gray-scale dilation (or local max).  This will be replaced with the van Herk/Gil-Werman algorithm
+//Brute force gray-scale dilation (or local max).  This may be replaced with the van Herk/Gil-Werman algorithm
 __kernel void morphDilateKernelBF( __global const float16 *in,  __global float16 *out,
                                    const long imszx, const long imszy, 
                                    const long padx, const long pady,
