@@ -371,7 +371,7 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
 
   // now place them in the output arrays
   for (i=0; i< lnmax; ++i){
-    if (maxval[z*lnmax+i] > -2.0e6){
+    if (maxval[z*lnmax+i] > -1.0e6){
       //maxval[z*lnmax + i] = maxval1d[lnmax-i-1];
       indxy = maxloc[z*lnmax+i];
       x =  ( indxy % imszx );

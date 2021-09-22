@@ -557,7 +557,7 @@ class BandDetect():
       # there is something very strange that happens if the number of images
       # is a exact multiple of the max group size (typically 256)
       mxGroupSz = gpu[gpu_id].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
-      #nImCL += np.int(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
+      nImCL += np.int(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
       radonCL = np.zeros( (nRp , nTp, nImCL), dtype = np.float32)
       radonCL[:,:,0:shp[2]] = radon
       rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radonCL)
@@ -702,7 +702,7 @@ class BandDetect():
       # there is something very strange that happens if the number of images
       # is a exact multiple of the max group size (typically 256)
       mxGroupSz = gpu[gpu_id].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
-      #nImCL += np.int(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
+      nImCL += np.int(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
       radonCL = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
       radonCL[:,:,0:shp[2]] = radon
       rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radonCL)
@@ -838,11 +838,10 @@ class BandDetect():
                                    np.int(self.nTheta),rdnConvIn,rdnConvIn, lMaxRdnIn)
       rdnConv_out = rdnConvIn
 
-    bandData['max']    = bdat[0][0:nPats,:]
+    bandData['max'] = bdat[0][0:nPats,:]
     bandData['avemax'] = bdat[1][0:nPats,:]
     bandData['maxloc'] = bdat[2][0:nPats, :, :]
     bandData['aveloc'] = bdat[3][0:nPats, :, :]
-    bandData['valid']  = bdat[4][0:nPats, :]
     bandData['maxloc'] -= self.padding.reshape(1,1,2)
     bandData['aveloc'] -= self.padding.reshape(1,1,2)
 
@@ -891,8 +890,8 @@ class BandDetect():
         rnn = np.sum(nn * (np.float32(r) + nnr))
         cnn = np.sum(nn * (np.float32(c) + nnc))
         bandData_aveloc[q,i,:] = np.array([rnn,cnn])
-        bandData_valid[q,i] = 1
-    return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc, bandData_valid
+        bandData_valid[q,i] = 
+    return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc
 
   def band_labelCL(self,rdnConvIn, rdnPadIn, lMaxRdnIn,clparams=None):
 
@@ -1000,8 +999,8 @@ class BandDetect():
     temp = np.asarray(np.unravel_index(maxloc, (shp[0], shp[1])), dtype = np.float32)
     maxlocxy[:,:,0] = temp[0,:,:]
     maxlocxy[:,:,1] = temp[1,:,:]
-    valid = np.asarray(maxval > -1e6, dtype=np.int8)
-    return (maxval,aveval,maxlocxy,aveloc,valid), rdnConv_gpu
+
+    return (maxval,aveval,maxlocxy,aveloc), rdnConv_gpu
 
 
 

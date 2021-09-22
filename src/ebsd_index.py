@@ -85,6 +85,8 @@ class IndexerRay():
       else: #MacOS handles GPU memory conflicts much better when the context is destroyed between each
         # run, and has very low overhead for making the context. 
         self.openCLParams = openclparam.OpenClParam()
+        #self.openCLParams.gpu_id = 0
+        #self.openCLParams.gpu_id = 1
         self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
     except:
       self.openCLParams = None
@@ -219,6 +221,7 @@ def index_pats_distributed(patsIn = None,filename=None,filenameout=None,phaselis
   ray.shutdown()
 
   ray.init(num_cpus=n_cpu_nodes, num_gpus=ngpu, _system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes} )
+  #ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu)
   pats = None
   if patsIn is None:
     pdim = None
