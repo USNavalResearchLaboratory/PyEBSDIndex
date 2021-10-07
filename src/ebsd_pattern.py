@@ -122,7 +122,7 @@ class EBSDPatternFile():
   def read_header(self, path=None):
     pass
 
-  def read_data(self,path=None,convertToFloat=False,patStartEnd = [0,-1],returnArrayOnly=False):
+  def read_data(self,path=None,convertToFloat=False,patStartCount = [0,-1],returnArrayOnly=False):
     pass
 
   def write_header(self):
@@ -213,7 +213,7 @@ class UPFile(EBSDPatternFile):
       self.yStep = dat[1]
     f.close()
 
-  def read_data(self,path=None,convertToFloat=False,patStartCount = [0,-1],returnArrayOnly=False, bitdepth=None):  # readInterval=[0, -1], arrayOnly=False,
+  def read_data(self,path=None,convertToFloat=False,patStartCount = [0,-1],returnArrayOnly=False, bitdepth=None):
     if path is not None:
       self.path = path
       self.read_header(bitdepth=bitdepth)
@@ -239,7 +239,7 @@ class UPFile(EBSDPatternFile):
     else:
       typeout = type
 
-    pStartEnd = np.asarray(patStartCount)
+    pStartEnd = np.asarray(patStartCount, dtype=np.int64)
     if pStartEnd.ndim == 1: # read a continuous set of patterns.
       patStart = patStartCount[0]
       nPatToRead = patStartCount[-1]
@@ -291,14 +291,17 @@ class UPFile(EBSDPatternFile):
 
         if (rowstart+nrowread) > self.nRows:
           nrowread = self.nRows - rowstart
-
+        nrowread = np.uint64(nrowread)
+        ncolread = np.uint64(ncolread)
         nPatToRead = [ncolread, nrowread]
-        patterns = np.zeros([ncolread*nrowread,self.patternH,self.patternW],dtype=typeout)
+
+        patterns = np.zeros([int(ncolread*nrowread),self.patternH,self.patternW],dtype=typeout)
 
         for i in range(nrowread):
-          pstart = ((rowstart+i)*self.nCols)+colstart
+          pstart = int(((rowstart+i)*self.nCols)+colstart)
           ptemp = self.read_data(path=path,convertToFloat=convertToFloat,patStartCount = [pstart,ncolread],returnArrayOnly=True, bitdepth=bitdepth)
-          patterns[i*ncolread:(i+1)*ncolread, :, :] = ptemp
+
+          patterns[int(i*ncolread):int((i+1)*ncolread), :, :] = ptemp
 
     if returnArrayOnly == True:
       return patterns
