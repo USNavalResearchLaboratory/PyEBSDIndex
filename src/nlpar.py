@@ -14,9 +14,13 @@ class NLPAR():
   def __init__(self, filename=None, hdfdatapath=None):
     self.lam = 0.7
     self.searchradius = 3
+    self.dthresh = 0.0
     self.filepath = None
     self.hdfdatapath = None
+    self.filepathout = None
+    self.hdfdatapathout = None
     self.patternfile = None
+    self.patternfileout = None
     self.setfile(filename, hdfdatapath)
     self.mask = None
     self.sigma = None
@@ -26,14 +30,30 @@ class NLPAR():
     if filename is not None:
       self.filepath = Path(filename)
       self.hdfdatapath = hdfdatapath
-      self.getfileobj()
+      self.getfileobj(True)
 
+  def setoutfile(self, filename=None,  hdfdatapath=None):
+    if filename is not None:
+      self.filepathout = Path(filename)
+      self.hdfdatapathout = hdfdatapath
+      self.getfileobj(False)
+    else:
+      if self.patternfile is not None:
+        if self.patternfile.file_type == 'UP':
+          pass #newfilepath =
+        if self.patternfile.file_type == 'HDF5'
+          pass
 
-  def getfileobj(self):
+  def getfileobj(self, inout=None):
+    if inout is None:
+      inout = True
     if self.filepath is not None:
-      self.patternfile = ebsd_pattern.get_pattern_file_obj(self.filepath, hdfDataPath=self.hdfdatapath)
+      if inout == True:
+       self.patternfile = ebsd_pattern.get_pattern_file_obj(self.filepath, hdfDataPath=self.hdfdatapath)
+      else:
+        self.patternfileout = ebsd_pattern.get_pattern_file_obj(self.filepathout, hdfDataPath=self.hdfdatapathout)
 
-  def opt_lambda(self,chunksize=0,saturation_protect=True,automask=True,
+  def opt_lambda(self,chunksize=0,saturation_protect=True,automask=True, backsub = False,
                  target_weights=[0.5, 0.375, 0.25], dthresh=0.0):
 
     target_weights = np.asarray(target_weights)
@@ -99,6 +119,10 @@ class NLPAR():
 
       shp = data.shape
       data = data.reshape(shp[0],phw)
+      if backsub is True:
+        back = np.mean(data, axis=0)
+        back -= np.mean(back)
+        data -= back
 
       rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
       sigchunk, (d2,n2, dij) = self.sigma_numba(data,nn,rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
@@ -113,7 +137,7 @@ class NLPAR():
         lambopt1 = opt.minimize(loptfunc,lam,args=(d2,tw,dthresh),method='Nelder-Mead',
                                 bounds = [[0.0, 10.0]],options={'fatol': 0.0001})
         lamopt_values_chnk.append(lambopt1['x'])
-        #print(lambopt1['x'])
+
 
       lamopt_values.append(lamopt_values_chnk)
     lamopt_values = np.asarray(lamopt_values)
@@ -122,7 +146,107 @@ class NLPAR():
     if self.sigma is None:
       self.sigma = sigma
 
-  
+  def calcnlpar(self,chunksize=0,searchradius=None,lam = None, dthresh = None, saturation_protect=True,automask=True,
+                filename=None, fileout=None, backsub = False,  hdfdatapath=None, hdfdatapathout=None):
+
+
+    if filename is not None:
+      self.setfile(filename=filename,  hdfdatapath=hdfdatapath)
+
+    if fileout is not None:
+      self.setoutfile(filename=fileout,hdfdatapath=hdfdatapathout)
+
+    nrows = np.int64(self.patternfile.nRows)
+    ncols = np.int64(self.patternfile.nCols)
+
+    pwidth = np.int64(self.patternfile.patternW)
+    pheight = np.int64(self.patternfile.patternH)
+    phw = pheight*pwidth
+
+    if chunksize <= 0:
+      chunksize = np.round(1e9/phw/ncols) # keeps the chunk at about 8GB
+      print("Chunk size set to nrows:", int(chunksize))
+    chunksize = np.int64(chunksize)
+
+    if lam is not None:
+      self.lam = lam
+
+    if dthresh is not None:
+      self.dthresh = dthresh
+
+    if searchradius is not None:
+      self.searchradius = searchradius
+
+    lam = np.float32(self.lam)
+    dthresh = np.float32(self.dthresh)
+    sr = np.int64(self.searchradius)
+
+    if (automask is True) and (self.mask is None):
+      self.mask = (self.automask(pheight,pwidth))
+    if self.mask is None:
+      self.mask = np.ones((pheight,pwidth), dytype=np.uint8)
+
+    indices = np.asarray( (self.mask.flatten().nonzero())[0], np.uint64)
+    calcsigma = False
+    if self.sigma is None:
+      calcsigma = True
+      self.sigma = np.zeros((nrows, ncols), dtype=np.float32)+1e24
+
+
+    if np.asarray(self.sigma).size == 1:
+      tmp = np.asarray(self.sigma)[0]
+      self.sigma =  np.zeros((nrows, ncols), dtype=np.float32)+tmp
+      calcsigma = False
+
+    shpsigma = np.asarray(self.sigma).shape
+    if (shpsigma[0] != nrows) and (shpsigma[1] != ncols):
+      self.sigma = np.zeros((nrows,ncols),dtype=np.float32) + 1e24
+      calcsigma = True
+
+
+    sigma = np.asarray(self.sigma)
+
+
+    colstartcount = np.asarray([0,ncols],dtype=np.int64)
+    print(lam, sr, dthresh)
+    for j in range(0,nrows,chunksize):
+      rowstartread = np.int64(max(0, j-sr))
+      rowend = min(j + chunksize+sr,nrows)
+      rowcountread = np.int64(rowend-rowstartread)
+      data = self.patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
+                                        convertToFloat=True,returnArrayOnly=True)
+
+      shpdata = data.shape
+      data = data.reshape(shpdata[0], phw)
+
+      if backsub is True:
+        back = np.mean(data,axis=0)
+        back -= np.mean(back)
+        data -= back
+
+      rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
+      if calcsigma is True:
+        sigchunk, tmp = self.sigma_numba(data,1,rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
+        del tmp
+        tmp = (sigma[rowstartread:rowend,:] < sigchunk).choose(sigchunk,sigma[rowstartread:rowend,:])
+        sigma[rowstartread:rowend,:] = tmp
+      else:
+        sigchunk = sigma[rowstartread:rowend,:]
+
+      if rowend == nrows:
+        rowstartcount = np.asarray([j-rowstartread,rowcountread - (j-rowstartread) ], dtype=np.int64)
+      else:
+        rowstartcount = np.asarray([j-rowstartread,chunksize ], dtype=np.int64)
+      print(sigchunk.min(), sigchunk.max())
+      dataout = self.nlpar_nb(data,lam, sr, dthresh, sigchunk,
+                              rowcountread,ncols,indices,saturation_protect)
+
+      dataout = dataout.reshape(shpdata)
+      return dataout
+      #sigma[j:j+rowstartcount[1],:] += \
+      #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
+
+
 
   def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True):
 
@@ -244,3 +368,101 @@ class NLPAR():
 
         sigma[j,i] = np.sqrt(mind)
     return sigma,( dout, nout, dij)
+
+  @staticmethod
+  @numba.jit(nopython=True,cache=True,fastmath=True,parallel=True)
+  def nlpar_nb(data,lam, sr, dthresh, sigma, nrows,ncols,indices,saturation_protect=True):
+
+    def getpairid(idx0, idx1):
+      idx0_t = int(idx0)
+      idx1_t = int(idx1)
+      if idx0 < idx1:
+        pairid = idx0_t + (idx1_t << 32)
+      else:
+        pairid = idx1_t + (idx0_t << 32)
+      return numba.uint64(pairid)
+
+    lam2 = 1.0 / lam**2
+    dataout = np.zeros_like(data, np.float32)
+    shpdata = data.shape
+    shpind = indices.shape
+    winsz = np.int32((2*sr+1)**2)
+
+
+    mxval = np.max(data)
+
+    if saturation_protect == False:
+      mxval += 1.0
+    else:
+      mxval *= 1.0#0.9961
+
+    for j in numba.prange(nrows):
+      winstart_y = max((j - sr),0) - max((j + sr - (nrows - 1)),0)
+      winend_y = min((j + sr),(nrows - 1)) + max((sr - j),0) + 1
+      pairdict = numba.typed.Dict.empty(key_type=numba.core.types.uint64,value_type=numba.core.types.float32)
+      for i in range(ncols):
+        winstart_x = max((i - sr),0) - max((i + sr - (ncols - 1)),0)
+        winend_x = min((i + sr),(ncols - 1)) + max((sr - i),0) + 1
+
+        weights = np.zeros(winsz,dtype=np.float32)
+        pindx = np.zeros(winsz,dtype=np.uint64)
+
+        indx_0 = i + ncols * j
+        sigma0 = sigma[j,i]**2
+
+        counter = 0
+        for j_nn in range(winstart_y,winend_y):
+          for i_nn in range(winstart_x,winend_x):
+            indx_nn = i_nn + ncols * j_nn
+            pindx[counter] = indx_nn
+            #print(indx_0, indx_nn)
+            if indx_nn == indx_0:
+              pass
+            else:
+              pairid = getpairid(indx_0, indx_nn)
+              if pairid in pairdict:
+                pass
+              else:
+                sigma1 = sigma[j_nn,i_nn]**2
+                d2 = np.float32(0.0)
+                n2 = np.float32(0.0)
+                for q in range(shpind[0]):
+                  d0 = data[indx_0,indices[q]]
+                  d1 = data[indx_nn,indices[q]]
+                  if (d1 < mxval) and (d0 < mxval):
+                    n2 += 1.0
+                    d2 += (d0 - d1) ** 2
+                d2 -= n2*(sigma0+sigma1)
+                dnorm = (sigma1 + sigma0)*np.sqrt(2.0*n2)
+                if dnorm > 1.e-8:
+                  d2 /= dnorm
+                else:
+                  d2 = 1e6*n2
+                pairdict[pairid] = d2
+            counter += 1
+        #print('________________')
+        # end of window scanning
+        for i_nn in range(winsz):
+          indx_nn = pindx[i_nn]
+          if indx_nn == indx_0:
+            weights[i_nn] = 1.0
+          else:
+            pairid = getpairid(indx_0, indx_nn)
+
+            #print(indx_0, indx_nn, pairid, pairid in pairdict)
+            weights[i_nn] = pairdict[pairid]
+            weights[i_nn] = np.maximum(weights[i_nn]-dthresh, 0.0)
+            weights[i_nn] = np.exp(-1.0 * weights[i_nn] * lam2)
+
+        sum = np.sum(weights)
+        weights /= sum
+        for i_nn in range(winsz):
+          indx_nn = pindx[i_nn]
+          for q in range(shpdata[1]):
+            dataout[indx_0, q] += data[indx_nn, q]*weights[i_nn]
+
+
+
+    return dataout
+
+
