@@ -42,8 +42,9 @@ def optimize(pats, indexer, PC0 = None, batch = False):
   else:
     patterns = pats
 
-
-  banddat = indexer.bandDetectPlan.find_bands(pats)
+  indxerCPU = copy.deepcopy(indexer)
+  indxerCPU.bandDetectPlan.CLOps = [False, False, False, False]
+  banddat = indxerCPU.bandDetectPlan.find_bands(pats)
   npoints = banddat.shape[0]
   if PC0 is None:
     PC0 = indexer.PC
@@ -52,7 +53,7 @@ def optimize(pats, indexer, PC0 = None, batch = False):
 
     PCopt = opt.minimize(optfunction,PC0,args=(indexer,banddat),method='Nelder-Mead', options={'fatol': 0.00001})
     PCoutRet = PCopt['x']
-    print(PCopt['fun'])
+    #print(PCopt['fun'])
   else:
     PCoutRet = np.zeros((npoints, 3))
     for i in range(npoints):

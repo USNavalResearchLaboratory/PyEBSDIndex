@@ -6,7 +6,7 @@ import rotlib
 
 def qu2ipf_cubic(quats, vector=np.array([0,0,1.0])):
   xstalvect = rotlib.quat_vector(quats,vector)
-  return ipf_color_cubic(xstalvect)
+  return ipf_color_cubic(xstalvect).clip(0.0, 1.0)
 
 def ipf_color_cubic(xstalvect):
   shp = xstalvect.shape
