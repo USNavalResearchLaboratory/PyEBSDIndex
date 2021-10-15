@@ -1,26 +1,29 @@
 import numpy as np
-import pyopencl as cl
-import openclparam
+from timeit import default_timer as timer
+import time
+# import pyopencl as cl
+# from pathlib import Path
+from os import path, environ
+import sys
+
+import multiprocessing
+import queue
+
+import matplotlib.pyplot as plt
 import ray
 
 if ray.__version__ < '1.1.0':  # this fixes an issue when runnning locally on a VPN
   ray.services.get_node_ip_address = lambda: '127.0.0.1'
 else:
   ray._private.services.get_node_ip_address = lambda: '127.0.0.1'
-# from pathlib import Path
-# from os import path, environ
-import sys
-import multiprocessing
-import queue
+
 import ebsd_pattern
 import band_detect
 import band_vote
 import rotlib
 import tripletlib
-from timeit import default_timer as timer
-import time
 import EBSDImage.IPFcolor as ipfcolor
-import matplotlib.pyplot as plt
+import openclparam
 
 RADEG = 180.0 / np.pi
 import traceback
@@ -71,6 +74,8 @@ def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
 @ray.remote(num_cpus=1,num_gpus=1)
 class IndexerRay():
   def __init__(self,actorid=0):
+    sys.path.append(path.dirname(__file__))  # do this to help Ray find the program files
+    import openclparam # do this to help Ray find the program files
     # device, context, queue, program, mf
     # self.dataout = None
     # self.indxstart = None
@@ -84,7 +89,8 @@ class IndexerRay():
         self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
 
       else:  # MacOS handles GPU memory conflicts much better when the context is destroyed between each
-        # run, and has very low overhead for making the context. 
+        # run, and has very low overhead for making the context.
+        #pass
         self.openCLParams = openclparam.OpenClParam()
         # self.openCLParams.gpu_id = 0
         # self.openCLParams.gpu_id = 1

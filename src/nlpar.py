@@ -40,18 +40,23 @@ class NLPAR():
     else:
       if self.patternfile is not None:
         if self.patternfile.file_type == 'UP':
-          pass #newfilepath =
-        if self.patternfile.file_type == 'HDF5'
+          p = Path(self.filepath)
+          appnd = "lam{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)\
+                  + "dt{:1.1f}".format(self.dthresh)
+          newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
+          self.patternfile.copy_file(newfilepath)
+          self.filepathout = newfilepath
+          self.getfileobj(False)
+        if self.patternfile.file_type == 'HDF5':
           pass
 
-  def getfileobj(self, inout=None):
-    if inout is None:
-      inout = True
-    if self.filepath is not None:
+  def getfileobj(self, inout=True):
       if inout == True:
-       self.patternfile = ebsd_pattern.get_pattern_file_obj(self.filepath, hdfDataPath=self.hdfdatapath)
+        if self.filepath is not None:
+          self.patternfile = ebsd_pattern.get_pattern_file_obj(self.filepath, hdfDataPath=self.hdfdatapath)
       else:
-        self.patternfileout = ebsd_pattern.get_pattern_file_obj(self.filepathout, hdfDataPath=self.hdfdatapathout)
+        if self.filepathout is not None:
+          self.patternfileout = ebsd_pattern.get_pattern_file_obj(self.filepathout, hdfDataPath=self.hdfdatapathout)
 
   def opt_lambda(self,chunksize=0,saturation_protect=True,automask=True, backsub = False,
                  target_weights=[0.5, 0.375, 0.25], dthresh=0.0):
@@ -156,6 +161,9 @@ class NLPAR():
     if fileout is not None:
       self.setoutfile(filename=fileout,hdfdatapath=hdfdatapathout)
 
+    if self.patternfileout is None:
+      self.setoutfile()
+
     nrows = np.int64(self.patternfile.nRows)
     ncols = np.int64(self.patternfile.nCols)
 
@@ -233,16 +241,19 @@ class NLPAR():
       else:
         sigchunk = sigma[rowstartread:rowend,:]
 
-      if rowend == nrows:
-        rowstartcount = np.asarray([j-rowstartread,rowcountread - (j-rowstartread) ], dtype=np.int64)
-      else:
-        rowstartcount = np.asarray([j-rowstartread,chunksize ], dtype=np.int64)
-      print(sigchunk.min(), sigchunk.max())
+
       dataout = self.nlpar_nb(data,lam, sr, dthresh, sigchunk,
                               rowcountread,ncols,indices,saturation_protect)
 
-      dataout = dataout.reshape(shpdata)
-      return dataout
+      dataout = dataout.reshape(rowcountread, ncols, phw)
+      dataout = dataout[j-rowstartread:, :, : ]
+      shpout = dataout.shape
+      dataout = dataout.reshape(shpout[0]*shpout[1], pheight, pwidth)
+
+      self.patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
+                                     flt2int='clip',scalevalue=1.0 )
+
+      #return dataout
       #sigma[j:j+rowstartcount[1],:] += \
       #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
 
@@ -396,13 +407,13 @@ class NLPAR():
     else:
       mxval *= 1.0#0.9961
 
-    for j in numba.prange(nrows):
-      winstart_y = max((j - sr),0) - max((j + sr - (nrows - 1)),0)
-      winend_y = min((j + sr),(nrows - 1)) + max((sr - j),0) + 1
+    for i in numba.prange(ncols):
+      winstart_x = max((i - sr),0) - max((i + sr - (ncols - 1)),0)
+      winend_x = min((i + sr),(ncols - 1)) + max((sr - i),0) + 1
       pairdict = numba.typed.Dict.empty(key_type=numba.core.types.uint64,value_type=numba.core.types.float32)
-      for i in range(ncols):
-        winstart_x = max((i - sr),0) - max((i + sr - (ncols - 1)),0)
-        winend_x = min((i + sr),(ncols - 1)) + max((sr - i),0) + 1
+      for j in range(nrows):
+        winstart_y = max((j - sr),0) - max((j + sr - (nrows - 1)),0)
+        winend_y = min((j + sr),(nrows - 1)) + max((sr - j),0) + 1
 
         weights = np.zeros(winsz,dtype=np.float32)
         pindx = np.zeros(winsz,dtype=np.uint64)
@@ -438,7 +449,7 @@ class NLPAR():
                   d2 /= dnorm
                 else:
                   d2 = 1e6*n2
-                pairdict[pairid] = d2
+                pairdict[pairid] = numba.float32(d2)
             counter += 1
         #print('________________')
         # end of window scanning

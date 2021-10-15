@@ -1507,7 +1507,8 @@ def quataveL(quin,unitNorm=True):
     else:
       s = -1.0
     qout += s*qu[i+1,:]
-  qout /= numba.float32(n)
+  #qout /= numba.float32(n)
+  qout = quatnormL(qout)
   return qout
 
 def quat_multiply(q1,q2,p=P):

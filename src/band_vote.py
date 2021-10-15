@@ -299,7 +299,10 @@ class BandVote():
     tic = timer()
     test = np.sum(test * poles[polematch[whGood], :], axis = 1)
     test = np.arccos(np.clip(test, -1.0, 1.0))*RADEG
+
+
     fit = np.mean(test)
+
     #print('fitting: ',timer() - tic)
     return avequat, fit
 
