@@ -265,13 +265,13 @@ class UPFile(EBSDPatternFile):
       nPerPat = self.patternW * self.patternH
 
       f.seek(int(nPerPat * patStart * bitD/8), 1)
-
-
-
-      for p in np.arange(int(nPatToRead)):
-        onePat = np.fromfile(f, dtype=type, count=nPerPat)
-        onePat = onePat.reshape(self.patternH, self.patternW)
-        patterns[p, :, :] = onePat.astype(typeout)
+      readpats = np.fromfile(f, dtype=type, count=int(nPatToRead*nPerPat))
+      readpats = readpats.reshape(nPatToRead,self.patternH, self.patternW)
+      patterns = readpats.astype(typeout)
+      # for p in np.arange(int(nPatToRead)):
+      #   onePat = np.fromfile(f, dtype=type, count=nPerPat)
+      #   onePat = onePat.reshape(self.patternH, self.patternW)
+      #   patterns[p, :, :] = onePat.astype(typeout)
       f.close()
 
     elif pStartEnd.ndim == 2: # read a slab of patterns.
@@ -440,10 +440,12 @@ class UPFile(EBSDPatternFile):
       nPerPat = self.patternW * self.patternH
       nPerPatByte = nPerPat*bitD/8
       f.seek(int(nPerPatByte * (patStart) + self.filePos),0)
-      for p in np.arange(int(nPatToWrite)):
-        onePat = pats[p, :, :]
-        onePatInt = pat_flt2int(onePat,method=flt2int,scalevalue=scalevalue,bitdepth=bitD,maxScale=max)
-        onePatInt.tofile(f)
+      pat2write = pat_flt2int(pats,method=flt2int,scalevalue=scalevalue,bitdepth=bitD,maxScale=max)
+      pat2write.tofile(f)
+      #for p in np.arange(int(nPatToWrite)):
+      #  onePat = pats[p, :, :]
+      #  onePatInt = pat_flt2int(onePat,method=flt2int,scalevalue=scalevalue,bitdepth=bitD,maxScale=max)
+      #  onePatInt.tofile(f)
       f.close()
 
     elif pStartEnd.ndim == 2: # write a slab of patterns.

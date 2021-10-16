@@ -11,10 +11,10 @@ import ebsd_pattern
 #environ["NUMBA_CACHE_DIR"] = str(tempdir)
 
 class NLPAR():
-  def __init__(self, filename=None, hdfdatapath=None):
-    self.lam = 0.7
-    self.searchradius = 3
-    self.dthresh = 0.0
+  def __init__(self, filename=None, hdfdatapath=None, lam=0.7, searchradius=3,dthresh=0.0):
+    self.lam = lam
+    self.searchradius = searchradius
+    self.dthresh = dthresh
     self.filepath = None
     self.hdfdatapath = None
     self.filepathout = None
@@ -214,7 +214,8 @@ class NLPAR():
 
     sigma = np.asarray(self.sigma)
 
-
+    nthreadpos = numba.get_num_threads()
+    #numba.set_num_threads(36)
     colstartcount = np.asarray([0,ncols],dtype=np.int64)
     print(lam, sr, dthresh)
     for j in range(0,nrows,chunksize):
@@ -241,7 +242,7 @@ class NLPAR():
       else:
         sigchunk = sigma[rowstartread:rowend,:]
 
-
+      print('Block', j)
       dataout = self.nlpar_nb(data,lam, sr, dthresh, sigchunk,
                               rowcountread,ncols,indices,saturation_protect)
 
@@ -252,11 +253,12 @@ class NLPAR():
 
       self.patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
                                      flt2int='clip',scalevalue=1.0 )
-
+      #self.patternfileout.write_data(newpatterns=dataout,patStartCount=[j*ncols,shpout[0]*shpout[1]],
+      #                               flt2int='clip',scalevalue=1.0 )
       #return dataout
       #sigma[j:j+rowstartcount[1],:] += \
       #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
-
+    numba.set_num_threads(nthreadpos)
 
 
   def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True):
@@ -401,12 +403,10 @@ class NLPAR():
 
 
     mxval = np.max(data)
-
     if saturation_protect == False:
-      mxval += 1.0
+      mxval += np.float32(1.0)
     else:
-      mxval *= 1.0#0.9961
-
+      mxval *= np.float32(1.0)
     for i in numba.prange(ncols):
       winstart_x = max((i - sr),0) - max((i + sr - (ncols - 1)),0)
       winend_x = min((i + sr),(ncols - 1)) + max((sr - i),0) + 1
@@ -426,13 +426,13 @@ class NLPAR():
           for i_nn in range(winstart_x,winend_x):
             indx_nn = i_nn + ncols * j_nn
             pindx[counter] = indx_nn
-            #print(indx_0, indx_nn)
+
             if indx_nn == indx_0:
-              pass
+              weights[counter] = np.float32(0.0)
             else:
               pairid = getpairid(indx_0, indx_nn)
               if pairid in pairdict:
-                pass
+                weights[counter] = pairdict[pairid]
               else:
                 sigma1 = sigma[j_nn,i_nn]**2
                 d2 = np.float32(0.0)
@@ -441,38 +441,30 @@ class NLPAR():
                   d0 = data[indx_0,indices[q]]
                   d1 = data[indx_nn,indices[q]]
                   if (d1 < mxval) and (d0 < mxval):
-                    n2 += 1.0
-                    d2 += (d0 - d1) ** 2
+                    n2 += np.float32(1.0)
+                    d2 += (d0 - d1) ** np.int32(2)
                 d2 -= n2*(sigma0+sigma1)
-                dnorm = (sigma1 + sigma0)*np.sqrt(2.0*n2)
-                if dnorm > 1.e-8:
+                dnorm = (sigma1 + sigma0)*np.sqrt(np.float32(2.0)*n2)
+                if dnorm > np.float32(1.e-8):
                   d2 /= dnorm
                 else:
-                  d2 = 1e6*n2
+                  d2 = np.float32(1e6)*n2
+                weights[counter] = d2
                 pairdict[pairid] = numba.float32(d2)
             counter += 1
         #print('________________')
         # end of window scanning
+        sum = np.float(0.0)
+        for i_nn in range(winsz):
+          weights[i_nn] = np.maximum(weights[i_nn]-dthresh, numba.float32(0.0))
+          weights[i_nn] = np.exp(-1.0 * weights[i_nn] * lam2)
+          sum += weights[i_nn]
+
         for i_nn in range(winsz):
           indx_nn = pindx[i_nn]
-          if indx_nn == indx_0:
-            weights[i_nn] = 1.0
-          else:
-            pairid = getpairid(indx_0, indx_nn)
-
-            #print(indx_0, indx_nn, pairid, pairid in pairdict)
-            weights[i_nn] = pairdict[pairid]
-            weights[i_nn] = np.maximum(weights[i_nn]-dthresh, 0.0)
-            weights[i_nn] = np.exp(-1.0 * weights[i_nn] * lam2)
-
-        sum = np.sum(weights)
-        weights /= sum
-        for i_nn in range(winsz):
-          indx_nn = pindx[i_nn]
+          weights[i_nn] /= sum
           for q in range(shpdata[1]):
             dataout[indx_0, q] += data[indx_nn, q]*weights[i_nn]
-
-
 
     return dataout
 
