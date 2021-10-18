@@ -8,8 +8,9 @@ dependencies:
   - scipy 
   - matplotlib 
   - pyopencl
-  #- ocl_icd_wrapper_apple
-  #- ocl-icd-system
+  - jupyter-labs
+  #- ocl_icd_wrapper_apple # MacOS
+  #- ocl-icd-system # linux (maybe windows?)
   - pip
   - pip:
     - 'ray[default]'

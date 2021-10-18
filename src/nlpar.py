@@ -36,6 +36,8 @@ class NLPAR():
     if filename is not None:
       self.filepathout = Path(filename)
       self.hdfdatapathout = hdfdatapath
+      if str(self.filepathout) != str(self.patternfile.path):
+        self.patternfile.copy_file(self.filepathout)
       self.getfileobj(False)
     else:
       if self.patternfile is not None:
@@ -59,7 +61,7 @@ class NLPAR():
           self.patternfileout = ebsd_pattern.get_pattern_file_obj(self.filepathout, hdfDataPath=self.hdfdatapathout)
 
   def opt_lambda(self,chunksize=0,saturation_protect=True,automask=True, backsub = False,
-                 target_weights=[0.5, 0.375, 0.25], dthresh=0.0):
+                 target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True):
 
     target_weights = np.asarray(target_weights)
 
@@ -95,7 +97,7 @@ class NLPAR():
 
     nn = 1
     if chunksize <= 0:
-      chunksize = np.round(1e9 / phw / ncols)  # keeps the chunk at about 4GB
+      chunksize = np.maximum(1, np.round(1e9 / phw / ncols) ) # keeps the chunk at about 4GB
       print("Chunk size set to nrows:", int(chunksize))
     chunksize = np.int64(chunksize)
 
@@ -104,7 +106,7 @@ class NLPAR():
     if (automask is True) and (self.mask is None):
       self.mask = (self.automask(pheight,pwidth))
     if self.mask is None:
-      self.mask = np.ones((pheight,pwidth),dytype=np.uint8)
+      self.mask = np.ones((pheight,pwidth),dtype=np.uint8)
 
     indices = np.asarray((self.mask.flatten().nonzero())[0],np.uint64)
 
@@ -115,6 +117,7 @@ class NLPAR():
     dthresh = np.float32(dthresh)
     lamopt_values = []
     for j in range(0,nrows,chunksize):
+      print('Block',j)
       #rowstartread = np.int64(max(0,j - nn))
       rowstartread = np.int64(j)
       rowend = min(j + chunksize + nn,nrows)
@@ -147,16 +150,31 @@ class NLPAR():
       lamopt_values.append(lamopt_values_chnk)
     lamopt_values = np.asarray(lamopt_values)
     print("Range of lambda values: ", np.mean(lamopt_values, axis = 0).flatten())
-    print("Optimal Choice: ", np.mean(lamopt_values))
+    print("Optimal Choice: ", np.median(np.mean(lamopt_values, axis = 0)))
+    if autoupdate == True:
+      self.lam = np.median(np.mean(lamopt_values, axis = 0))
     if self.sigma is None:
       self.sigma = sigma
 
   def calcnlpar(self,chunksize=0,searchradius=None,lam = None, dthresh = None, saturation_protect=True,automask=True,
                 filename=None, fileout=None, backsub = False,  hdfdatapath=None, hdfdatapathout=None):
 
+    if lam is not None:
+      self.lam = lam
+
+    if dthresh is not None:
+      self.dthresh = dthresh
+
+    if searchradius is not None:
+      self.searchradius = searchradius
+
+    lam = np.float32(self.lam)
+    dthresh = np.float32(self.dthresh)
+    sr = np.int64(self.searchradius)
 
     if filename is not None:
       self.setfile(filename=filename,  hdfdatapath=hdfdatapath)
+      self.sigma = None
 
     if fileout is not None:
       self.setoutfile(filename=fileout,hdfdatapath=hdfdatapathout)
@@ -172,27 +190,16 @@ class NLPAR():
     phw = pheight*pwidth
 
     if chunksize <= 0:
-      chunksize = np.round(1e9/phw/ncols) # keeps the chunk at about 8GB
+      chunksize = np.maximum(1, np.round(1e9 / phw / ncols) ) # keeps the chunk at about 8GB
       print("Chunk size set to nrows:", int(chunksize))
     chunksize = np.int64(chunksize)
 
-    if lam is not None:
-      self.lam = lam
 
-    if dthresh is not None:
-      self.dthresh = dthresh
-
-    if searchradius is not None:
-      self.searchradius = searchradius
-
-    lam = np.float32(self.lam)
-    dthresh = np.float32(self.dthresh)
-    sr = np.int64(self.searchradius)
 
     if (automask is True) and (self.mask is None):
       self.mask = (self.automask(pheight,pwidth))
     if self.mask is None:
-      self.mask = np.ones((pheight,pwidth), dytype=np.uint8)
+      self.mask = np.ones((pheight,pwidth), dtype=np.uint8)
 
     indices = np.asarray( (self.mask.flatten().nonzero())[0], np.uint64)
     calcsigma = False
@@ -259,7 +266,7 @@ class NLPAR():
       #sigma[j:j+rowstartcount[1],:] += \
       #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
     numba.set_num_threads(nthreadpos)
-
+    self.filepathout = None
 
   def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True):
 
@@ -428,7 +435,7 @@ class NLPAR():
             pindx[counter] = indx_nn
 
             if indx_nn == indx_0:
-              weights[counter] = np.float32(0.0)
+              weights[counter] = np.float32(-1.0e6)
             else:
               pairid = getpairid(indx_0, indx_nn)
               if pairid in pairdict:
