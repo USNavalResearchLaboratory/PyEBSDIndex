@@ -1,8 +1,17 @@
-**/__pycache__
 *.o
-**/.idea
 rotlibcheck.h5
-**.dgraph**
-**.ipynb_checkpoints**
-src/Archive
+**.dgraph
+pyebsdindex/Archive
 report.log
+
+# Python
+**/__pycache__
+*.egg-info
+
+# Jupyter
+**.ipynb_checkpoints
+
+# Editors
+**/.idea
+.vscode
+*.code-workspace
