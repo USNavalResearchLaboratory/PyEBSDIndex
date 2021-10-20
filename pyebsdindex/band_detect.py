@@ -1,13 +1,15 @@
-import numpy as np
-from os import path, environ
+from os import environ
+from timeit import default_timer as timer
+
+import matplotlib.pyplot as plt
 import numba
+import numpy as np
+import pyopencl as cl
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage.morphology import grey_dilation as scipy_grey_dilation
-import radon_fast
-from timeit import default_timer as timer
-import matplotlib.pyplot as plt
-import pyopencl as cl
-import openclparam
+
+from pyebsdindex import openclparam, radon_fast
+
 
 #from os import environ
 #environ['PYOPENCL_COMPILER_OUTPUT'] = '1'

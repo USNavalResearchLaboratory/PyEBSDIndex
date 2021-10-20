@@ -1,6 +1,7 @@
+from timeit import default_timer as timer
+
 import numpy as np
 import numba
-from timeit import default_timer as timer
 import ray
 
 

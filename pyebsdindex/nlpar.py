@@ -1,14 +1,15 @@
-import numpy as np
-import numba
-import scipy.optimize as opt
-import matplotlib.pyplot as plt
 from pathlib import Path
-from os import environ
 from timeit import default_timer as timer
 
+import numba
+import numpy as np
+import scipy.optimize as opt
 
-import ebsd_pattern
+from pyebsdindex import ebsd_pattern
+
+#from os import environ
 #environ["NUMBA_CACHE_DIR"] = str(tempdir)
+
 
 class NLPAR():
   def __init__(self, filename=None, hdfdatapath=None, lam=0.7, searchradius=3,dthresh=0.0):

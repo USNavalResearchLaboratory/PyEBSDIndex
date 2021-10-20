@@ -1,12 +1,17 @@
-import numpy as np
-import numba
-import rotlib
-from timeit import default_timer as timer
-RADEG = 180.0/np.pi
 from os import environ
-import tempfile
 from pathlib import PurePath
 import platform
+import tempfile
+from timeit import default_timer as timer
+
+import numba
+import numpy as np
+
+from pyebsdindex import rotlib
+
+
+RADEG = 180.0/np.pi
+
 tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
 tempdir = tempdir.joinpath('numba')
 environ["NUMBA_CACHE_DIR"] = str(tempdir)

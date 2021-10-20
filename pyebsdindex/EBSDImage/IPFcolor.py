@@ -1,7 +1,8 @@
-import numpy as np
 import matplotlib.colors as pltcolors
 import matplotlib.pyplot as plt
-import rotlib
+import numpy as np
+
+from pyebsdindex import rotlib
 
 
 def qu2ipf_cubic(quats, vector=np.array([0,0,1.0])):
