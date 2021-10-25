@@ -1,10 +1,10 @@
-import numpy as np
-import scipy.optimize as opt
-import pyswarms as pso
 import copy
-from timeit import default_timer as timer
-import time
-import ebsd_index
+
+import numpy as np
+import pyswarms as pso
+import scipy.optimize as opt
+
+
 RADEG = 180.0/np.pi
 
 
@@ -118,11 +118,3 @@ def file_opt(fobj, indexer):
 
 
   return pcopt
-
-
-
-
-
-
-
-

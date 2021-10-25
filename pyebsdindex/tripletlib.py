@@ -1,8 +1,10 @@
-import rotlib
-import crystal_sym
 import numpy as np
 
+from pyebsdindex import crystal_sym, rotlib
+
+
 RADEG = 180.0/np.pi
+
 
 class triplib():
   def __init__(self, libType='FCC', phaseName=None, laticeParameter = None):

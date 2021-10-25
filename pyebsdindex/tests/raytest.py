@@ -1,12 +1,14 @@
-import ray
-ray.services.get_node_ip_address = lambda: '127.0.0.1'
-import numpy as np
-import os, sys
-import numba
+import os
 import time
 from timeit import default_timer as timer
+
+import numba
 import pyopencl as cl
-#1from ebsd_index import index_chunk
+import ray
+
+
+ray.services.get_node_ip_address = lambda: '127.0.0.1'
+
 
 @ray.remote
 def testfun(x,y):

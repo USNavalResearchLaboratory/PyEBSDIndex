@@ -1,6 +1,8 @@
 import numpy as np
-#import numba
-import rotlib
+
+from pyebsdindex import rotlib
+
+
 PI = np.pi
 
 def cubicsym_q(quatin=None, low = False):

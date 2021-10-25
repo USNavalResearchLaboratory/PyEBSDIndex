@@ -1,32 +1,30 @@
-import numpy as np
-from timeit import default_timer as timer
-import time
-# import pyopencl as cl
-# from pathlib import Path
 from os import path, environ
-import sys
-
 import multiprocessing
 import queue
+import sys
+import time
+from timeit import default_timer as timer
 
 import matplotlib.pyplot as plt
+import numpy as np
 import ray
+
+from pyebsdindex import (
+    band_detect,
+    band_vote,
+    ebsd_pattern,
+    rotlib,
+    tripletlib,
+)
+from pyebsdindex.EBSDImage import IPFcolor
+
 
 if ray.__version__ < '1.1.0':  # this fixes an issue when runnning locally on a VPN
   ray.services.get_node_ip_address = lambda: '127.0.0.1'
 else:
   ray._private.services.get_node_ip_address = lambda: '127.0.0.1'
 
-import ebsd_pattern
-import band_detect
-import band_vote
-import rotlib
-import tripletlib
-import EBSDImage.IPFcolor as ipfcolor
-import openclparam
-
 RADEG = 180.0 / np.pi
-import traceback
 
 
 def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
@@ -857,5 +855,5 @@ def __main__(file=None,ncpu=-1):
   dat = index_pats_distributed(filename=file,patstart=0,npats=-1,
                                chunksize=1008,ncpu=ncpu,ebsd_indexer_obj=indxer)
   imshape = (indxer.fID.nRows,indxer.fID.nCols)
-  ipfim = ipfcolor.ipf_color_cubic(dat['quat']).reshape(imshape[0],imshape[1],3);
+  ipfim = IPFcolor.ipf_color_cubic(dat['quat']).reshape(imshape[0],imshape[1],3);
   plt.imshow(ipfim)

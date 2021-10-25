@@ -1,11 +1,13 @@
-import numpy as np
-from timeit import default_timer as timer
-from os import path
-from numba import jit, prange
-import pyopencl as cl
-import openclparam
-import matplotlib.pyplot as plt
 from os import environ
+from timeit import default_timer as timer
+
+from numba import jit, prange
+import numpy as np
+import pyopencl as cl
+
+from pyebsdindex import openclparam
+
+
 environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
 RADDEG = 180.0/np.pi

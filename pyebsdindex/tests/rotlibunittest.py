@@ -1,8 +1,10 @@
-import numpy as np
 from timeit import default_timer as timer
-from rotlib import *
-#from rotations import *
-from rotlib import quatnorm, quatconj, quat_multiply
+
+import numpy as np
+
+from pyebsdindex.rotlib import *
+from pyebsdindex.rotlib import quatnorm, quatconj, quat_multiply
+
 
 pi = np.pi
 RADDEG = 180.0/pi
