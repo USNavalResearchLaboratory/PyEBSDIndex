@@ -15,6 +15,7 @@ from pyebsdindex import (
     ebsd_pattern,
     rotlib,
     tripletlib,
+    openclparam
 )
 from pyebsdindex.EBSDImage import IPFcolor
 
