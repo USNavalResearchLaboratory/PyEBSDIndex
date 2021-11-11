@@ -474,13 +474,13 @@ class BandVote():
           angfitTry = np.arccos(angfitTry) * RADEG
           whMatch = np.nonzero(angfitTry < angTol)[0]
           nmatch = whMatch.size
-          scoreTry = np.float32(nmatch) * np.mean(np.abs(angTol - angfitTry[whMatch]))
-
+          #scoreTry = np.float32(nmatch) * np.mean(np.abs(angTol - angfitTry[whMatch]))
+          scoreTry = np.float32(nmatch) /( np.mean(angfitTry[whMatch]) + 1e-6)
           if scoreTry > score:
             score = scoreTry
             angFit = angfitTry
             for j in range(nBnds):
-              polematch[j] = np.argmax(test[:,j])
+              polematch[j] = np.argmax(test[:,j]) * ( 2*np.int32(angfitTry[j] < angTol)-1)
             R[:,:] = Rtry[i,:,:]
 
         whGood = (np.nonzero(angFit < angTol)[0]).astype(np.int64)

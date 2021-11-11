@@ -91,7 +91,7 @@ class IndexerRay():
         # run, and has very low overhead for making the context.
         #pass
         self.openCLParams = openclparam.OpenClParam()
-        # self.openCLParams.gpu_id = 0
+        #self.openCLParams.gpu_id = 0
         # self.openCLParams.gpu_id = 1
         self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
     except:
@@ -727,7 +727,7 @@ class EBSDIndexer():
 
     self.dataTemplate = np.dtype([('quat',np.float32,(4)),('iq',np.float32), \
                                   ('pq',np.float32),('cm',np.float32),('phase',np.int32), \
-                                  ('fit',np.float32),('nmatch',np.int32),('matchattempts',np.int32,(2))])
+                                  ('fit',np.float32),('nmatch',np.int32),('matchattempts',np.int32,(2)), ('totvotes', np.int32)])
 
   def update_file(self,filename=None,patDim=np.array([120,120],dtype=np.int32)):
     if filename is None:
@@ -767,7 +767,7 @@ class EBSDIndexer():
     # print(timer() - tic)
     tic = timer()
     bandData = self.bandDetectPlan.find_bands(pats,clparams=clparams,verbose=verbose)
-
+    shpBandDat = bandData.shape
     if PC[0] is None:
       PC_0 = self.PC
     else:
@@ -786,6 +786,8 @@ class EBSDIndexer():
 
     indxData['phase'] = -1
     indxData['fit'] = 180.0
+    indxData['totvotes'] = 0
+    earlyexit = max(7, shpBandDat[1])
     for i in range(npoints):
 
       bandNorm1 = bandNorm[i,:,:]
@@ -797,7 +799,7 @@ class EBSDIndexer():
         indxData['pq'][0:nPhases,i] = np.sum(bDat1['max'],axis=0)
 
         for j in range(len(self.phaseLib)):
-          avequat,fit,cm,bandmatch,nMatch,matchAttempts = self.phaseLib[j].tripvote(bandNorm1,goNumba=True)
+          avequat,fit,cm,bandmatch,nMatch,matchAttempts, totvotes = self.phaseLib[j].tripvote(bandNorm1,goNumba=True, verbose=verbose)
           # avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].pairVoteOrientation(bandNorm1,goNumba=True)
           if nMatch >= 3:
             fitmetric = nMatch * cm
@@ -807,7 +809,8 @@ class EBSDIndexer():
             indxData['phase'][j,i] = j
             indxData['nmatch'][j,i] = nMatch
             indxData['matchattempts'][j,i] = matchAttempts
-          if nMatch >= 9:
+            indxData['totvotes'][j,i] = totvotes
+          if nMatch >= earlyexit:
             break
 
     qref2detect = self.refframe2detector()
