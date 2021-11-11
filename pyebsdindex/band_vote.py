@@ -23,6 +23,7 @@ class BandVote():
     self.phaseSym = self.tripLib.symmetry
     self.latticeParam = self.tripLib.latticeParameter
     self.angTol = angTol
+    self.nbandearlyexit = 8
     # these lookup tables are used to order the index for the pole-family when
     # sorting triplet angles from low to high.
     LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]],dtype=np.int64)
@@ -90,7 +91,7 @@ class BandVote():
     #print(bandRank)
     #print(tvotes, band_cm, mxvote)
     #print('vote loops: ', timer() - tic)
-    if verbose > 1:
+    if verbose > 2:
       print('band Vote time:',timer() - tic)
     tic = timer()
 
@@ -106,43 +107,29 @@ class BandVote():
     #       break
     #print('refinement: ', timer() - tic)
     #print('tripvote: ',timer() - tic0)
-
-    bandRank_arg = np.argsort(bandRank)
+    sumaccum = np.sum(accumulator)
+    bandRank_arg = np.argsort(bandRank).astype(np.int64)
     test  = 0
     fit = 1000.0
     nMatch = -1
     avequat = np.zeros(4, dtype=np.float32)
     polematch = np.array([-1])
     whGood = -1
-    for i in range(n_bands-1):
-      for j in range(i+1,n_bands):
-        #avequat1,fit1,bandmatch1,nMatch1 = self.band_vote_refine2(bandnorms, bandRank_arg[-1-i], bandRank_arg[-1-j] ,bandFam,angTol=self.angTol)
-        fit1, nMatch1, whGood1, polematch1 = self.band_index(bandnorms,bandRank_arg[-1 - i],bandRank_arg[-1 - j],bandFam,angTol=self.angTol)
-        test += 1
-        if nMatch1 >= n_bands-1: #going to make the judgement that if you have matched n-1 bands, this is highly likely to be right
-          fit = fit1
-          nMatch = nMatch1
-          whGood = whGood1
-          polematch = polematch1
-          break
-        else:
-          if nMatch < nMatch1:
-            fit = fit1
-            nMatch = nMatch1
-            whGood = whGood1
-            polematch = polematch1
-          elif nMatch == nMatch1:
-            if fit > fit1:
-              fit = fit1
-              nMatch = nMatch1
-              whGood = whGood1
-              polematch = polematch1
-      if nMatch >= n_bands-1:
-        break
-    if verbose > 1:
+
+    angTable = self.tripLib.completelib['angTable']
+    sztable = angTable.shape
+    famIndx = self.tripLib.completelib['famIndex']
+    nFam = self.tripLib.completelib['nFamily']
+    poles = self.tripLib.completelib['polesCart']
+    angTol = self.angTol
+
+    # this will check the vote, and return the exact band matching to specific poles of the best fitting solution.
+    fit, polematch, nMatch, whGood, ij= self.band_index_nb(poles, bandRank_arg, bandFam,  famIndx, nFam, angTable, bandnorms, angTol)
+
+    if verbose > 2:
       print('band index: ',timer() - tic)
     tic = timer()
-    cm = 0.0
+
     cm2 = 0.0
     if nMatch >=2:
       avequat, fit = self.refine_orientation(bandnorms,whGood,polematch)
@@ -152,10 +139,10 @@ class BandVote():
       cm2 = np.sum(accumulator[[whfam], [whmatch]]).astype(np.float32)
       cm2 /= np.sum(accumulator.clip(1))
 
-    if verbose > 1:
+    if verbose > 2:
       print('refinement: ', timer() - tic)
       print('all: ',timer() - tic0)
-    return avequat, fit, cm2, polematch, nMatch, (i,j)
+    return avequat, fit, cm2, polematch, nMatch, ij, sumaccum
 
   def band_vote_refine(self,bandnorms,bandRank,familyLabel,angTol=3.0):
     tic = timer()
@@ -238,45 +225,51 @@ class BandVote():
     #print('averaging: ',timer() - tic)
     return (avequat, fit, polematch, nGood )
 
-  def band_index(self,bandnorms,bnd1,bnd2,familyLabel,angTol=3.0):
-    tic = timer()
-    nBands = np.int(bandnorms.size/3)
+  def band_index(self,bandnorms,bnd1,bnd2,familyLabel,angTol=3.0, verbose = 0):
+
+    #nBands = np.int32(bandnorms.size/3)
     angTable = self.tripLib.completelib['angTable']
     sztable = angTable.shape
-    whGood = -1
+    #whGood = -1
     famIndx = self.tripLib.completelib['famIndex']
     nFam = self.tripLib.completelib['nFamily']
     poles = self.tripLib.completelib['polesCart']
-    ang01 = 0.0
+    #ang01 = 0.0
     # need to check that the two selected bands are not parallel.
-    v0 = bandnorms[bnd1, :]
-    f0 = familyLabel[bnd1]
-    v1 = bandnorms[bnd2, :]
-    f1 = familyLabel[bnd2]
-    ang01 = np.clip(np.dot(v0, v1), -1.0, 1.0)
-    ang01 = np.arccos(ang01)*RADEG
-    if ang01 < angTol: # the two poles are parallel, send in another two poles if available.
-      return 360.0, 0, whGood, -1
+    #v0 = bandnorms[bnd1, :]
+    #f0 = familyLabel[bnd1]
+    #v1 = bandnorms[bnd2, :]
+    #f1 = familyLabel[bnd2]
+    #ang01 = np.clip(np.dot(v0, v1), -1.0, 1.0)
+    #ang01 = np.arccos(ang01)*RADEG
+    #if ang01 < angTol: # the two poles are parallel, send in another two poles if available.
+    #  return 360.0, 0, whGood, -1
 
-    wh01 = np.nonzero(np.abs(angTable[famIndx[f0], famIndx[f1]:np.int(famIndx[f1]+nFam[f1])] - ang01) < angTol)[0]
+    #wh01 = np.nonzero(np.abs(angTable[famIndx[f0], famIndx[f1]:np.int(famIndx[f1]+nFam[f1])] - ang01) < angTol)[0]
 
-    n01 = wh01.size
-    if  n01 == 0:
-      return 360.0, 0, whGood, -1
+    #n01 = wh01.size
+    #if  n01 == 0:
+    #  return 360.0, 0, whGood, -1
 
-    wh01 += famIndx[f1]
-    p0 = poles[famIndx[f0], :]
+    #wh01 += famIndx[f1]
+    #p0 = poles[famIndx[f0], :]
     #print('pre first loop: ',timer() - tic)
-    tic = timer()
+    #tic = timer()
     # place numba code here ...
-    angFit, polematch, R = self.band_vote_refine_loops1(poles,v0,v1, p0, wh01, bandnorms, angTol)
 
-    whGood = np.nonzero(angFit < angTol)[0]
-    nGood = np.int64(whGood.size)
-    if nGood < 3:
-      return 360.0, -1, -1, -1
 
-    fit = np.mean(angFit[whGood])
+
+    #fit, polematch, R, nGood, whGood = self.band_vote_refine_loops1(poles,v0,v1, p0, wh01, bandnorms, angTol)
+    fit,polematch,R,nGood,whGood = self.band_vote_refine_loops1(poles, bnd1, bnd2, familyLabel,  famIndx, nFam, angTable, bandnorms, angTol)
+
+    #print('numba first loops',timer() - tic)
+    #whGood = np.nonzero(angFit < angTol)[0]
+    #nGood = np.int64(whGood.size)
+    #if nGood < 3:
+    #  return 360.0, -1, -1, -1
+
+    #fit = np.mean(angFit[whGood])
+    #print('all bindexed time', timer()-tic0)
     return fit, nGood, whGood, polematch
 
   def refine_orientation(self,bandnorms, whGood, polematch):
@@ -388,67 +381,146 @@ class BandVote():
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
-  def band_vote_refine_loops1(poles, v0, v1, p0, wh01, bandnorms, angTol):
+  def band_index_nb(poles, bandRank_arg, familyLabel,  famIndx, nFam, angTable, bandnorms, angTol):
+    eps = np.float32(1.0e-12)
     nBnds = bandnorms.shape[0]
-    n01 = wh01.size
-    v0v1c = np.cross(v0,v1)
-    v0v1c /= np.linalg.norm(v0v1c)
-    # attempt to see which solution gives the best match to all the poles
-    # best is measured as the number of poles that are within tolerance.
-    # Use the TRIAD method for finding the rotation matrix
-    pflt = np.asarray(poles, dtype = np.float32)
-    Rtry = np.zeros((n01,3,3), dtype = np.float32)
-    bndnorm = np.transpose(np.asarray(bandnorms, dtype = np.float32))
-    #score = np.zeros((n01), dtype = np.float32)
-    A = np.zeros((3,3), dtype = np.float32)
-    B = np.zeros((3,3), dtype = np.float32)
-    AB = np.zeros((3,3),dtype=np.float32)
-    b2 = np.cross(v0,v0v1c)
-    B[0,:] = v0
-    B[1,:] = v0v1c
-    B[2,:] = b2
-    A[:,0] = p0
-    score = -1.0
 
-    for i in range(n01):
-      p1 = poles[wh01[i],:]
-      ntemp = np.linalg.norm(p1) + 1.0e-35
-      p1 = p1 / ntemp
-      p0p1c = np.cross(p0,p1)
-      ntemp = np.linalg.norm(p0p1c) + 1.0e-35
-      p0p1c = p0p1c / ntemp
-      A[:,1] = p0p1c
-      A[:,2] = np.cross(p0,p0p1c)
-      AB = A.dot(B)
-      Rtry[i,:,:] = AB
+    whGood_out = np.zeros(nBnds, dtype=np.int64)-1
 
-      testp = (AB.dot(bndnorm))
-      test = pflt.dot(testp)
-      #print(test.shape)
-      angfitTry = np.zeros((nBnds), dtype = np.float32)
-      #angfitTry = np.max(test,axis=0)
-      for j in range(nBnds):
-        angfitTry[j] = np.max(test[:,j])
-        angfitTry[j] = -1.0 if angfitTry[j] < -1.0 else angfitTry[j]
-        angfitTry[j] =  1.0 if angfitTry[j] >  1.0 else angfitTry[j]
+    fitout = np.float32(360.0)
+    nMatch = np.int64(-1)
 
-      #angfitTry = np.clip(np.amax(test,axis=0),-1.0,1.0)
+    polematch_out = np.zeros((nBnds),dtype=np.int64) - 1
 
-      angfitTry = np.arccos(angfitTry) * RADEG
-      whMatch = np.nonzero(angfitTry < angTol)[0]
+    for ii in range(nBnds-1):
+      for jj in range(ii+1,nBnds):
+        fit = np.float32(360.0)
+        whGood = np.zeros(nBnds,dtype=np.int64) - 1
+        nGood = np.int64(-1)
+        polematch = np.zeros((nBnds),dtype=np.int64) - 1
+        R = np.zeros((3,3),dtype=np.float32)
+        bnd1 = bandRank_arg[-1 - ii]
+        bnd2 = bandRank_arg[-1 - jj]
 
-      nmatch = whMatch.size
-      scoreTry = np.float32(nmatch) * np.mean(np.abs(angTol - angfitTry[whMatch]))
+        v0 = bandnorms[bnd1,:]
+        f0 = familyLabel[bnd1]
+        v1 = bandnorms[bnd2,:]
+        f1 = familyLabel[bnd2]
+        ang01 = np.dot(v0,v1)
+        if ang01 > np.float32(1.0):
+          ang01 = np.float32(1.0-eps)
+        if ang01 < np.float32(-11.0):
+          ang01 = np.float32(-1.0+eps)
 
-      if scoreTry > score:
-        score = scoreTry
-        angFit = angfitTry
-        polematch = np.zeros((nBnds), dtype = np.int32)
-        for j in range(nBnds):
-          polematch[j] = np.argmax(test[:,j])
-        R = Rtry[i,:,:]
+        ang01 = np.arccos(ang01) * RADEG
+        if ang01 < angTol:  # the two poles are parallel, send in another two poles if available.
+          continue
+          #return fit, polematch, R, nGood, whGood
 
-    return angFit, polematch, R
+        wh01 = np.nonzero(np.abs(angTable[famIndx[f0],famIndx[f1]:np.int(famIndx[f1] + nFam[f1])] - ang01) < angTol)[0]
+
+        n01 = wh01.size
+        if n01 == 0:
+          continue
+          #return fit, polematch, R, nGood, whGood
+
+        wh01 += famIndx[f1]
+        p0 = poles[famIndx[f0],:]
+
+        n01 = wh01.size
+        v0v1c = np.cross(v0,v1)
+        v0v1c /= np.linalg.norm(v0v1c)
+        # attempt to see which solution gives the best match to all the poles
+        # best is measured as the number of poles that are within tolerance.
+        # Use the TRIAD method for finding the rotation matrix
+        pflt = np.asarray(poles, dtype = np.float32)
+        Rtry = np.zeros((n01,3,3), dtype = np.float32)
+        bndnorm = np.transpose(np.asarray(bandnorms, dtype = np.float32))
+        #score = np.zeros((n01), dtype = np.float32)
+        A = np.zeros((3,3), dtype = np.float32)
+        B = np.zeros((3,3), dtype = np.float32)
+        AB = np.zeros((3,3),dtype=np.float32)
+        b2 = np.cross(v0,v0v1c)
+        B[0,:] = v0
+        B[1,:] = v0v1c
+        B[2,:] = b2
+        A[:,0] = p0
+        score = -1.0
+
+        for i in range(n01):
+          p1 = poles[wh01[i],:]
+          ntemp = np.linalg.norm(p1) + 1.0e-35
+          p1 = p1 / ntemp
+          p0p1c = np.cross(p0,p1)
+          ntemp = np.linalg.norm(p0p1c) + 1.0e-35
+          p0p1c = p0p1c / ntemp
+          A[:,1] = p0p1c
+          A[:,2] = np.cross(p0,p0p1c)
+          AB = A.dot(B)
+          Rtry[i,:,:] = AB
+
+          testp = (AB.dot(bndnorm))
+          test = pflt.dot(testp)
+          #print(test.shape)
+          angfitTry = np.zeros((nBnds), dtype = np.float32)
+          #angfitTry = np.max(test,axis=0)
+          for j in range(nBnds):
+            angfitTry[j] = np.max(test[:,j])
+            angfitTry[j] = -1.0 if angfitTry[j] < -1.0 else angfitTry[j]
+            angfitTry[j] =  1.0 if angfitTry[j] >  1.0 else angfitTry[j]
+
+          #angfitTry = np.clip(np.amax(test,axis=0),-1.0,1.0)
+
+          angfitTry = np.arccos(angfitTry) * RADEG
+          whMatch = np.nonzero(angfitTry < angTol)[0]
+          nmatch = whMatch.size
+          scoreTry = np.float32(nmatch) * np.mean(np.abs(angTol - angfitTry[whMatch]))
+
+          if scoreTry > score:
+            score = scoreTry
+            angFit = angfitTry
+            for j in range(nBnds):
+              polematch[j] = np.argmax(test[:,j])
+            R[:,:] = Rtry[i,:,:]
+
+        whGood = (np.nonzero(angFit < angTol)[0]).astype(np.int64)
+        nGood = max(np.int64(whGood.size), np.int64(0))
+
+        if nGood < 3:
+          continue
+          #return 360.0,-1,-1,-1
+          #whGood = -1*np.ones((1), dtype=np.int64)
+          #fit = np.float32(360.0)
+          #polematch[:] = -1
+          #nGood = np.int64(-1)
+        else:
+          fit = np.float32(0.0)
+          for q in range(nGood):
+            fit += angFit[whGood[q]]
+          fit /= np.float32(nGood)
+
+        if nGood >= (nBnds - 1):
+          fitout = fit
+          nMatch = nGood
+          whGood_out = whGood
+          polematch_out = polematch
+          break
+        else:
+          if nMatch < nGood:
+            fitout = fit
+            nMatch = nGood
+            whGood_out = whGood
+            polematch_out = polematch
+          elif nMatch == nGood:
+            if fitout > fit:
+              fitout = fit
+              nMatch = nGood
+              whGood_out = whGood
+              polematch_out = polematch
+      if nMatch >= nBnds - 1:
+        break
+
+    return fitout, polematch_out,nMatch, whGood_out, (ii,jj)
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
