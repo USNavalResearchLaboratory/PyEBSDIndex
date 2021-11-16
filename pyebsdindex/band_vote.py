@@ -144,86 +144,7 @@ class BandVote():
       print('all: ',timer() - tic0)
     return avequat, fit, cm2, polematch, nMatch, ij, sumaccum
 
-  def band_vote_refine(self,bandnorms,bandRank,familyLabel,angTol=3.0):
-    tic = timer()
-    nBands = np.int(bandnorms.size/3)
-    angTable = self.tripLib.completelib['angTable']
-    sztable = angTable.shape
 
-    famIndx = self.tripLib.completelib['famIndex']
-    nFam = self.tripLib.completelib['nFamily']
-    poles = self.tripLib.completelib['polesCart']
-    nPoles = np.int(poles.size / 3)
-    srt = np.flip(np.argsort(bandRank))
-    v0indx = -1
-    v1indx = 0
-    ang01 = 0.0
-    while ang01 < angTol: # need to check that the two selected bands are not parallel.
-      # I am not sure I need this anymore ... the band vote will detect a bad answer, and attempt with
-      # two other poles.  Hmmm
-      v0indx += 1
-      v1indx += 1
-      v0 = bandnorms[srt[v0indx], :]
-      f0 = familyLabel[srt[v0indx]]
-      v1 = bandnorms[srt[v1indx], :]
-      f1 = familyLabel[srt[v1indx]]
-      ang01 = np.clip(np.dot(v0, v1), -1.0, 1.0)
-      ang01 = np.arccos(ang01)*RADEG
-      if v1indx == (nBands-1):
-        return (np.array([1.0,0,0,0]),360.0,nBands - 1,0) # everything is parallel - just give up.
-
-
-
-
-    wh01 = np.nonzero(np.abs(angTable[famIndx[f0], famIndx[f1]:np.int(famIndx[f1]+nFam[f1])] - ang01) < angTol)[0]
-
-    n01 = wh01.size
-    if  n01 == 0:
-      return (np.array([1.0, 0, 0, 0]), 360.0, nBands-1, 0)
-
-    wh01 += famIndx[f1]
-    p0 = poles[famIndx[f0], :]
-    #print('pre first loop: ',timer() - tic)
-    tic = timer()
-    # place numba code here ...
-    angFit, polematch, R = self.band_vote_refine_loops1(poles,v0,v1, p0, wh01, bandnorms, angTol)
-
-    whGood = np.nonzero(angFit < angTol)[0]
-    nGood = np.int64(whGood.size)
-    if nGood < 3:
-      return (np.array([1.0,0,0,0]),360.0,nBands - 1,0)
-    whNoGood = np.nonzero(angFit >= angTol)[0]
-    nNoGood = whNoGood.size
-
-    if nNoGood > 0:
-      polematch[whNoGood] = -1
-    #print('first loop: ',timer() - tic)
-    # do a n choose 2 of the rest of the poles
-    # n choose k combinations --> C = n! / (k!(n-k)! == product(lindgen(k)+(n-k+1)) / factorial(k)
-    # N Choose K with N = good band poles and K = 2
-    tic = timer()
-    n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int(2))
-    whGood = np.asarray(whGood,dtype=np.int64)
-    #qweight = np.zeros(n2Fit)
-    AB = self.band_vote_refine_loops3(nGood,whGood,poles,bandnorms,polematch,n2Fit)
-
-    #print('2nd looping: ',timer() - tic)
-    tic = timer()
-    quats = rotlib.om2qu(AB)
-    sign0 = np.sum(quats[0,:] * quats, axis = 1)
-    sign = ((sign0 >= 0).astype(np.float32) - (sign0 < 0).astype(np.float32)).reshape(n2Fit,1)
-    quats *= sign
-    avequat = np.mean(quats, axis = 0)
-    avequat = rotlib.quatnorm(avequat)
-    #if avequat[0] < 0:
-    #  avequat *= -1.0
-
-    test = rotlib.quat_vector(avequat,bandnorms[whGood,:])
-    test = np.sum(test * poles[polematch[whGood], :], axis = 1)
-    test = np.arccos(np.clip(test, -1.0, 1.0))*RADEG
-    fit = np.mean(test)
-    #print('averaging: ',timer() - tic)
-    return (avequat, fit, polematch, nGood )
 
   def band_index(self,bandnorms,bnd1,bnd2,familyLabel,angTol=3.0, verbose = 0):
 
@@ -278,22 +199,18 @@ class BandVote():
     nGood = whGood.size
     n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int(2))
     whGood = np.asarray(whGood,dtype=np.int64)
-    AB, ABgood = self.band_vote_refine_loops3(nGood,whGood,poles,bandnorms,polematch,n2Fit)
+    AB, ABgood = self.orientation_refine_loops_am(nGood,whGood,poles,bandnorms,polematch,n2Fit)
 
     #print("triad", timer()-tic)
     tic = timer()
     quats = rotlib.om2quL(AB[ABgood.nonzero()[0], :, :])
     #print("om2qu", timer() - tic)
     tic = timer()
-    #sign0 = np.sum(quats[0,:] * quats, axis = 1)
-    #sign = ((sign0 >= 0).astype(np.float32) - (sign0 < 0).astype(np.float32)).reshape(n2Fit,1)
-    #quats *= sign
-    #avequat = np.mean(quats, axis = 0)
     avequat = rotlib.quatave(quats)
-    #avequat = rotlib.quatnorm(avequat)
+
 
     test = rotlib.quat_vectorL(avequat,bandnorms[whGood,:])
-    #print('averaging: ',timer() - tic)
+
     tic = timer()
     test = np.sum(test * poles[polematch[whGood], :], axis = 1)
     test = np.arccos(np.clip(test, -1.0, 1.0))*RADEG
@@ -524,7 +441,8 @@ class BandVote():
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
-  def band_vote_refine_loops2(nGood, whGood, poles, bandnorms, polematch, n2Fit):
+  def orientation_refine_loops_triad(nGood, whGood, poles, bandnorms, polematch, n2Fit):
+    #uses the TRIAD method for getting rotation matrix from imperfect poles.
     quats = np.zeros((n2Fit,4),dtype=np.float32)
     counter = 0
     A = np.zeros((3,3), dtype = np.float32)
@@ -577,8 +495,9 @@ class BandVote():
 
   @staticmethod
   @numba.jit(nopython=True,cache=True,fastmath=True,parallel=False)
-  def band_vote_refine_loops3(nGood,whGood,poles,bandnorms,polematch,n2Fit):
-    # this uses the method laid out by Morawiec 2020 Eq.4
+  def orientation_refine_loops_am(nGood,whGood,poles,bandnorms,polematch,n2Fit):
+    # this uses the method laid out by Morawiec 2020 Eq.4 for getting rotation matrix
+    # from imperfect poles
     counter = 0
     A = np.zeros((3,3),dtype=np.float32)
     B = np.zeros((3,3),dtype=np.float32)
