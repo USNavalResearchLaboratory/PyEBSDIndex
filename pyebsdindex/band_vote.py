@@ -496,7 +496,7 @@ class BandVote():
   @staticmethod
   @numba.jit(nopython=True,cache=True,fastmath=True,parallel=False)
   def orientation_refine_loops_am(nGood,whGood,poles,bandnorms,polematch,n2Fit):
-    # this uses the method laid out by Morawiec 2020 Eq.4 for getting rotation matrix
+    # this uses the method laid out by A. Morawiec 2020 Eq.4 for getting rotation matrix
     # from imperfect poles
     counter = 0
     A = np.zeros((3,3),dtype=np.float32)
