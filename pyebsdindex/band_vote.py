@@ -332,14 +332,12 @@ class BandVote():
         ang01 = np.arccos(ang01) * RADEG
         if ang01 < angTol:  # the two poles are parallel, send in another two poles if available.
           continue
-          #return fit, polematch, R, nGood, whGood
 
         wh01 = np.nonzero(np.abs(angTable[famIndx[f0],famIndx[f1]:np.int(famIndx[f1] + nFam[f1])] - ang01) < angTol)[0]
 
         n01 = wh01.size
         if n01 == 0:
           continue
-          #return fit, polematch, R, nGood, whGood
 
         wh01 += famIndx[f1]
         p0 = poles[famIndx[f0],:]

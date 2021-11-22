@@ -204,7 +204,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
         npatsdone += rate[1]
         ndone += 1
 
-        ratetemp = len(workers) * (rate[1]) / (timer() - ticp)
+        ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
         chunkave += ratetemp
         totalave = npatsdone / (timer() - tic0)
         # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
@@ -239,6 +239,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
         del workers[jid]
         del timers[jid]
         del jobs_indx[jid]
+        n_cpu_nodes -= 1
         if len(workers) < 1:  # rare case that we have killed all workers...
           job_pstart_end = p_indx_start_end.pop(0)
           workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(jid))
@@ -248,6 +249,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
           timers.append(timer())
           time.sleep(0.01)
           jobs_indx.append(job_pstart_end[:])
+          n_cpu_nodes += 1
 
   if mode == 'memorymode':
     workers = []
@@ -284,7 +286,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
         ticp = timers[jid]
         dataout[:,indxstr - patstart:indxend - patstart] = wrkdataout
         npatsdone += rate[1]
-        ratetemp = len(workers) * (rate[1]) / (timer() - ticp)
+        ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
         chunkave += ratetemp
         totalave = npatsdone / (timer() - tic0)
         # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
@@ -319,6 +321,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
         del workers[jid]
         del timers[jid]
         del jobs_indx[jid]
+        n_cpu_nodes -= 1
         if len(workers) < 1:  # rare case that we have killed all workers...
           job_pstart_end = p_indx_start_end.pop(0)
           workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(jid))
@@ -328,6 +331,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
           nsubmit += 1
           timers.append(timer())
           jobs_indx.append(job_pstart_end)
+          n_cpu_nodes += 1
 
     del jobs
     del workers
