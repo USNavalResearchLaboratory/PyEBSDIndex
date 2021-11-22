@@ -1,5 +1,5 @@
-####################################################################################################
-# 2020-2020, David Rowenhorst/The US Naval Research Laboratory, Washington DC
+'''
+2020-2021, David Rowenhorst/The US Naval Research Laboratory, Washington DC
 # Pursuant to title 17 section 105 of the United States Code, works of US Governement employees 
 # are not not subject to copyright protection.
 #
@@ -47,6 +47,7 @@
 # If the inputs are not in C-order or not aligned, a copy of the input will be made. 
 #
 #
+'''
 
 import numpy as np
 import numba
