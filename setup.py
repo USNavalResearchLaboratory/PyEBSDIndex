@@ -44,9 +44,13 @@ setup(
         "numpy",
         "numba",
         "pyopencl",
+        "ocl_icd_wrapper_apple;sys_platform == 'darwin'",
+        "ocl-icd-system;sys_platform == 'linux'",
         "pyswarms",
         "ray[default]",
         "scipy",
+        "h5py",
+
     ],
     # Files to include when distributing package
     packages=find_packages(),

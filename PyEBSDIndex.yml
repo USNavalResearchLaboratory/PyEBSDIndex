@@ -9,6 +9,7 @@ dependencies:
   - matplotlib 
   - pyopencl
   - jupyter-labs
+  - h5py
   #- ocl_icd_wrapper_apple # MacOS
   #- ocl-icd-system # linux (maybe windows?)
   - pip

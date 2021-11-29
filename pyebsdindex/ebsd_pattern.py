@@ -26,6 +26,7 @@ from pathlib import Path
 import shutil
 import copy
 import os
+import h5py
 
 
 
@@ -151,7 +152,7 @@ class EBSDPatternFile():
   def write_header(self):
     pass
 
-  def write_data(self):
+  def write_data(self, patStartCount = [0,-1]):
     pass
 
   def copy_file(self, newpath):
@@ -165,7 +166,7 @@ class EBSDPatternFile():
   def copy_obj(self):
     return copy.deepcopy(self)
 
-  def set_scan_rc(self, rc=(0,0)):
+  def set_scan_rc(self, rc=(0,0)): # helper function for pattern files that don't record the scan rows and columns
     self.nCols = rc[1]
     self.nRows = rc[0]
     self.nPatterns = self.nCols * self.nRows
@@ -235,6 +236,7 @@ class UPFile(EBSDPatternFile):
       self.xStep = dat[0]
       self.yStep = dat[1]
     f.close()
+    return 0 #note this function uses multiple returns
 
   def read_data(self,path=None,convertToFloat=False,patStartCount = [0,-1],returnArrayOnly=False, bitdepth=None):
     if path is not None:
@@ -533,7 +535,36 @@ class UPFile(EBSDPatternFile):
         self.bitdepth = 8
 
 
+class HDFPat(EBSDPatternFile):
 
+  def __init__(self, path=None):
+    EBSDPatternFile.__init__(self, path)
+    self.file_type = 'HDF5'
+    self.vendor = 'PyEBSDIndex'
+    #HDF only attributes
+    self.bitdepth = 8
+    self.datapath = None
+    self.datagroups = []
+    self.patternID = 'Pattern'
+
+
+  def get_data_paths(self):
+    try:
+      f = h5py.File(self.path, 'r')
+    except:
+      print("File Not Found:",str(Path(self.path)))
+      return -1
+
+    groupsets = list(f.keys())
+    for grpset in groupsets:
+      if isinstance(f[grpset],h5py.Group):
+        if 'EBSD' in f[grpset]:
+          if self.patternID in f[grpset+'/EBSD/Data']:
+            if (grpset  not in self.datagroups):
+              self.datagroups.append(grpset)
+
+    if (self.datapath is None) and (len(self.datagroups) > 0):
+      self.datapath = self.datagroups[0]+str('/EBSD/Data/')+self.patternID
 
 
 
