@@ -65,7 +65,7 @@ class NLPAR():
       self.getfileobj(False)
     else:
       if self.patternfile is not None:
-        if self.patternfile.file_type == 'UP':
+        if self.patternfile.filetype == 'UP':
           p = Path(self.filepath)
           appnd = "lam{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)\
                   + "dt{:1.1f}".format(self.dthresh)
@@ -73,7 +73,7 @@ class NLPAR():
           self.patternfile.copy_file(newfilepath)
           self.filepathout = newfilepath
           self.getfileobj(False)
-        if self.patternfile.file_type == 'HDF5':
+        if self.patternfile.filetype == 'HDF5':
           pass
 
   def getfileobj(self, inout=True):
