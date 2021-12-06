@@ -56,11 +56,13 @@ def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
                bandDetectPlan=None,nRho=90,nTheta=180,tSigma=None,rSigma=None,rhoMaskFrac=0.1,nBands=9, \
                backgroundSub=False,patstart=0,npats=-1, \
                return_indexer_obj=False,ebsd_indexer_obj=None,clparams=None,verbose=0):
+
   pats = None
   if patsIn is None:
     pdim = None
   else:
-    if patsIn is ebsd_pattern.EBSDPatterns:
+
+    if isinstance(patsIn,ebsd_pattern.EBSDPatterns):
       pats = patsIn.patterns
     if type(patsIn) is np.ndarray:
       pats = patsIn
@@ -115,13 +117,13 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 
   ray.shutdown()
 
-  ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
-  # ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu)
+  #ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
+  ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu)
   pats = None
   if patsIn is None:
     pdim = None
   else:
-    if patsIn is ebsd_pattern.EBSDPatterns:
+    if isinstance(patsIn,ebsd_pattern.EBSDPatterns):
       pats = patsIn.patterns
     if type(patsIn) is np.ndarray:
       pats = patsIn

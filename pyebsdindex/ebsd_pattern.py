@@ -35,16 +35,19 @@ def get_pattern_file_obj(path,file_type=str(''),hdfDataPath=None):
   ''' this function will look at the path and return the correct EBSDPatterFile object
   if file_type is not specified, then it will be guessed based off of the extension'''
   ebsdfileobj = None
-
+  pathtemp = np.atleast_1d(path)
+  filepath = pathtemp[0]
   ftype = file_type
   if ftype == str(''):
-    extension = str.lower(Path(path).suffix)
+    extension = str.lower(Path(filepath).suffix)
     if (extension == '.up1'):
       ftype = 'UP1'
     elif (extension == '.up2'):
       ftype = 'UP2'
     elif (extension == '.oh5'):
       ftype = 'OH5'
+    elif (extension == '.h5'):
+      ftype = 'H5'
     else:
       raise ValueError('Error: extension not recognized')
 
@@ -52,7 +55,15 @@ def get_pattern_file_obj(path,file_type=str(''),hdfDataPath=None):
     ebsdfileobj = UPFile(path)
   if (ftype.upper() == 'OH5'):
     ebsdfileobj = EDAXOH5(path)
-
+    if pathtemp.size == 1: #automatically chose the first data group
+      ebsdfileobj.get_data_paths()
+      ebsdfileobj.set_data_path(pathindex=0)
+  if (ftype.upper() == 'H5'):
+    ebsdfileobj = HDF5PatFile(path) # if the path variable is a list, the second item is set to be the hdf5 path to
+    # the patterns.
+    if pathtemp.size == 1: #automatically chose the first data group
+      ebsdfileobj.get_data_paths()
+      ebsdfileobj.set_data_path(pathindex=0)
   ebsdfileobj.read_header()
   return ebsdfileobj
 
@@ -91,7 +102,7 @@ def pat_flt2int(patterns,typeout=None,method='clip',scalevalue=0.98,maxScale=Non
   minval = 0
   maxval = 255
   if (isinstance(typeout(0), np.uint16)):
-    outtype = np.uint16
+    typeout = np.uint16
     minval = 0
     maxval = 65535
 
@@ -154,7 +165,7 @@ class EBSDPatternFile():
     self.yStep = None
     self.hexflag = False
     self.filetype = filetype
-    self.filedatatype = np.dtype(np.uint8)  # the data type of the patterns within the file
+    self.filedatatype = np.uint8  # the data type of the patterns within the file
 
 
   def read_header(self, path=None):
@@ -282,7 +293,7 @@ class EBSDPatternFile():
         pats = newpatterns
       npats = pats.shape[0]
     max = pats.max()
-    typepat = pats.dtype
+
     if maxScale is not None:
       max = maxScale
 
@@ -369,16 +380,16 @@ class UPFile(EBSDPatternFile):
     extension = str.lower(Path(self.path).suffix)
     try:
       if (extension == '.up1'):
-        self.filedatatype = np.dtype(np.uint8)
+        self.filedatatype = np.uint8
       elif (extension == '.up2'):
-        self.filedatatype = np.dtype(np.uint16)
+        self.filedatatype = np.uint16
       else:
         if (bitdepth is None) and (self.filedatatype is None):
           raise ValueError('Error: extension not recognized, set "bitdepth" parameter')
         elif (bitdepth == 8):
-          self.filedatatype = np.dtype(np.uint8)
+          self.filedatatype = np.uint8
         elif (bitdepth == 16):
-          self.filedatatype =np.dtype(np.uint16)
+          self.filedatatype = np.uint16
 
     except ValueError as exp:
       print(exp)
@@ -442,16 +453,16 @@ class UPFile(EBSDPatternFile):
     extension = str.lower(Path(filepath).suffix)
     try:
       if (extension == '.up1'):
-        self.filedatatype = np.dtype(np.uint8)
+        self.filedatatype = np.uint8
       elif (extension == '.up2'):
-        self.filedatatype = np.dtype(np.uint16)
+        self.filedatatype = np.uint16
       else:
         if (bitdepth is None) and (self.filedatatype is None):
           raise ValueError('Error: extension not recognized, set "bitdepth" parameter')
         elif (bitdepth == 8):
-          self.filedatatype = np.dtype(np.uint8)
+          self.filedatatype = np.uint8
         elif (bitdepth == 16):
-          self.filedatatype = np.dtype(np.uint16)
+          self.filedatatype = np.uint16
 
     except ValueError as exp:
       print(exp)
@@ -556,12 +567,19 @@ class UPFile(EBSDPatternFile):
 
 class HDF5PatFile(EBSDPatternFile):
   def __init__(self, path=None):
-    EBSDPatternFile.__init__(self, path)
+    filepath = None
+    hdf5path = None
+    if path is not None:
+      ptemp = np.atleast_1d(path)
+      filepath = ptemp[0]
+      if ptemp.size > 1:
+        hdf5path = ptemp[1]
+    EBSDPatternFile.__init__(self, filepath)
     self.filetype = 'HDF5'
     self.vendor = 'PyEBSDIndex'
     #HDF only attributes
     self.filedatatype = np.dtype(np.uint8)
-    self.h5datasetpath = None # This will be the h5 path to the patterns
+    self.h5datasetpath = hdf5path # This will be the h5 path to the patterns
     self.h5datagroups = [] # there can be multiple scans in one h5 file.  Potential data groups will be stored here.
     self.patternh5id = 'Pattern' #the name used for the pattern dataset array in the h5 file.
 
@@ -589,12 +607,9 @@ class HDF5PatFile(EBSDPatternFile):
         print(self.h5datagroups)
     return len(self.h5datagroups)
 
-  def set_data_path(self, datapath=None, pathindex=0):
+  def set_data_path(self, datapath=None):
     if datapath is not None:
       self.h5datasetpath = datapath
-    # else:
-    #   if len(self.h5datagroups) > 0:
-    #     self.h5datasetpath = self.h5datagroups[pathindex] + '/EBSD/Data/' + self.patternh5id
 
   def pat_reader(self,patStart,nPatToRead):
     '''This is a basic function that will read a chunk of patterns from the HDF5 file.
@@ -658,7 +673,8 @@ class EDAXOH5(HDF5PatFile):
       print("File Not Found:", str(Path(self.path)))
       return -1
 
-    self.version = str(f['Version'])
+    self.version = str(f['Version'][()][0])
+
     if self.version  >= 'OIM Analysis 8.6.00':
       ngrp = self.get_data_paths()
       if ngrp <= 0:
@@ -672,20 +688,15 @@ class EDAXOH5(HDF5PatFile):
       self.patternW = shp[-1]
       self.patternH = shp[-2]
       self.nPatterns = shp[-3]
-      self.filedatatype = dset.dtype
+      self.filedatatype = dset.dtype.type
       headerpath = self.h5datagroups[self.activegroupid]+'/EBSD/Header/'
-      self.nCols = int(f[headerpath+'nColumns'])
-      self.nRows = int(f[headerpath+'nRows'])
+      self.nCols = np.int32(f[headerpath+'nColumns'][()][0])
+      self.nRows = np.int32(f[headerpath+'nRows'][()][0])
+      self.hexFlag = np.int32(f[headerpath+'Grid Type'][()][0] == 'HexGrid')
 
-      self.hexFlag = int(f[headerpath+'GridType'] == 'HexGrid')
-
-      self.xStep = float(f[headerpath+'Step X'])
-      self.yStep = float(f[headerpath+'Step Y'])
+      self.xStep = np.float32(f[headerpath+'Step X'][()][0])
+      self.yStep = np.float32(f[headerpath+'Step Y'][()][0])
 
     return 0 #note this function uses multiple returns
 
-if __name__ == "__main__":
-  file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1'
-  f = UPFile(file)
-  #f.ReadHeader()
-  pat = f.read_data()
+

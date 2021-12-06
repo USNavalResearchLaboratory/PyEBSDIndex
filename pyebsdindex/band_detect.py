@@ -211,9 +211,9 @@ class BandDetect():
       elif method.upper() == 'EVENSTRIDE':
         step = int(npats / nsample) # not great, but maybe good enough.
         stride = np.arange(0,npats, step, dypte = np.uint64)
-      pat1 = fileobj.read_data(convertToFloat=True,patStartEnd=[stride[0],stride[0] + 1],returnArrayOnly=True)
+      pat1 = fileobj.read_data(convertToFloat=True,patStartCount=[stride[0], 1],returnArrayOnly=True)
       for i in stride[1:]:
-        pat1 += fileobj.read_data(convertToFloat=True,patStartEnd=[i,i + 1],returnArrayOnly=True)
+        pat1 += fileobj.read_data(convertToFloat=True,patStartCount=[i, 1],returnArrayOnly=True)
       back = pat1 / float(len(stride))
       pshape = pat1.shape
     # a bit of image processing.

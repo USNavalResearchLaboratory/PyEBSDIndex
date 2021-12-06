@@ -55,6 +55,9 @@ class triplib():
       self.build_fcc()
       self.symmetry = 43
       self.qsymops = crystal_sym.cubicsym_q()
+      if phaseName is None:
+        self.phaseName = 'FCC'
+
       if laticeParameter is None:
         self.latticeParameter = np.array([1.0,1.0,1.0,90.0,90.0,90.0])
       else:
@@ -62,18 +65,27 @@ class triplib():
 
     if libType.upper() == 'BCC':
       self.build_bcc()
-      self.symmetry = 43
-      self.qsymops = crystal_sym.cubicsym_q()
+
+      if phaseName is None:
+        self.phaseName = 'BCC'
       if laticeParameter is None:
         self.latticeParameter = np.array([1.0,1.0,1.0,90.0,90.0,90.0])
       else:
         self.latticeParameter = laticeParameter
 
   def build_fcc(self):
+    if self.phaseName is None:
+      self.phaseName = 'FCC'
+    self.symmetry = 43
+    self.qsymops = crystal_sym.cubicsym_q()
     poles = np.array([[0,0,2], [1,1,1], [0,2,2], [1,1,3]])
     self.build_trip_lib(poles,crystal_sym.cubicsym_q())
 
   def build_bcc(self):
+    if self.phaseName is None:
+      self.phaseName = 'BCC'
+    self.symmetry = 43
+    self.qsymops = crystal_sym.cubicsym_q()
     poles = np.array([[0,1,1],[0,0,2],[1,1,2],[0,1,3]])
     self.build_trip_lib(poles,crystal_sym.cubicsym_q())
 
