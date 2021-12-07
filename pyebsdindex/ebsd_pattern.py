@@ -36,6 +36,7 @@ def get_pattern_file_obj(path,file_type=str(''),hdfDataPath=None):
   if file_type is not specified, then it will be guessed based off of the extension'''
   ebsdfileobj = None
   pathtemp = np.atleast_1d(path)
+  
   filepath = pathtemp[0]
   ftype = file_type
   if ftype == str(''):
@@ -61,6 +62,18 @@ def get_pattern_file_obj(path,file_type=str(''),hdfDataPath=None):
   if (ftype.upper() == 'H5'):
     ebsdfileobj = HDF5PatFile(path) # if the path variable is a list, the second item is set to be the hdf5 path to
     # the patterns.
+    try:
+      f = h5py.File(Path(path).expanduser(),'r+')
+    except:
+      print("File Not Found:",str(Path(path)))
+      return -1
+
+    if 'Manufacture' in f.keys():
+      vendor = str(f['Manufacture'][()][0])
+      if vendor.upper() == 'EDAX':
+        ebsdfileobj = EDAXOH5(path)
+      if vendor.upper() >= 'Bruker Nano':
+        ebsdfileobj = BRUKERH5(path)
     if pathtemp.size == 1: #automatically chose the first data group
       ebsdfileobj.get_data_paths()
       ebsdfileobj.set_data_path(pathindex=0)
@@ -613,7 +626,9 @@ class HDF5PatFile(EBSDPatternFile):
 
   def pat_reader(self,patStart,nPatToRead):
     '''This is a basic function that will read a chunk of patterns from the HDF5 file.
-    It assumes that patterns are laid out in a HDF5 dataset as an array of N patterns x pattern height x pattern width '''
+    Mainly this is intended to be called by the parent class function read_data.
+    It assumes that patterns are laid out in a HDF5 dataset as an array
+    of N patterns x pattern height x pattern width.  '''
     try:
       f = h5py.File(Path(self.path).expanduser(),'r')
     except:
@@ -628,10 +643,12 @@ class HDF5PatFile(EBSDPatternFile):
 
   def pat_writer(self, pat2write, patStart, nPatToWrite, typewrite):
     '''This is a basic function that will write a chunk of patterns to the HDF5 file.
+        Mainly this is intended to be called by the parent class function write_data.
         It assumes that patterns are laid out in a HDF5 dataset as an array of
         N patterns x pattern height x pattern width.  It also assumes the full dataset exists.
         Using the parent write_data method, it will check that a header exists, and that a dataset
-        exists and fill it with blank data if needed.'''
+        exists and fill it with blank data if needed --- a good assumption given that
+        write_data will perform this check.  '''
     try:
       f = h5py.File(Path(self.path).expanduser(),'r+')
     except:
@@ -699,4 +716,59 @@ class EDAXOH5(HDF5PatFile):
 
     return 0 #note this function uses multiple returns
 
+class BRUKERH5(HDF5PatFile):
+  def __init__(self, path=None):
+    HDF5PatFile.__init__(self, path)
+    self.filetype = 'BRUKERH5'
+    self.vendor = 'BRUKER'
+    #EDAXOH5 only attributes
+    self.filedatatype = None # np.dtype(np.uint8)
+    self.patternh5id = 'RawPatterns'
+    self.activegroupid = None
+    if self.path is not None:
+      self.get_data_paths()
 
+  def set_data_path(self, datapath=None, pathindex=0): #overloaded from parent - will default to first group.
+    if datapath is not None:
+      self.h5datasetpath = datapath
+    else:
+      if len(self.h5datagroups) > 0:
+        self.activegroupid = pathindex
+        self.h5datasetpath = self.h5datagroups[self.activegroupid] + '/EBSD/Data/' + self.patternh5id
+
+
+  def read_header(self, path=None):
+    if path is not None:
+      self.path = path
+
+    try:
+      f = h5py.File(Path(self.path).expanduser(), 'r')
+    except:
+      print("File Not Found:", str(Path(self.path)))
+      return -1
+
+    self.version = str(f['Version'][()][0])
+
+    if self.version.upper()  >= 'ESPIRT 2.X':
+      ngrp = self.get_data_paths()
+      if ngrp <= 0:
+        f.close()
+        return -2 # no data groups with patterns found.
+      if self.h5datasetpath is None: # default to the first datagroup
+        self.set_data_path(pathindex=0)
+
+      dset = f[self.h5datasetpath]
+      shp = np.array(dset.shape)
+      self.patternW = shp[-1]
+      self.patternH = shp[-2]
+      self.nPatterns = shp[-3]
+      self.filedatatype = dset.dtype.type
+      headerpath = self.h5datagroups[self.activegroupid]+'/EBSD/Header/'
+      self.nCols = np.int32(f[headerpath+'NCOLS'][()][0])
+      self.nRows = np.int32(f[headerpath+'NROWS'][()][0])
+      #self.hexFlag = np.int32(f[headerpath+'Grid Type'][()][0] == 'HexGrid')
+
+      self.xStep = np.float32(f[headerpath+'XSTEP'][()][0])
+      self.yStep = np.float32(f[headerpath+'YSTEP'][()][0])
+
+    return 0 #note this function uses multiple returns
