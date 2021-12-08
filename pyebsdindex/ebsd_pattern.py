@@ -747,7 +747,7 @@ class BRUKERH5(HDF5PatFile):
       print("File Not Found:", str(Path(self.path)))
       return -1
 
-    self.version = str(f['Version'][()][0])
+    self.version = str(f['Version'][()][0]) # get version 
 
     if self.version.upper()  >= 'ESPIRT 2.X':
       ngrp = self.get_data_paths()
