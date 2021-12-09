@@ -31,12 +31,12 @@ setup(
     zip_safe=True,
     # Contact
     author=__credits__,
-    download_url="https://github.com/drowenhorst-nrl/PyEBSDIndex",
+    download_url="https://github.com/USNavalResearchLaboratory/PyEBSDIndex",
     maintainer=__author__,
     maintainer_email=__author_email__,
     project_urls={
-        "Bug Tracker": "https://github.com/drowenhorst-nrl/PyEBSDIndex/issues",
-        "Source Code": "https://github.com/drowenhorst-nrl/PyEBSDIndex",
+        "Bug Tracker": "https://github.com/USNavalResearchLaboratory/PyEBSDIndex/issues",
+        "Source Code": "https://github.com/USNavalResearchLaboratory/PyEBSDIndex",
     },
     # Dependencies
     install_requires=[
