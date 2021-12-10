@@ -60,7 +60,7 @@ class NLPAR():
     if filename is not None:
       self.filepathout = Path(filename)
       self.hdfdatapathout = hdfdatapath
-      if str(self.filepathout) != str(self.patternfile.path):
+      if str(self.filepathout) != str(self.patternfile.filepath):
         self.patternfile.copy_file(self.filepathout)
       self.getfileobj(False)
     else:
