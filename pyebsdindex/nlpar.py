@@ -54,7 +54,7 @@ class NLPAR():
     if filename is not None:
       self.filepath = Path(filename)
       self.hdfdatapath = hdfdatapath
-      self.getfileobj(True)
+      self.getinfileobj()
 
   def setoutfile(self, filename=None,  hdfdatapath=None):
     if filename is not None:
@@ -62,7 +62,7 @@ class NLPAR():
       self.hdfdatapathout = hdfdatapath
       if str(self.filepathout) != str(self.patternfile.filepath):
         self.patternfile.copy_file(self.filepathout)
-      self.getfileobj(False)
+      self.getoutfileobj()
     else:
       if self.patternfile is not None:
         if self.patternfile.filetype == 'UP':
@@ -72,17 +72,19 @@ class NLPAR():
           newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
           self.patternfile.copy_file(newfilepath)
           self.filepathout = newfilepath
-          self.getfileobj(False)
+          self.getoutfileobj()
         if self.patternfile.filetype == 'HDF5':
           pass
 
-  def getfileobj(self, inout=True):
-      if inout == True:
-        if self.filepath is not None:
-          self.patternfile = ebsd_pattern.get_pattern_file_obj(self.filepath, hdfDataPath=self.hdfdatapath)
-      else:
-        if self.filepathout is not None:
-          self.patternfileout = ebsd_pattern.get_pattern_file_obj(self.filepathout, hdfDataPath=self.hdfdatapathout)
+  def getinfileobj(self, inout=True):
+    if self.filepath is not None:
+      if self.hdfdatapath is None:
+      self.patternfile = ebsd_pattern.get_pattern_file_obj(self.filepath)
+
+
+  def getoutfileobj(self, inout=True):
+    if self.filepathout is not None:
+      self.patternfileout = ebsd_pattern.get_pattern_file_obj(self.filepathout, hdfDataPath=self.hdfdatapathout)
 
   def opt_lambda(self,chunksize=0,saturation_protect=True,automask=True, backsub = False,
                  target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True):
