@@ -1,0 +1,17 @@
+*.o
+rotlibcheck.h5
+**.dgraph
+pyebsdindex/Archive
+report.log
+
+# Python
+**/__pycache__
+*.egg-info
+
+# Jupyter
+**.ipynb_checkpoints
+
+# Editors
+**/.idea
+.vscode
+*.code-workspace
