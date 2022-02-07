@@ -43,7 +43,7 @@ from pyebsdindex import (
 from pyebsdindex.EBSDImage import IPFcolor
 
 
-if ray.__version__ < '1.1.0':  # this fixes an issue when runnning locally on a VPN
+if ray.__version__ < '1.1.0':  # this fixes an issue when running locally on a VPN
   ray.services.get_node_ip_address = lambda: '127.0.0.1'
 else:
   ray._private.services.get_node_ip_address = lambda: '127.0.0.1'
@@ -591,7 +591,7 @@ class EBSDIndexer():
     return quatref2detect
 
   def pcCorrect(self,xy=[0.0,0.0]):  # at somepoint we will put some methods here for correcting the PC
-    # depending on the location within the scan.  Need to correct band_detect.radon2pole to accept mulitple
+    # depending on the location within the scan.  Need to correct band_detect.radon2pole to accept a
     # PC for each point
     pass
 

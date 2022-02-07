@@ -192,7 +192,7 @@ class EBSDPatternFile():
 
   def read_data(self,path=None,convertToFloat=False,patStartCount = [0,-1],returnArrayOnly=False):
     if path is not None:
-      self.filepath = Path(path).expanduser().resolve()
+      self.set_filepath(path)
       self.read_header()
     if self.version is None:
       self.read_header()
@@ -364,7 +364,8 @@ class EBSDPatternFile():
   def copy_file(self, newpath, **kwargs):
     src = Path(self.filepath).expanduser().resolve()
     if newpath is not None:
-      dst = Path(newpath).expanduser().resolve()
+      path = np.atleast_1d(newpath)
+      dst = Path(path[0]).expanduser().resolve()
     else:
       dst = Path(str(src.expanduser().resolve())+'.copy')
     shutil.copyfile(src,dst)
@@ -602,7 +603,6 @@ class HDF5PatFile(EBSDPatternFile):
     self.h5patdatpth = None
     self.set_filepath(path)
 
-
     self.filedatatype = np.uint8
     self.set_data_path(hdf5path) # This will be the h5 path to the patterns
 
@@ -668,18 +668,21 @@ class HDF5PatFile(EBSDPatternFile):
   def copy_file(self, newpath, **kwargs):
     pathtemp = np.atleast_1d(newpath)
     fpath = Path(pathtemp[0]).expanduser().resolve()
+    #print(pathtemp)
     hdf5path = None
     if pathtemp.size > 1:
       hdf5path = pathtemp[1]
     if hdf5path is None: # no hdf dataset path is specified -- just copy the whole file.
-      EBSDPatternFile.copy_file(newpath)
+      EBSDPatternFile.copy_file(self, fpath)
       return
 
     src = Path(self.filepath).expanduser().resolve()
     newh5path = ''
     if 'newh5path' in kwargs:
       newh5path = kwargs['newh5path']
-
+    else:
+      if hdf5path is not None:
+        newh5path = hdf5path
 
     samefile = fpath.exists()
     if samefile:

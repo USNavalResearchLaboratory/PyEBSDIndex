@@ -66,6 +66,8 @@ class NLPAR():
 
 
   def setoutfile(self,patternfile, filepath=None):
+    '''patternfile is an input pattern file object from ebsd_pattern.  Filepath is a string
+     or in the case of HDF5, an array of strings to indicate where the new data should be stored'''
     self.filepathout = None
     self.hdfdatapathout = None
     pathtemp = np.atleast_1d(filepath)
@@ -73,13 +75,14 @@ class NLPAR():
     hdf5path = None
     if pathtemp.size > 1:
       hdf5path = pathtemp[1]
-    if fpath is not None:
+    print(fpath, hdf5path)
+    if fpath is not None: # the user has set an output file path.
       self.filepathout = Path(fpath).expanduser().resolve()
       self.hdfdatapathout =  hdf5path
       if patternfile.filetype != 'HDF5': #check that the input and output are not the same.
         pathok = self.filepathout.exists()
         if pathok:
-          self.filepathout.samefile(patternfile.filepath)
+          pathok = self.filepathout.samefile(patternfile.filepath)
         if pathok:
           raise ValueError('Error: File input and output are exactly the same.')
           return
@@ -87,10 +90,11 @@ class NLPAR():
         patternfile.copy_file([self.filepathout,self.hdfdatapathout] )
         return  # fpath and (maybe) hdf5 path were set manually.
       else: # this is a hdf5 file
-        if not self.self.filepathout.exists():
-          patternfile.copy_file([self.filepathout, self.hdfdatapathout])
+        #if self.filepathout.exists():
+        #  print([self.filepathout,self.hdfdatapathout])
+        patternfile.copy_file([self.filepathout, self.hdfdatapathout])
 
-    if patternfile is not None:
+    if patternfile is not None: # the user has set no path.
       hdf5path = None
       if patternfile.filetype == 'UP':
         p = Path(patternfile.filepath)
@@ -108,8 +112,9 @@ class NLPAR():
         appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
         hdf5path = hdf5path_org+appnd
         newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
-        patternfile.copy_file([newfilepath, hdf5path_org], newh5path=hdf5path)
-        hdf5path = hdf5path+'/EBSD/Data/' + patternfile.patternh5id
+        #patternfile.copy_file([newfilepath, hdf5path_org], newh5path=hdf5path)
+        patternfile.copy_file([newfilepath])
+        hdf5path = patternfile.h5patdatpth
 
       self.filepathout = newfilepath
       self.hdfdatapathout = hdf5path
