@@ -1,4 +1,4 @@
-'''This software was developed by employees of the US Naval Research Laboratory (NRL), an
+"""This software was developed by employees of the US Naval Research Laboratory (NRL), an
 agency of the Federal Government. Pursuant to title 17 section 105 of the United States
 Code, works of NRL employees are not subject to copyright protection, and this software
 is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
@@ -18,8 +18,7 @@ works bear some notice that they are derived from it, and any modified versions 
 some notice that they have been modified.
 
 Author: David Rowenhorst;
-The US Naval Research Laboratory Date: 21 Aug 2020'''
-
+The US Naval Research Laboratory Date: 21 Aug 2020"""
 
 
 import copy
@@ -29,35 +28,33 @@ import pyswarms as pso
 import scipy.optimize as opt
 
 
-RADEG = 180.0/np.pi
+RADEG = 180.0 / np.pi
 
 
-def optfunction(PC_i,indexer,banddat):
-  bandNorm = indexer.bandDetectPlan.radon2pole(banddat,PC=PC_i,vendor=indexer.vendor)
-  npoints = banddat.shape[0]
-  nave = 0.0
-  fitave = 0.0
-  for i in range(npoints):
+def optfunction(PC_i, indexer, banddat):
+    band_norm = indexer.bandDetectPlan.radon2pole(banddat, PC=PC_i, vendor=indexer.vendor)
+    n_points = banddat.shape[0]
+    n_averages = 0
+    average_fit = 0
+    phase = indexer.phaseLib[0]
 
-    bandNorm1 = bandNorm[i,:,:]
-    bDat1 = banddat[i,:]
-    whgood = np.nonzero(bDat1['max'] > -1.0e6)[0]
+    for i in range(n_points):
+        band_norm1 = band_norm[i, :, :]
+        band_data1 = banddat[i, :]
+        whgood = np.nonzero(band_data1['max'] > -1e6)[0]
+        if whgood.size >= 3:
+            band_norm1 = band_norm1[whgood, :]
+            fit = phase.tripvote(band_norm1, goNumba=True)[1]
+            if fit < 90:
+                average_fit += fit
+                n_averages += 1
 
-    if whgood.size >= 3:
-      bDat1 = bDat1[whgood]
-      bandNorm1 = bandNorm1[whgood,:]
+    if n_averages < 0.9:
+        average_fit = 100
+    else:
+        average_fit /= n_averages
+    return average_fit
 
-      avequat,fit,cm,bandmatch,nMatch,matchAttempts = indexer.phaseLib[0].tripvote(bandNorm1,goNumba=True)
-      if fit < 90.0:
-        fitave += fit
-        nave += 1.0
-
-  if nave < 0.9:
-    return 100.0
-  #dat, start, end = indexer.index_pats(patsin=pats, PC=PC_i)
-  fitave /= nave
-  #print(fitave)
-  return fitave
 
 def optimize(pats, indexer, PC0 = None, batch = False):
   ndim = pats.ndim
