@@ -76,23 +76,24 @@ class Radon():
 
     #xmin = -1.0*(self.imDim[0]-1)*0.5
     #ymin = -1.0*(self.imDim[1]-1)*0.5
-    xmin = -1.0*(self.imDim[0]-1)*0.5
-    ymin = -1.0*(self.imDim[1]-1)*0.5
+    xmin = -1.0*(self.imDim[1]-1)*0.5
+    ymin = -1.0*(self.imDim[0]-1)*0.5
 
     #self.radon = np.zeros([self.nRho, self.nTheta])
     sTheta = np.sin(self.theta*DEGRAD)
     cTheta = np.cos(self.theta*DEGRAD)
     thetatest = np.abs(sTheta) >= (np.sqrt(2.) * 0.5)
 
-    m = np.arange(self.imDim[0], dtype = np.uint32)
-    n = np.arange(self.imDim[1], dtype = np.uint32)
+    m = np.arange(self.imDim[1], dtype = np.uint32) # x values
+    n = np.arange(self.imDim[0], dtype = np.uint32) # y values
 
     a = -1.0*np.where(thetatest == 1, cTheta, sTheta)
     a /= np.where(thetatest == 1, sTheta, cTheta)
     b = xmin*cTheta + ymin*sTheta
 
-    self.indexPlan = np.zeros([self.nRho, self.nTheta, self.imDim.max()], dtype=np.uint64)
-    outofbounds = self.imDim[0]*self.imDim[1]
+    outofbounds = self.imDim[0]*self.imDim[1]+1
+    self.indexPlan = np.zeros([self.nRho,self.nTheta,self.imDim.max()],dtype=np.uint64)+outofbounds
+
     for i in np.arange(self.nTheta):
       b1 = self.rho - b[i]
       if thetatest[i]:
@@ -100,10 +101,10 @@ class Radon():
         b1 = b1.reshape(self.nRho, 1)
         indx_y = np.floor(a[i]*m+b1).astype(np.int64)
         indx_y = np.where(indx_y < 0, outofbounds, indx_y)
-        indx_y = np.where(indx_y >= self.imDim[1], outofbounds, indx_y)
+        indx_y = np.where(indx_y >= self.imDim[0], outofbounds, indx_y)
         #indx_y = np.clip(indx_y, 0, self.imDim[1])
-        indx1D = np.clip(m+self.imDim[0]*indx_y, 0, outofbounds)
-        self.indexPlan[:,i, :] = indx1D
+        indx1D = np.clip(m+self.imDim[1]*indx_y, 0, outofbounds)
+        self.indexPlan[:,i, 0:self.imDim[1]] = indx1D
       else:
         b1 /= cTheta[i]
         b1 = b1.reshape(self.nRho, 1)
@@ -112,9 +113,9 @@ class Radon():
         else:
           indx_x = np.ceil(a[i] * n + b1).astype(np.int64)
         indx_x = np.where(indx_x < 0, outofbounds, indx_x)
-        indx_x = np.where(indx_x >= self.imDim[0], outofbounds, indx_x)
-        indx1D = np.clip(indx_x+self.imDim[0]*n, 0, outofbounds)
-        self.indexPlan[:, i, :] = indx1D
+        indx_x = np.where(indx_x >= self.imDim[1], outofbounds, indx_x)
+        indx1D = np.clip(indx_x+self.imDim[1]*n, 0, outofbounds)
+        self.indexPlan[:, i, 0:self.imDim[0]] = indx1D
       self.indexPlan.sort(axis = -1)
 
 
@@ -180,7 +181,7 @@ class Radon():
     radon = np.zeros([self.nRho + 2 * padding[0],self.nTheta + 2 * padding[1], nIm],dtype=np.float32)
     shp = radon.shape
 
-    self.rdn_loops(image,self.indexPlan,nIm,nPx,indxDim,radon, np.asarray(padding))
+    counter = self.rdn_loops(image,self.indexPlan,nIm,nPx,indxDim,radon, np.asarray(padding))
 
     if (fixArtifacts == True):
       radon[:,padding[1],:] = radon[:,padding[1]+1,:]
@@ -190,7 +191,7 @@ class Radon():
     image = image.reshape(shapeIm)
 
     #print(timer()-tic)
-    return radon
+    return radon#, counter
 
   @staticmethod
   @jit(nopython=True, fastmath=True, cache=True, parallel=False)
@@ -198,9 +199,11 @@ class Radon():
     nRho = indxdim[0]
     nTheta = indxdim[1]
     nIndex = indxdim[2]
+    #counter = np.zeros((nRho, nTheta, nIm), dtype=np.float32)
     count = 0.0
     sum = 0.0
     for q in prange(nIm):
+      #radon[:,:,q] = np.mean(images[q*nPx:(q+1)*nPx])
       imstart = q*nPx
       for i in range(nRho):
         ip = i+padding[0]
@@ -215,7 +218,10 @@ class Radon():
             #radon[q, i, j] += images[imstart+indx1]
             sum += images[imstart + indx1]
             count += 1.0
+          #if count >= 1.0:
+            #counter[ip,jp, q] = count
           radon[ip,jp,q] = sum/(count + 1.0e-12)
+    #return counter
 
   def radon_fasterCL(self,image,padding = np.array([0,0]),fixArtifacts = False, background = None, returnBuff = False, clparams=None ):
 

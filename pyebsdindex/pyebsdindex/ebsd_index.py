@@ -55,7 +55,7 @@ def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
                vendor=None,PC=None,sampleTilt=70.0,camElev=5.3, \
                bandDetectPlan=None,nRho=90,nTheta=180,tSigma=None,rSigma=None,rhoMaskFrac=0.1,nBands=9, \
                backgroundSub=False,patstart=0,npats=-1, \
-               return_indexer_obj=False,ebsd_indexer_obj=None,clparams=None,verbose=0):
+               return_indexer_obj=False,ebsd_indexer_obj=None,clparams=None,verbose=0, chunksize = 528):
 
   pats = None
   if patsIn is None:
@@ -87,7 +87,7 @@ def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
     indexer.bandDetectPlan.collect_background(fileobj=indexer.fID,patsIn=pats,nsample=1000)
 
   dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patstart=patstart,npats=npats, \
-                                                 clparams=clparams,verbose=verbose)
+                                                 clparams=clparams,verbose=verbose, chunksize = chunksize)
 
   if return_indexer_obj == False:
     return dataout
@@ -97,7 +97,7 @@ def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
 def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
                            vendor=None,PC=None,sampleTilt=70.0,camElev=5.3, \
                            peakDetectPlan=None,nRho=90,nTheta=180,tSigma=None,rSigma=None,rhoMaskFrac=0.1,nBands=9,
-                           patstart=0,npats=-1,chunksize=256,ncpu=-1,
+                           patstart=0,npats=-1,chunksize=528,ncpu=-1,
                            return_indexer_obj=False,ebsd_indexer_obj=None,keep_log=False):
   n_cpu_nodes = int(multiprocessing.cpu_count())  # int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
   if ncpu != -1:
@@ -416,7 +416,7 @@ class IndexerRay():
     try:
       tic = timer()
       dataout,indxstart,npatsout = indexer.index_pats(patsin=pats,patstart=patstart,npats=npats,
-                                                      clparams=self.openCLParams)
+                                                      clparams=self.openCLParams, chunksize = -1)
       rate = np.array([timer() - tic,npatsout])
       return dataout,indxstart,indxstart + npatsout,rate
     except:
@@ -489,7 +489,7 @@ class EBSDIndexer():
       self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
       self.bandDetectPlan.band_detect_setup(patDim=[self.fID.patternW,self.fID.patternH])
 
-  def index_pats(self,patsin=None,patstart=0,npats=-1,clparams=None,PC=[None,None,None],verbose=0):
+  def index_pats(self,patsin=None,patstart=0,npats=-1,clparams=None,PC=[None,None,None],verbose=0, chunksize = 528):
     tic = timer()
 
     if patsin is None:
@@ -517,7 +517,7 @@ class EBSDIndexer():
 
     # print(timer() - tic)
     tic = timer()
-    bandData = self.bandDetectPlan.find_bands(pats,clparams=clparams,verbose=verbose)
+    bandData = self.bandDetectPlan.find_bands(pats,clparams=clparams,verbose=verbose, chunksize = chunksize)
     shpBandDat = bandData.shape
     if PC[0] is None:
       PC_0 = self.PC
