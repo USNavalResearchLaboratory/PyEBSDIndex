@@ -66,16 +66,18 @@ class NLPAR():
 
 
   def setoutfile(self,patternfile, filepath=None):
-    '''patternfile is an input pattern file object from ebsd_pattern.  Filepath is a string
-     or in the case of HDF5, an array of strings to indicate where the new data should be stored'''
+    '''patternfile is an input pattern file object from ebsd_pattern.  Filepath is a string.
+    In the future I want to be able to specify the HDF5 data path to store the output data, but that
+    is proving to be a bit of a mess.  For now, a copy of the original HDF5 is made, and the NLPAR patterns will be
+    overwritten on top of the originals. '''
     self.filepathout = None
     self.hdfdatapathout = None
     pathtemp = np.atleast_1d(filepath)
     fpath = pathtemp[0]
     hdf5path = None
-    if pathtemp.size > 1:
-      hdf5path = pathtemp[1]
-    print(fpath, hdf5path)
+    #if pathtemp.size > 1:
+    #  hdf5path = pathtemp[1]
+    #print(fpath, hdf5path)
     if fpath is not None: # the user has set an output file path.
       self.filepathout = Path(fpath).expanduser().resolve()
       self.hdfdatapathout =  hdf5path
