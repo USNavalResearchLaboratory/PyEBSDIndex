@@ -35,7 +35,7 @@ from pyebsdindex import ebsd_pattern
 
 
 class NLPAR():
-  def __init__(self, filename=None, hdfdatapath=None, lam=0.7, searchradius=3,dthresh=0.0):
+  def __init__(self, filename=None,  lam=0.7, searchradius=3,dthresh=0.0):
     self.lam = lam
     self.searchradius = searchradius
     self.dthresh = dthresh
@@ -43,46 +43,96 @@ class NLPAR():
     self.hdfdatapath = None
     self.filepathout = None
     self.hdfdatapathout = None
-    self.patternfile = None
-    self.patternfileout = None
-    self.setfile(filename, hdfdatapath)
+    #self.patternfile = None
+    #self.patternfileout = None
+    self.setfile(filename)
     self.mask = None
     self.sigma = None
 
 
-  def setfile(self, filename=None,  hdfdatapath=None):
-    if filename is not None:
-      self.filepath = Path(filename)
-      self.hdfdatapath = hdfdatapath
-      self.getfileobj(True)
+  def setfile(self,filepath=None):
+    self.filepath = None
+    self.hdfdatapath = None
+    pathtemp = np.atleast_1d(filepath)
+    fpath = pathtemp[0]
+    hdf5path = None
+    if pathtemp.size > 1:
+      hdf5path = pathtemp[1]
+    if fpath is not None:
+      self.filepath = Path(fpath)
+      self.hdfdatapath = hdf5path
 
-  def setoutfile(self, filename=None,  hdfdatapath=None):
-    if filename is not None:
-      self.filepathout = Path(filename)
-      self.hdfdatapathout = hdfdatapath
-      if str(self.filepathout) != str(self.patternfile.path):
-        self.patternfile.copy_file(self.filepathout)
-      self.getfileobj(False)
+
+
+
+  def setoutfile(self,patternfile, filepath=None):
+    '''patternfile is an input pattern file object from ebsd_pattern.  Filepath is a string.
+    In the future I want to be able to specify the HDF5 data path to store the output data, but that
+    is proving to be a bit of a mess.  For now, a copy of the original HDF5 is made, and the NLPAR patterns will be
+    overwritten on top of the originals. '''
+    self.filepathout = None
+    self.hdfdatapathout = None
+    pathtemp = np.atleast_1d(filepath)
+    fpath = pathtemp[0]
+    hdf5path = None
+    #if pathtemp.size > 1:
+    #  hdf5path = pathtemp[1]
+    #print(fpath, hdf5path)
+    if fpath is not None: # the user has set an output file path.
+      self.filepathout = Path(fpath).expanduser().resolve()
+      self.hdfdatapathout =  hdf5path
+      if patternfile.filetype != 'HDF5': #check that the input and output are not the same.
+        pathok = self.filepathout.exists()
+        if pathok:
+          pathok = self.filepathout.samefile(patternfile.filepath)
+        if pathok:
+          raise ValueError('Error: File input and output are exactly the same.')
+          return
+
+        patternfile.copy_file([self.filepathout,self.hdfdatapathout] )
+        return  # fpath and (maybe) hdf5 path were set manually.
+      else: # this is a hdf5 file
+        #if self.filepathout.exists():
+        #  print([self.filepathout,self.hdfdatapathout])
+        patternfile.copy_file([self.filepathout, self.hdfdatapathout])
+
+    if patternfile is not None: # the user has set no path.
+      hdf5path = None
+      if patternfile.filetype == 'UP':
+        p = Path(patternfile.filepath)
+        appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
+        newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
+        patternfile.copy_file(newfilepath)
+
+      if patternfile.filetype == 'HDF5':
+        hdf5path_tmp = str(patternfile.h5patdatpth).split('/')
+        if hdf5path_tmp[0] == '':
+          hdf5path_org =  hdf5path_tmp[1]
+        else:
+          hdf5path_org = hdf5path_tmp[0]
+        p = Path(patternfile.filepath)
+        appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
+        hdf5path = hdf5path_org+appnd
+        newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
+        #patternfile.copy_file([newfilepath, hdf5path_org], newh5path=hdf5path)
+        patternfile.copy_file([newfilepath])
+        hdf5path = patternfile.h5patdatpth
+
+      self.filepathout = newfilepath
+      self.hdfdatapathout = hdf5path
+      return
+
+  def getinfileobj(self, inout=True):
+    if self.filepath is not None:
+      return ebsd_pattern.get_pattern_file_obj([self.filepath, self.hdfdatapath])
     else:
-      if self.patternfile is not None:
-        if self.patternfile.filetype == 'UP':
-          p = Path(self.filepath)
-          appnd = "lam{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)\
-                  + "dt{:1.1f}".format(self.dthresh)
-          newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
-          self.patternfile.copy_file(newfilepath)
-          self.filepathout = newfilepath
-          self.getfileobj(False)
-        if self.patternfile.filetype == 'HDF5':
-          pass
+      return None
 
-  def getfileobj(self, inout=True):
-      if inout == True:
-        if self.filepath is not None:
-          self.patternfile = ebsd_pattern.get_pattern_file_obj(self.filepath, hdfDataPath=self.hdfdatapath)
-      else:
-        if self.filepathout is not None:
-          self.patternfileout = ebsd_pattern.get_pattern_file_obj(self.filepathout, hdfDataPath=self.hdfdatapathout)
+  def getoutfileobj(self, inout=True):
+    if self.filepathout is not None:
+      return ebsd_pattern.get_pattern_file_obj([self.filepathout, self.hdfdatapathout])
+    else:
+      return None
 
   def opt_lambda(self,chunksize=0,saturation_protect=True,automask=True, backsub = False,
                  target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True):
@@ -112,16 +162,19 @@ class NLPAR():
               d2[j,i,q] -= n2[j,i,q] * s2_12
               d2[j,i,q] /= s2_12*np.sqrt(2.0*n2[j,i,q])
 
-    nrows = np.uint64(self.patternfile.nRows)
-    ncols = np.uint64(self.patternfile.nCols)
+    patternfile = self.getinfileobj()
+    patternfile.read_header()
+    nrows = np.uint64(patternfile.nRows)
+    ncols = np.uint64(patternfile.nCols)
 
-    pwidth = np.uint64(self.patternfile.patternW)
-    pheight = np.uint64(self.patternfile.patternH)
+    pwidth = np.uint64(patternfile.patternW)
+    pheight = np.uint64(patternfile.patternH)
     phw = pheight * pwidth
 
     nn = 1
     if chunksize <= 0:
       chunksize = np.maximum(1, np.round(1e9 / phw / ncols) ) # keeps the chunk at about 4GB
+      chunksize = np.minimum(nrows,chunksize)
       print("Chunk size set to nrows:", int(chunksize))
     chunksize = np.int64(chunksize)
 
@@ -146,7 +199,7 @@ class NLPAR():
       rowstartread = np.int64(j)
       rowend = min(j + chunksize + nn,nrows)
       rowcountread = np.int64(rowend - rowstartread)
-      data = self.patternfile.read_data(patStartCount=[[0,rowstartread],[ncols,rowcountread]],
+      data = patternfile.read_data(patStartCount=[[0,rowstartread],[ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
 
       shp = data.shape
@@ -180,8 +233,8 @@ class NLPAR():
     if self.sigma is None:
       self.sigma = sigma
 
-  def calcnlpar(self,chunksize=0,searchradius=None,lam = None, dthresh = None, saturation_protect=True,automask=True,
-                filename=None, fileout=None, backsub = False,  hdfdatapath=None, hdfdatapathout=None):
+  def calcnlpar(self,chunksize=0,searchradius=None,lam = None,dthresh = None,saturation_protect=True,automask=True,
+                filepath=None,filepathout=None,reset_sigma=True,backsub = False):
 
     if lam is not None:
       self.lam = lam
@@ -196,25 +249,30 @@ class NLPAR():
     dthresh = np.float32(self.dthresh)
     sr = np.int64(self.searchradius)
 
-    if filename is not None:
-      self.setfile(filename=filename,  hdfdatapath=hdfdatapath)
+    if filepath is not None:
+      self.setfile(filepath=filepath)
+
+    if reset_sigma:
       self.sigma = None
 
-    if fileout is not None:
-      self.setoutfile(filename=fileout,hdfdatapath=hdfdatapathout)
+    patternfile = self.getinfileobj()
 
-    if self.patternfileout is None:
-      self.setoutfile()
+    #if filepathout is not None:
+    self.setoutfile(patternfile, filepath=filepathout)
 
-    nrows = np.int64(self.patternfile.nRows)
-    ncols = np.int64(self.patternfile.nCols)
+    patternfileout = self.getoutfileobj()
 
-    pwidth = np.int64(self.patternfile.patternW)
-    pheight = np.int64(self.patternfile.patternH)
+
+    nrows = np.int64(patternfile.nRows)
+    ncols = np.int64(patternfile.nCols)
+
+    pwidth = np.int64(patternfile.patternW)
+    pheight = np.int64(patternfile.patternH)
     phw = pheight*pwidth
 
     if chunksize <= 0:
       chunksize = np.maximum(1, np.round(1e9 / phw / ncols) ) # keeps the chunk at about 8GB
+      chunksize = np.minimum(nrows, chunksize)
       print("Chunk size set to nrows:", int(chunksize))
     chunksize = np.int64(chunksize)
 
@@ -253,7 +311,7 @@ class NLPAR():
       rowstartread = np.int64(max(0, j-sr))
       rowend = min(j + chunksize+sr,nrows)
       rowcountread = np.int64(rowend-rowstartread)
-      data = self.patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
+      data = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
 
       shpdata = data.shape
@@ -282,7 +340,7 @@ class NLPAR():
       shpout = dataout.shape
       dataout = dataout.reshape(shpout[0]*shpout[1], pheight, pwidth)
 
-      self.patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
+      patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
                                      flt2int='clip',scalevalue=1.0 )
       #self.patternfileout.write_data(newpatterns=dataout,patStartCount=[j*ncols,shpout[0]*shpout[1]],
       #                               flt2int='clip',scalevalue=1.0 )
@@ -290,19 +348,23 @@ class NLPAR():
       #sigma[j:j+rowstartcount[1],:] += \
       #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
     numba.set_num_threads(nthreadpos)
-    self.filepathout = None
+
 
   def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True):
 
-    nrows = np.uint64(self.patternfile.nRows)
-    ncols = np.uint64(self.patternfile.nCols)
+    patternfile = self.getinfileobj()
 
-    pwidth = np.uint64(self.patternfile.patternW)
-    pheight = np.uint64(self.patternfile.patternH)
+
+    nrows = np.uint64(patternfile.nRows)
+    ncols = np.uint64(patternfile.nCols)
+
+    pwidth = np.uint64(patternfile.patternW)
+    pheight = np.uint64(patternfile.patternH)
     phw = pheight*pwidth
 
     if chunksize <= 0:
       chunksize = np.round(2e9/phw/ncols) # keeps the chunk at about 8GB
+      chunksize = np.minimum(nrows,chunksize)
       print("Chunk size set to nrows:", int(chunksize))
     chunksize = np.int64(chunksize)
 
@@ -324,7 +386,7 @@ class NLPAR():
       rowstartread = np.int64(max(0, j-nn))
       rowend = min(j + chunksize+nn,nrows)
       rowcountread = np.int64(rowend-rowstartread)
-      data = self.patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
+      data = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
 
       shp = data.shape

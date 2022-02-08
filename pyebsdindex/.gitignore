@@ -3,7 +3,6 @@ rotlibcheck.h5
 **.dgraph
 pyebsdindex/Archive
 report.log
-**.DS_Store
 
 # Python
 **/__pycache__
