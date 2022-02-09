@@ -31,6 +31,7 @@ from timeit import default_timer as timer
 import matplotlib.pyplot as plt
 import numpy as np
 import ray
+import h5py
 
 from pyebsdindex import (
     band_detect,
@@ -61,12 +62,23 @@ def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
   if patsIn is None:
     pdim = None
   else:
-
     if isinstance(patsIn,ebsd_pattern.EBSDPatterns):
       pats = patsIn.patterns
     if type(patsIn) is np.ndarray:
       pats = patsIn
+    if isinstance(patsIn, h5py.Dataset):
+      shp = patsIn.shape
+      if len(shp) == 3:
+        pats = patsIn
+      if len(shp) == 2:  # just read off disk now.
+        pats = patsIn[()]
+        pats = pats.reshape(1, shp[0], shp[1])
+
+    if pats is None:
+      print('Unrecognized input data type')
+      return
     pdim = pats.shape[-2:]
+
 
   if ebsd_indexer_obj == None:
     indexer = EBSDIndexer(filename=filename,phaselist=phaselist, \
@@ -127,6 +139,17 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
       pats = patsIn.patterns
     if type(patsIn) is np.ndarray:
       pats = patsIn
+    if isinstance(patsIn,h5py.Dataset):
+      shp = patsIn.shape
+      if len(shp) == 3:
+        pats = patsIn
+      if len(shp) == 2: # just read off disk now.
+        pats = patsIn[()]
+        pats = pats.reshape(1,shp[0], shp[1])
+
+    if pats is None:
+      print('Unrecognized input data type')
+      return
     pdim = pats.shape[-2:]
 
   if ebsd_indexer_obj == None:
