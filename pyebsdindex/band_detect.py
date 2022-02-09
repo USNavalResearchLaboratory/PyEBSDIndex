@@ -387,7 +387,7 @@ class BandDetect():
     nBands = bandData.shape[1]
 
     # This translation from the Radon to theta and rho assumes that the first pixel read
-    # in off the detector is in the bottom left corner. -- No longer a good assumption ---
+    # in off the detector is in the bottom left corner. -- No longer the assumption --- see below.  
     # theta = self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1], dtype=np.int)]/RADEG
     # rho = self.radonPlan.rho[np.array(bandData['aveloc'][:, :, 0], dtype=np.int)]
 
@@ -412,7 +412,7 @@ class BandDetect():
 
     dimf = np.array(self.patDim, dtype=np.float32)
     if ven == 'EDAX':
-      t *= np.array([dimf[0],dimf[1],-dimf[0]])
+      t *= np.array([dimf[1],dimf[0],-dimf[1]])
     # describes the translation from the bottom left corner of the pattern image to the point on the detector
     # perpendicular to where the beam contacts the sample.
 
@@ -425,8 +425,8 @@ class BandDetect():
     p = np.zeros((nPats, nBands, 3), dtype=np.float32)
     p[:,:,0] = rho*ctheta # get a point within the band -- here it is the point perpendicular to the image center.
     p[:,:,1] = rho*stheta
-    p[:,:,0] += dimf[0] * 0.5 # now convert this with reference to the image origin.
-    p[:,:,1] += dimf[1] * 0.5 # this is now [O_vP]_v in Eq 3.1.6
+    p[:,:,0] += dimf[1] * 0.5 # now convert this with reference to the image origin.
+    p[:,:,1] += dimf[0] * 0.5 # this is now [O_vP]_v in Eq 3.1.6
 
     #n2 = p - t.reshape(1,1,3)
     n2 = p - t
