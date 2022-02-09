@@ -50,6 +50,7 @@ setup(
         "ray[default]",
         "scipy",
         "h5py",
+        "jupyterlab"
 
     ],
     # Files to include when distributing package
