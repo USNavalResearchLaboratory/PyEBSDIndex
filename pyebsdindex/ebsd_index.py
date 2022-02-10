@@ -82,7 +82,7 @@ def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
 
   if ebsd_indexer_obj == None:
     indexer = EBSDIndexer(filename=filename,phaselist=phaselist, \
-                          vendor=None,PC=PC,sampleTilt=sampleTilt,camElev=camElev, \
+                          vendor=vendor,PC=PC,sampleTilt=sampleTilt,camElev=camElev, \
                           bandDetectPlan=bandDetectPlan, \
                           nRho=nRho,nTheta=nTheta,tSigma=tSigma,rSigma=rSigma,rhoMaskFrac=rhoMaskFrac,nBands=nBands,
                           patDim=pdim)
@@ -154,7 +154,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 
   if ebsd_indexer_obj == None:
     indexer = EBSDIndexer(filename=filename,phaselist=phaselist, \
-                          vendor=None,PC=PC,sampleTilt=sampleTilt,camElev=camElev, \
+                          vendor=vendor,PC=PC,sampleTilt=sampleTilt,camElev=camElev, \
                           bandDetectPlan=peakDetectPlan, \
                           nRho=nRho,nTheta=nTheta,tSigma=tSigma,rSigma=rSigma,rhoMaskFrac=rhoMaskFrac,nBands=nBands,
                           patDim=pdim)
@@ -472,8 +472,7 @@ class EBSDIndexer():
       if self.fID is not None:
         self.vendor = self.fID.vendor
     else:
-      if vendor is not None:
-        self.vendor = vendor
+      self.vendor = vendor
 
     if PC is None:
       self.PC = np.array([0.471659,0.675044,0.630139])  # a default value
@@ -605,11 +604,19 @@ class EBSDIndexer():
     return indxData,patstart,npats
 
   def refframe2detector(self):
-    if self.vendor == 'EDAX':
+    ven = str.upper(self.vendor)
+    if (ven in ['EDAX', 'EMSOFT', 'KIKUCHIPY']):
       q0 = np.array([np.sqrt(2.0) * 0.5,0.0,0.0,-1.0 * np.sqrt(2.0) * 0.5])
       tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
       q1 = np.array([np.cos(tiltang * 0.5),np.sin(tiltang * 0.5),0.0,0.0])
       quatref2detect = rotlib.quat_multiply(q1,q0)
+
+    if ven in ['OXFORD', 'BRUKER']:
+      tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
+      q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
+      quatref2detect = q1
+
+
 
     return quatref2detect
 

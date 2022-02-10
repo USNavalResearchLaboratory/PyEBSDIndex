@@ -402,17 +402,23 @@ class BandDetect():
     ctheta = np.cos(theta)
 
     t = (np.asfarray(PC)).copy()
-    spt = t.shape
-    if len(spt) < 2:
+    shapet = t.shape
+    if len(shapet) < 2:
       t = np.tile(t, nPats).reshape(nPats,3)
     else:
-      if spt[0] != nPats:
+      if shapet[0] != nPats:
         t = np.tile(t[0,:], nPats).reshape(nPats,3)
 
 
     dimf = np.array(self.patDim, dtype=np.float32)
-    if ven == 'EDAX':
-      t *= np.array([dimf[1],dimf[0],-dimf[1]])
+    if (ven in ['EDAX', 'OXFORD']) :
+      t *= np.array([dimf[1],dimf[1],-1.0 * dimf[1]])
+    if (ven == 'EMSOFT'):
+      t += np.array([dimf[1] / 2.0,dimf[0] / 2.0,0.0])
+      t[2,:] *= -1.0
+    if ven in ['KIKUCHIPY', 'BRUKER']:
+      t *=  np.array([dimf[1],dimf[0],-1.0 *dimf[0]])
+      t[1,:] = dimf[0] - t[1,:]
     # describes the translation from the bottom left corner of the pattern image to the point on the detector
     # perpendicular to where the beam contacts the sample.
 
