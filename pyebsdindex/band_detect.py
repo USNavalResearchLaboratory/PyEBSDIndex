@@ -414,7 +414,7 @@ class BandDetect():
       t *= np.array([dimf[1], dimf[1], -dimf[1]])
     if ven == 'EMSOFT':
       t += np.array([dimf[1] / 2.0, dimf[0] / 2.0, 0.0])
-      t[:, 2] *= -1
+      t[:, 2] *= -1.0
     if ven in ['KIKUCHIPY', 'BRUKER']:
       t *=  np.array([dimf[1], dimf[0], -dimf[0]])
       t[:, 1] = dimf[0] - t[:, 1]
