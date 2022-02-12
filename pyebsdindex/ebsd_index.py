@@ -43,11 +43,11 @@ from pyebsdindex import (
 )
 from pyebsdindex.EBSDImage import IPFcolor
 
-
-if ray.__version__ < '1.1.0':  # this fixes an issue when running locally on a VPN
-  ray.services.get_node_ip_address = lambda: '127.0.0.1'
-else:
-  ray._private.services.get_node_ip_address = lambda: '127.0.0.1'
+# if sys.platform == 'darwin':
+#   if ray.__version__ < '1.1.0':  # this fixes an issue when running locally on a VPN
+#     ray.services.get_node_ip_address = lambda: '127.0.0.1'
+#   else:
+#     ray._private.services.get_node_ip_address = lambda: '127.0.0.1'
 
 RADEG = 180.0 / np.pi
 
@@ -130,7 +130,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
   ray.shutdown()
 
   #ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
-  ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu)
+  ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu, _node_ip_address="0.0.0.0")
   pats = None
   if patsIn is None:
     pdim = None

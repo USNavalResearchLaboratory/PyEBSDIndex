@@ -155,8 +155,8 @@ __kernel void convolution3d2d( __global const float16 *in, __constant float *ker
   const unsigned long int nImChunk = get_global_size(2);
   //long int indxIm; 
   //long int indxK;
-  long unsigned long yIndx; 
-  long unsigned long yKIndx; 
+  unsigned long yIndx; 
+  unsigned long yKIndx; 
   float16 pxVal;
   float16 sum = (float16) (0.0f); // initialize convolution sum
   float kVal;
