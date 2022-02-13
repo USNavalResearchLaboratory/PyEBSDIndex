@@ -72,7 +72,6 @@ setup(
         "numpy",
         "numba",
         "pyopencl",
-        "pybind11",
         #"ocl_icd_wrapper_apple;sys_platform == 'darwin'",
         #"ocl-icd-system;sys_platform == 'linux'",
         "pyswarms",
