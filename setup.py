@@ -10,22 +10,8 @@ from pyebsdindex import (
 # tests. From setuptools:
 # https://setuptools.readthedocs.io/en/latest/setuptools.html#declaring-extras-optional-features-with-their-own-dependencies
 extra_feature_requirements = {
-    "doc": [
-        "furo",
-        "nbsphinx >= 0.7",
-        "sphinx >= 3.0.2",
-        "sphinx-copybutton >= 0.2.5",
-        "sphinx-gallery >= 0.6",
-        "sphinxcontrib-bibtex >= 1.0",
-    ],
     "tests": ["coverage >= 5.0", "pytest >= 5.4", "pytest-cov >= 2.8.1"],
 }
-
-# Create a development project, including both the doc and tests
-# projects
-extra_feature_requirements["dev"] = list(
-    chain(*list(extra_feature_requirements.values()))
-)
 
 
 setup(
