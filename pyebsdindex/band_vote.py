@@ -1,4 +1,4 @@
-'''This software was developed by employees of the US Naval Research Laboratory (NRL), an
+"""This software was developed by employees of the US Naval Research Laboratory (NRL), an
 agency of the Federal Government. Pursuant to title 17 section 105 of the United States
 Code, works of NRL employees are not subject to copyright protection, and this software
 is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
@@ -18,7 +18,7 @@ works bear some notice that they are derived from it, and any modified versions 
 some notice that they have been modified.
 
 Author: David Rowenhorst;
-The US Naval Research Laboratory Date: 21 Aug 2020'''
+The US Naval Research Laboratory Date: 21 Aug 2020"""
 
 from os import environ
 from pathlib import PurePath
@@ -38,8 +38,9 @@ tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettemp
 tempdir = tempdir.joinpath('numba')
 environ["NUMBA_CACHE_DIR"] = str(tempdir)
 
-class BandVote():
-  def __init__(self, tripLib, angTol = 3.0):
+
+class BandVote:
+  def __init__(self, tripLib, angTol=3.0):
     self.tripLib = tripLib
     self.phaseName = self.tripLib.phaseName
     self.phaseSym = self.tripLib.symmetry
@@ -62,7 +63,7 @@ class BandVote():
     tic0 = timer()
     nfam = self.tripLib.family.shape[0]
     bandnorms = np.squeeze(bandnormsIN)
-    n_bands = np.int(bandnorms.size/3)
+    n_bands = np.int64(bandnorms.size/3)
 
     tic = timer()
     bandangs = np.abs(bandnorms.dot(bandnorms.T))
@@ -219,7 +220,7 @@ class BandVote():
     tic = timer()
     poles = self.tripLib.completelib['polesCart']
     nGood = whGood.size
-    n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int(2))
+    n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int64(2))
     whGood = np.asarray(whGood,dtype=np.int64)
     AB, ABgood = self.orientation_refine_loops_am(nGood,whGood,poles,bandnorms,polematch,n2Fit)
 
@@ -294,9 +295,9 @@ class BandVote():
                 accumulator[f[1],i] += 1
                 accumulator[f[2],j] += 1
 
-    mxvote = np.zeros(n_bands, dtype = np.int32)
-    tvotes = np.zeros(n_bands, dtype = np.int32)
-    band_cm = np.zeros(n_bands,dtype=np.float32)
+    mxvote = np.zeros(n_bands, dtype=np.int32)
+    tvotes = np.zeros(n_bands, dtype=np.int32)
+    band_cm = np.zeros(n_bands, dtype=np.float32)
     for q in range(n_bands):
       mxvote[q] = np.amax(accumulator[:,q])
       tvotes[q] = np.sum(accumulator[:,q])
@@ -355,7 +356,7 @@ class BandVote():
         if ang01 < angTol:  # the two poles are parallel, send in another two poles if available.
           continue
 
-        wh01 = np.nonzero(np.abs(angTable[famIndx[f0],famIndx[f1]:np.int(famIndx[f1] + nFam[f1])] - ang01) < angTol)[0]
+        wh01 = np.nonzero(np.abs(angTable[famIndx[f0],famIndx[f1]:np.int64(famIndx[f1] + nFam[f1])] - ang01) < angTol)[0]
 
         n01 = wh01.size
         if n01 == 0:
@@ -463,12 +464,12 @@ class BandVote():
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
   def orientation_refine_loops_triad(nGood, whGood, poles, bandnorms, polematch, n2Fit):
     #uses the TRIAD method for getting rotation matrix from imperfect poles.
-    quats = np.zeros((n2Fit,4),dtype=np.float32)
+    quats = np.zeros((n2Fit, 4), dtype=np.float32)
     counter = 0
-    A = np.zeros((3,3), dtype = np.float32)
-    B = np.zeros((3,3), dtype = np.float32)
-    AB = np.zeros((n2Fit, 3,3), dtype= np.float32)
-    whgood2 = np.zeros((n2Fit), dtype = np.int32)
+    A = np.zeros((3, 3), dtype=np.float32)
+    B = np.zeros((3, 3), dtype=np.float32)
+    AB = np.zeros((n2Fit, 3, 3), dtype=np.float32)
+    whgood2 = np.zeros(n2Fit, dtype=np.int32)
     for i in range(nGood):
       v0 = bandnorms[whGood[i],:]
       p0 = poles[polematch[whGood[i]],:]
@@ -519,10 +520,10 @@ class BandVote():
     # this uses the method laid out by A. Morawiec 2020 Eq.4 for getting rotation matrix
     # from imperfect poles
     counter = 0
-    A = np.zeros((3,3),dtype=np.float32)
-    B = np.zeros((3,3),dtype=np.float32)
-    AB = np.zeros((n2Fit,3,3),dtype=np.float32)
-    whgood2 = np.zeros((n2Fit),dtype=np.int32)
+    A = np.zeros((3, 3), dtype=np.float32)
+    B = np.zeros((3, 3), dtype=np.float32)
+    AB = np.zeros((n2Fit, 3, 3),dtype=np.float32)
+    whgood2 = np.zeros(n2Fit, dtype=np.int32)
     for i in range(nGood):
       v0 = bandnorms[whGood[i],:]
       p0 = poles[polematch[whGood[i]],:]
@@ -589,7 +590,7 @@ class BandVote():
     tic0 = timer()
     nfam = self.tripLib.family.shape[0]
     bandnorms = np.squeeze(bandnormsIN)
-    n_bands = np.int(bandnorms.size / 3)
+    n_bands = np.int64(bandnorms.size / 3)
 
     bandangs = np.abs(bandnorms.dot(bandnorms.T))
     bandangs = np.clip(bandangs,-1.0,1.0)
@@ -675,7 +676,7 @@ class BandVote():
       fit = np.zeros(nmxvote, dtype=np.float32)
       avequat = np.zeros((nmxvote,4),dtype=np.float32)
       nMatch = np.zeros((nmxvote),dtype=np.float32)
-      poleMatch = np.zeros((nmxvote,n_bands), dtype = np.int32)-1
+      poleMatch = np.zeros((nmxvote, n_bands), dtype=np.int32) - 1
       #cm = (mxvote-solutionVotes[solSrt[-nmxvote-1]])/np.sum(solutionVotes)
       cm = mxvote/np.sum(solutionVotes)
       for q in range(nmxvote):
@@ -714,7 +715,7 @@ class BandVote():
     nsym = qsym.shape[0]
     solutions = np.empty((500,24,4),dtype=np.float32)
     solutions[0,:,:] = rotlib.quat_multiplyL(qsym,np.array([1.0,0.0,0.0,0.0],dtype=np.float32))
-    solutionVotes = np.zeros(500,dtype=np.int32)
+    solutionVotes = np.zeros(500, dtype=np.int32)
     nsolutions = 1
     soltol = np.cos(5.0 / RADEG / 2.0)
 

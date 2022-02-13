@@ -16,3 +16,6 @@ report.log
 **/.idea
 .vscode
 *.code-workspace
+
+# Line coverage
+.coverage
