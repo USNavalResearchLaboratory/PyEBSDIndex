@@ -154,11 +154,11 @@ class triplib():
     #print(indx0FID)
     #This completely over previsions the arrays, this is essentially 
     #N Choose K with N = number of angles and K = 3
-    nlib = npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))/np.long(np.math.factorial(3))
-    nlib = nlib.astype(np.int)
+    nlib = npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))/np.compat.long(np.math.factorial(3))
+    nlib = nlib.astype(int)
 
     libANG = np.zeros((nlib, 3))
-    libID = np.zeros((nlib, 3), dtype = np.int)
+    libID = np.zeros((nlib, 3), dtype=int)
     counter = 0
 
     for i in range(npoles):
@@ -186,9 +186,9 @@ class triplib():
     #print(libANG.shape)
     angTable = self.calc_pole_dot(sympolesComplete,sympolesComplete)
     angTable = np.arccos(angTable)*RADEG
-    famindx0 = ((np.concatenate( ([0],np.cumsum(nFamComplete)) ))[0:-1]).astype(dtype=np.int)
+    famindx0 = ((np.concatenate( ([0],np.cumsum(nFamComplete)) ))[0:-1]).astype(dtype=np.int64)
     cartPoles = self.xstalplane2cart(sympolesComplete)
-    cartPoles /= np.linalg.norm(cartPoles, axis = 1).reshape(np.int(cartPoles.size/3),1)
+    cartPoles /= np.linalg.norm(cartPoles, axis = 1).reshape(np.int64(cartPoles.size/3),1)
     completePoleFamId = np.zeros(sympolesComplete.shape[0], dtype=np.int32)
     for i in range(npoles):
       for j in range(nFamComplete[i]):
@@ -237,8 +237,8 @@ class triplib():
 
   def calc_pole_dot(self,poles1,poles2,rMetricTensor = np.identity(3)):
 
-    p1 = poles1.reshape(np.int(poles1.size / 3), 3)
-    p2 = poles2.reshape(np.int(poles2.size / 3), 3)
+    p1 = poles1.reshape(np.int64(poles1.size / 3), 3)
+    p2 = poles2.reshape(np.int64(poles2.size / 3), 3)
 
     n1 = p1.shape[0]
     n2 = p2.shape[0]
@@ -268,7 +268,7 @@ class triplib():
     for i in range(6):
       LUT[:, LUTA[i,0], LUTA[i,1], LUTA[i,2]] = LUTB[i,:]
 
-    ntrips = np.int(libANG.size / 3)
+    ntrips = np.int64(libANG.size / 3)
     for i in range(ntrips):
       temp = np.squeeze(libANG[i,:])
       srt = np.argsort(temp)

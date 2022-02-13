@@ -1,4 +1,4 @@
-'''This software was developed by employees of the US Naval Research Laboratory (NRL), an
+"""This software was developed by employees of the US Naval Research Laboratory (NRL), an
 agency of the Federal Government. Pursuant to title 17 section 105 of the United States
 Code, works of NRL employees are not subject to copyright protection, and this software
 is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
@@ -18,9 +18,12 @@ works bear some notice that they are derived from it, and any modified versions 
 some notice that they have been modified.
 
 Author: David Rowenhorst;
-The US Naval Research Laboratory Date: 21 Aug 2020'''
+The US Naval Research Laboratory Date: 21 Aug 2020"""
 
 from os import environ
+from pathlib import PurePath
+import platform
+import tempfile
 from timeit import default_timer as timer
 
 import matplotlib.pyplot as plt
@@ -28,16 +31,13 @@ import numba
 import numpy as np
 import pyopencl as cl
 from scipy.ndimage import gaussian_filter
-from scipy.ndimage.morphology import grey_dilation as scipy_grey_dilation
+from scipy.ndimage import grey_dilation as scipy_grey_dilation
 
 from pyebsdindex import openclparam, radon_fast
 
 
 #from os import environ
 #environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
-import tempfile
-from pathlib import PurePath
-import platform
 tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
 tempdir = tempdir.joinpath('numba')
 environ["NUMBA_CACHE_DIR"] = str(tempdir)
@@ -1055,6 +1055,3 @@ class BandDetect():
     maxlocxy[:,:,1] = temp[1,:,:]
     valid = np.asarray(maxval > -1e6, dtype=np.int8)
     return (maxval,aveval,maxlocxy,aveloc,valid), rdnConv_gpu
-
-
-
