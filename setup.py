@@ -1,6 +1,31 @@
+from itertools import chain
 from setuptools import setup, find_packages
 
-from pyebsdindex import __author__, __author_email__, __credits__, __description__, __name__, __version__
+from pyebsdindex import (
+    __author__, __author_email__, __credits__, __description__, __name__, __version__
+)
+
+
+# Projects with optional features for building the documentation and running
+# tests. From setuptools:
+# https://setuptools.readthedocs.io/en/latest/setuptools.html#declaring-extras-optional-features-with-their-own-dependencies
+extra_feature_requirements = {
+    "doc": [
+        "furo",
+        "nbsphinx >= 0.7",
+        "sphinx >= 3.0.2",
+        "sphinx-copybutton >= 0.2.5",
+        "sphinx-gallery >= 0.6",
+        "sphinxcontrib-bibtex >= 1.0",
+    ],
+    "tests": ["coverage >= 5.0", "pytest >= 5.4", "pytest-cov >= 2.8.1"],
+}
+
+# Create a development project, including both the doc and tests
+# projects
+extra_feature_requirements["dev"] = list(
+    chain(*list(extra_feature_requirements.values()))
+)
 
 
 setup(
@@ -39,7 +64,10 @@ setup(
         "Source Code": "https://github.com/USNavalResearchLaboratory/PyEBSDIndex",
     },
     # Dependencies
+    extras_require=extra_feature_requirements,
     install_requires=[
+        "h5py",
+        "jupyterlab",
         "matplotlib",
         "numpy",
         "numba",
@@ -49,16 +77,13 @@ setup(
         "pyswarms",
         "ray[default]",
         "scipy",
-        "h5py",
-        "jupyterlab"
-
     ],
     # Files to include when distributing package
     packages=find_packages(),
     package_dir={"pyebsdindex": "pyebsdindex"},
     include_package_data=True,
     package_data={
-        "": ["License"],
+        "": ["License", "README.md"],
         "pyebsdindex": ["*.py", "*.cl"],
     },
 )
