@@ -37,7 +37,7 @@ class TestPCOptimization:
             patDim=pattern_al_sim_20kv.shape,
         )
         new_pc = pcopt.optimize(pattern_al_sim_20kv, indexer, PC0=pc0)
-        assert np.allclose(new_pc, pc0, atol=0.05)
+        assert np.allclose(new_pc, pc0, atol=0.04)
 
     def test_pc_optimize_pso(self, pattern_al_sim_20kv):
         pc0 = (0.4, 0.6, 0.5)
@@ -50,4 +50,4 @@ class TestPCOptimization:
             patDim=pattern_al_sim_20kv.shape,
         )
         new_pc = pcopt.optimize_pso(pattern_al_sim_20kv, indexer, PC0=pc0)
-        assert np.allclose(new_pc, pc0, atol=0.05)
+        assert np.allclose(new_pc, pc0, atol=0.04)

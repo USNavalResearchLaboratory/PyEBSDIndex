@@ -20,16 +20,48 @@
 # Author: David Rowenhorst;
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
+import numpy as np
+
 from pyebsdindex.ebsd_index import EBSDIndexer
+from pyebsdindex.rotlib import qu2eu
 
 
 class TestEBSDIndexer:
     def test_init(self):
+        """Test creation of an indexer instance and its default values.
+        """
         indexer = EBSDIndexer()
         assert indexer.phaselist == ["FCC"]
         assert indexer.sampleTilt == 70
         assert indexer.camElev == 5.3
         assert indexer.vendor == "EDAX"
 
-    def test_index_pats(self):
-        pass
+    def test_index_pats(self, pattern_al_sim_20kv):
+        """Test Hough indexing and setting/passing projection center
+        values.
+        """
+        pc = (0.4, 0.6, 0.5)
+        indexer_kwargs = dict(
+            phaselist=["FCC"],
+            vendor="EDAX",
+            sampleTilt=70,
+            camElev=5.3,
+            patDim=pattern_al_sim_20kv.shape
+        )
+
+        # Set PC upon initialization of indexer
+        indexer = EBSDIndexer(PC=pc, **indexer_kwargs)
+        data = indexer.index_pats(patsin=pattern_al_sim_20kv)[0]
+        assert np.allclose(data[0]["quat"], data[1]["quat"])
+
+        # Pass PC upon indexing
+        indexer2 = EBSDIndexer(**indexer_kwargs)
+        data2 = indexer2.index_pats(patsin=pattern_al_sim_20kv, PC=pc)[0]
+
+        # Results are the same in both examples
+        assert np.allclose(data2[0]["quat"], data[0]["quat"])
+
+        # Expected rotation (should be identity!)
+        euler = np.rad2deg(qu2eu(data[0]["quat"]))
+#        assert np.allclose(euler, (0, 0, 0), atol=2)
+        assert np.allclose(euler, (18, 0, 72), atol=2)
