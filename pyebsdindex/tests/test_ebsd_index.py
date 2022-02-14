@@ -61,7 +61,6 @@ class TestEBSDIndexer:
         # Results are the same in both examples
         assert np.allclose(data2[0]["quat"], data[0]["quat"])
 
-        # Expected rotation (should be identity!)
+        # Expected rotation (should be identity, (0, 0, 0)!)
         euler = np.rad2deg(qu2eu(data[0]["quat"]))
-#        assert np.allclose(euler, (0, 0, 0), atol=2)
-        assert np.allclose(euler, (18, 0, 72), atol=2)
+        assert np.isclose(euler, ((0, 0, 0), (0, 18, 72), (0, 90, 90)), atol=2).any()
