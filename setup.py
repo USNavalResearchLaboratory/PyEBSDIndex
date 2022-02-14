@@ -1,4 +1,3 @@
-from itertools import chain
 from setuptools import setup, find_packages
 
 from pyebsdindex import (
