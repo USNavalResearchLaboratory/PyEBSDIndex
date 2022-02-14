@@ -1,4 +1,4 @@
-'''This software was developed by employees of the US Naval Research Laboratory (NRL), an
+"""This software was developed by employees of the US Naval Research Laboratory (NRL), an
 agency of the Federal Government. Pursuant to title 17 section 105 of the United States
 Code, works of NRL employees are not subject to copyright protection, and this software
 is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
@@ -18,9 +18,12 @@ works bear some notice that they are derived from it, and any modified versions 
 some notice that they have been modified.
 
 Author: David Rowenhorst;
-The US Naval Research Laboratory Date: 21 Aug 2020'''
+The US Naval Research Laboratory Date: 21 Aug 2020"""
 
 from os import environ
+from pathlib import PurePath
+import platform
+import tempfile
 from timeit import default_timer as timer
 
 import matplotlib.pyplot as plt
@@ -28,16 +31,13 @@ import numba
 import numpy as np
 import pyopencl as cl
 from scipy.ndimage import gaussian_filter
-from scipy.ndimage.morphology import grey_dilation as scipy_grey_dilation
+from scipy.ndimage import grey_dilation as scipy_grey_dilation
 
 from pyebsdindex import openclparam, radon_fast
 
 
 #from os import environ
 #environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
-import tempfile
-from pathlib import PurePath
-import platform
 tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
 tempdir = tempdir.joinpath('numba')
 environ["NUMBA_CACHE_DIR"] = str(tempdir)
@@ -46,9 +46,19 @@ RADEG = 180.0/np.pi
 
 
 
-class BandDetect():
-  def __init__(self, patterns=None, patDim = None, nTheta = 180, nRho=90,\
-      tSigma= None, rSigma=None, rhoMaskFrac=0.1, nBands=9, clOps = [True, True, True, True]):
+class BandDetect:
+  def __init__(
+    self,
+    patterns=None,
+    patDim=None,
+    nTheta=180,
+    nRho=90,
+    tSigma=None,
+    rSigma=None,
+    rhoMaskFrac=0.1,
+    nBands=9,
+    clOps=[True, True, True, True]
+):
     self.patDim = None
     self.nTheta = nTheta
     self.nRho = nRho
@@ -60,8 +70,8 @@ class BandDetect():
     self.tSigma = tSigma
     self.rSigma = rSigma
     self.kernel = None
-    self.peakPad = np.array([11,11])
-    self.padding = np.array([11,11])
+    self.peakPad = np.array([11, 11])
+    self.padding = np.array([11, 11])
     self.rhoMaskFrac = rhoMaskFrac
 
     self.nBands = nBands
@@ -92,7 +102,7 @@ class BandDetect():
     recalc_radon = False
     recalc_masks = False
     if (patterns is None) and (patDim is not None):
-      p_dim = np.asarray(patDim, dtype=np.int)
+      p_dim = np.asarray(patDim, dtype=np.int64)
     if patterns is not None:
       p_dim = np.shape(patterns)[-2:]  # this will catch if someone sends in a [1 x N x M] image
     if p_dim is not None:
@@ -100,7 +110,7 @@ class BandDetect():
         recalc_radon = True
         self.patDim = p_dim
 
-      elif np.sum(np.abs(self.patDim[-2:]-p_dim[-2:]), dtype=np.int) != 0:
+      elif np.sum(np.abs(self.patDim[-2:]-p_dim[-2:]), dtype=np.int64) != 0:
         recalc_radon = True
         self.patDim = p_dim
 
@@ -154,14 +164,14 @@ class BandDetect():
       recalc_masks = True
 
     if recalc_masks == True:
-      ksz = np.array([np.max([np.int(4*self.rSigma), 5]), np.max([np.int(4*self.tSigma), 5])])
+      ksz = np.array([np.max([np.int64(4*self.rSigma), 5]), np.max([np.int64(4*self.tSigma), 5])])
       ksz = ksz + ((ksz % 2) == 0)
       kernel = np.zeros(ksz, dtype=np.float32)
       kernel[(ksz[0]/2).astype(int),(ksz[1]/2).astype(int) ] = 1
       kernel = -1.0*gaussian_filter(kernel, [self.rSigma, self.tSigma], order=[2,0])
       self.kernel = kernel.reshape((1,ksz[0], ksz[1]))
-      #self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int)
-      self.peakPad = np.array(np.around([3 * ksz[0], 4 * ksz[1]]), dtype=np.int)
+      #self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int64)
+      self.peakPad = np.array(np.around([3 * ksz[0], 4 * ksz[1]]), dtype=np.int64)
       self.peakPad += 1 - np.mod(self.peakPad, 2)  # make sure we have it as odd.
 
     self.padding = np.array([np.max( [self.peakPad[0], self.padding[0]] ), np.max([self.peakPad[1], self.padding[1]])])
@@ -183,7 +193,7 @@ class BandDetect():
       npats = patsIn.shape[0]
       if nsample is None:
         nsample = npats
-      pshape = patsIn.shape
+      #pshape = patsIn.shape
       if npats <= nsample:
         back = np.mean(patsIn, axis = 0)
         back = np.expand_dims(back,axis=0)
@@ -215,16 +225,16 @@ class BandDetect():
       for i in stride[1:]:
         pat1 += fileobj.read_data(convertToFloat=True,patStartCount=[i, 1],returnArrayOnly=True)
       back = pat1 / float(len(stride))
-      pshape = pat1.shape
+      #pshape = pat1.shape
     # a bit of image processing.
     if back is not None:
-      if sigma is None:
-       sigma = 2.0 * float(pshape[-1]) / 80.0
+      #if sigma is None:
+       #sigma = 2.0 * float(pshape[-1]) / 80.0
       #back[0,:,:] = gaussian_filter(back[0,:,:], sigma = sigma )
       back -= np.mean(back)
     self.backgroundsub = back
 
-  def find_bands(self, patternsIn, verbose=0, clparams = None, chunksize = 528):
+  def find_bands(self, patternsIn, verbose=0, clparams=None, chunksize=528):
     tic0 = timer()
     tic = timer()
     ndim = patternsIn.ndim
@@ -237,12 +247,11 @@ class BandDetect():
     nPats = shape[0]
 
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
-    eps = 1.e-6
     if chunksize < 0:
       nchunks = 1
       chunksize = nPats
     else:
-      nchunks = (np.ceil(nPats / chunksize)).astype(np.long)
+      nchunks = (np.ceil(nPats / chunksize)).astype(np.compat.long)
 
     chunk_start_end = [[i * chunksize,(i + 1) * chunksize] for i in range(nchunks)]
     chunk_start_end[-1][1] = nPats
@@ -473,7 +482,7 @@ class BandDetect():
           nR = self.nRho
           nRp = nR + 2 * self.padding[0]
           rdn_gpu = radonIn_gpu
-          nImCL = np.int(rdn_gpu.size / (nTp * nRp * 4))
+          nImCL = np.int64(rdn_gpu.size / (nTp * nRp * 4))
           shp = (nRp,nTp,nImCL)
           radonTry = np.zeros(shp, dtype=np.float32)
           cl.enqueue_copy(clparams.queue,radonTry,radonIn_gpu,is_blocking=True)
@@ -526,7 +535,7 @@ class BandDetect():
           nTp = nT + 2 * self.padding[1]
           nR = self.nRho
           nRp = nR + 2 * self.padding[0]
-          nImCL = np.int(rdn_gpu.size / (nTp * nRp * 4))
+          nImCL = np.int64(rdn_gpu.size / (nTp * nRp * 4))
           shp = (nRp,nTp,nImCL)
           radonTry = np.zeros(shp, dtype=np.float32)
           cl.enqueue_copy(clparams.queue,radonTry,rdn_gpu,is_blocking=True)
@@ -595,7 +604,7 @@ class BandDetect():
 
     if isinstance(radonIn_gpu, cl.Buffer):
       rdn_gpu = radonIn_gpu
-      nImCL = np.int(rdn_gpu.size/(nTp * nRp * 4))
+      nImCL = np.int64(rdn_gpu.size/(nTp * nRp * 4))
       shp = (nRp, nTp, nImCL)
     else:
       shp = radonIn.shape
@@ -606,11 +615,11 @@ class BandDetect():
         radon = radonIn
       shp = radon.shape
       nIm = shp[2]
-      nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm / clvtypesize))))
+      nImCL = np.int32(clvtypesize * (np.int64(np.ceil(nIm / clvtypesize))))
       # there is something very strange that happens if the number of images
       # is a exact multiple of the max group size (typically 256)
       mxGroupSz = gpu[gpu_id].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
-      #nImCL += np.int(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
+      #nImCL += np.int64(16 * (1 - np.int64(np.mod(nImCL,mxGroupSz) > 0)))
       radonCL = np.zeros( (nRp , nTp, nImCL), dtype = np.float32)
       radonCL[:,:,0:shp[2]] = radon
       rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radonCL)
@@ -632,7 +641,7 @@ class BandDetect():
       # for now I will assume that the kernel(s) can fit in local memory on the GPU
       # also going to assume that there is only one kernel -- this will be something to fix soon.
       k0 = self.kernel[0,:,:]
-      kshp = np.asarray(k0.shape, dtype = np.int32)
+      kshp = np.asarray(k0.shape, dtype=np.int32)
       pad = kshp/2
       kern_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0)
       prg.convolution3d2d(queue,(np.int32((shp[1]-2*pad[1])),np.int32((shp[0]-2*pad[0])), nImChunk),None,
@@ -647,7 +656,7 @@ class BandDetect():
 
       kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
       pad = kshp
-      k0x = np.require(self.kernel[0,np.int(kshp[0]/2),:],requirements=['C','A', 'W', 'O'])
+      k0x = np.require(self.kernel[0, np.int64(kshp[0] / 2), :], requirements=['C', 'A', 'W', 'O'])
       k0x *= 1.0 / k0x.sum()
       k0x = (k0x[...,:]).reshape(1,kshp[1])
 
@@ -661,7 +670,7 @@ class BandDetect():
                           np.int32(kshp[1]),np.int32(kshp[0]),np.int32(pad[1]),np.int32(pad[0]),tempConvbuff)
 
       kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
-      k0y = np.require(self.kernel[0,:,np.int(kshp[1] / 2)],requirements=['C','A', 'W', 'O'])
+      k0y = np.require(self.kernel[0, :, np.int32(kshp[1] / 2)], requirements=['C', 'A', 'W', 'O'])
       k0y *= 1.0 / k0y.sum()
       k0y = (k0y[...,:]).reshape(kshp[0],1)
       kshp = np.asarray(k0y.shape,dtype=np.int32)
@@ -741,7 +750,7 @@ class BandDetect():
 
     if isinstance(radonIn_gpu,cl.Buffer):
       rdn_gpu = radonIn_gpu
-      nImCL = np.int(rdn_gpu.size / (nTp * nRp * 4))
+      nImCL = np.int64(rdn_gpu.size / (nTp * nRp * 4))
       shp = (nRp,nTp,nImCL)
     else:
       shp = radonIn.shape
@@ -751,7 +760,7 @@ class BandDetect():
         radon = radonIn
       shp = radon.shape
       nIm = shp[2]
-      nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm / clvtypesize))))
+      nImCL = np.int32(clvtypesize * (np.int64(np.ceil(nIm / clvtypesize))))
       # there is something very strange that happens if the number of images
       # is a exact multiple of the max group size (typically 256)
       mxGroupSz = gpu[gpu_id].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
@@ -764,12 +773,12 @@ class BandDetect():
     nImChunk = np.uint64(nImCL / clvtypesize)
     #out = np.zeros((shp), dtype = np.int32)
 
-    lmaxX = cl.Buffer(ctx,mf.READ_WRITE ,size=rdn_gpu.size)
-    lmaxXY = cl.Buffer(ctx,mf.READ_WRITE ,size=rdn_gpu.size)
+    lmaxX = cl.Buffer(ctx, mf.READ_WRITE, size=rdn_gpu.size)
+    lmaxXY = cl.Buffer(ctx, mf.READ_WRITE, size=rdn_gpu.size)
 
 
-    nChunkT = np.uint64(np.ceil(nT / np.float(self.peakPad[1])))
-    nChunkR = np.uint64(np.ceil(nR / np.float(self.peakPad[0])))
+    nChunkT = np.uint64(np.ceil(nT / np.float64(self.peakPad[1])))
+    nChunkR = np.uint64(np.ceil(nR / np.float64(self.peakPad[0])))
     winszX = np.uint64(self.peakPad[1])
     winszX2 = np.uint64((winszX-1) / 2)
     winszY = np.uint64(self.peakPad[0])
@@ -858,7 +867,7 @@ class BandDetect():
           nTp = nT + 2 * self.padding[1]
           nR = self.nRho
           nRp = nR + 2 * self.padding[0]
-          nImCL = np.int(rdnConvIn_gpu.size / (nTp * nRp * 4))
+          nImCL = np.int64(rdnConvIn_gpu.size / (nTp * nRp * 4))
           shp = (nRp,nTp,nImCL)
           rdnConv = np.zeros(shp,dtype=np.float32)
           cl.enqueue_copy(clparams.queue,rdnConv,rdnConvIn_gpu,is_blocking=True)
@@ -871,41 +880,61 @@ class BandDetect():
           nR = self.nRho
           nRp = nR + 2 * self.padding[0]
 
-          nImCL = np.int(lMaxRdnIn_gpu.size / (nTp * nRp))
+          nImCL = np.int64(lMaxRdnIn_gpu.size / (nTp * nRp))
           shp = (nRp,nTp,nImCL)
           lMaxRdn = np.zeros(shp,dtype=np.ubyte)
           cl.enqueue_copy(clparams.queue,lMaxRdn,lMaxRdnIn_gpu,is_blocking=True)
         else:
           lMaxRdn = lMaxRdnIn
 
-        bdat = self.band_label_numba(np.int(self.nBands),np.int(nPats),np.int(self.nRho),
-                                     np.int(self.nTheta),rdnConv,rdnConv,lMaxRdn)
+        bdat = self.band_label_numba(
+          np.int64(self.nBands),
+          np.int64(nPats),
+          np.int64(self.nRho),
+          np.int64(self.nTheta),
+          rdnConv,
+          rdnConv,
+          lMaxRdn
+        )
         rdnConv_out = rdnConv
     else:
-
-      if self.EDAXIQ == True:
-        bdat = self.band_label_numba(np.int(self.nBands),np.int(nPats),np.int(self.nRho),
-                             np.int(self.nTheta),rdnConvIn,rdnNormIn,lMaxRdnIn)
+      if self.EDAXIQ:
+        bdat = self.band_label_numba(
+          np.int64(self.nBands),
+          np.int64(nPats),
+          np.int64(self.nRho),
+          np.int64(self.nTheta),
+          rdnConvIn,
+          rdnNormIn,
+          lMaxRdnIn
+        )
       else:
-        bdat = self.band_label_numba(np.int(self.nBands),np.int(nPats),np.int(self.nRho),
-                                   np.int(self.nTheta),rdnConvIn,rdnConvIn, lMaxRdnIn)
+        bdat = self.band_label_numba(
+          np.int64(self.nBands),
+          np.int64(nPats),
+          np.int64(self.nRho),
+          np.int64(self.nTheta),
+          rdnConvIn,
+          rdnConvIn,
+          lMaxRdnIn
+        )
       rdnConv_out = rdnConvIn
 
-    bandData['max']    = bdat[0][0:nPats,:]
-    bandData['avemax'] = bdat[1][0:nPats,:]
+    bandData['max']    = bdat[0][0:nPats, :]
+    bandData['avemax'] = bdat[1][0:nPats, :]
     bandData['maxloc'] = bdat[2][0:nPats, :, :]
     bandData['aveloc'] = bdat[3][0:nPats, :, :]
     bandData['valid']  = bdat[4][0:nPats, :]
-    bandData['maxloc'] -= self.padding.reshape(1,1,2)
-    bandData['aveloc'] -= self.padding.reshape(1,1,2)
+    bandData['maxloc'] -= self.padding.reshape(1, 1, 2)
+    bandData['aveloc'] -= self.padding.reshape(1, 1, 2)
 
     return bandData, rdnConv_out
 
   @staticmethod
   @numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
   def band_label_numba(nBands,nPats,nRho,nTheta,rdnConv,rdnPad,lMaxRdn):
-    nB = np.int(nBands)
-    nP = np.int(nPats)
+    nB = np.int64(nBands)
+    nP = np.int64(nPats)
 
     shp = rdnPad.shape
 
@@ -980,7 +1009,7 @@ class BandDetect():
 
     if isinstance(rdnConvIn,cl.Buffer):
       rdnConv_gpu = rdnConvIn
-      nIm = np.int(rdnConv_gpu.size / (nTp * nRp * 4))
+      nIm = np.int64(rdnConv_gpu.size / (nTp * nRp * 4))
       shp = (nRp,nTp,nIm)
     else:
       shp = rdnConvIn.shape
@@ -998,7 +1027,7 @@ class BandDetect():
 
     if isinstance(lMaxRdnIn,cl.Buffer):
       lMaxRdn_gpu = lMaxRdnIn
-      nIm = np.int(lMaxRdn_gpu.size / (nTp * nRp))
+      nIm = np.int64(lMaxRdn_gpu.size / (nTp * nRp))
       shp = (nRp,nTp,nIm)
     else:
       shp = lMaxRdnIn.shape
@@ -1055,6 +1084,3 @@ class BandDetect():
     maxlocxy[:,:,1] = temp[1,:,:]
     valid = np.asarray(maxval > -1e6, dtype=np.int8)
     return (maxval,aveval,maxlocxy,aveloc,valid), rdnConv_gpu
-
-
-

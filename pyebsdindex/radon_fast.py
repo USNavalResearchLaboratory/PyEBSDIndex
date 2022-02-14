@@ -1,4 +1,4 @@
-'''This software was developed by employees of the US Naval Research Laboratory (NRL), an
+"""This software was developed by employees of the US Naval Research Laboratory (NRL), an
 agency of the Federal Government. Pursuant to title 17 section 105 of the United States
 Code, works of NRL employees are not subject to copyright protection, and this software
 is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
@@ -18,10 +18,7 @@ works bear some notice that they are derived from it, and any modified versions 
 some notice that they have been modified.
 
 Author: David Rowenhorst;
-The US Naval Research Laboratory Date: 21 Aug 2020'''
-
-
-
+The US Naval Research Laboratory Date: 21 Aug 2020"""
 
 from os import environ
 from timeit import default_timer as timer
@@ -40,8 +37,8 @@ DEGRAD = np.pi/180.0
 
 
 
-class Radon():
-  def __init__(self, image=None, imageDim = None, nTheta = 180, nRho=90,rhoMax = None):
+class Radon:
+  def __init__(self, image=None, imageDim=None, nTheta=180, nRho=90, rhoMax=None):
     self.nTheta = nTheta
     self.nRho = nRho
     self.rhoMax = rhoMax
@@ -51,7 +48,7 @@ class Radon():
       self.rho = None
       self.imDim = None
     else:
-      if (image is not None):
+      if image is not None:
         self.imDim = np.asarray(image.shape[-2:])
       else:
         self.imDim = np.asarray(imageDim[-2:])
@@ -59,7 +56,7 @@ class Radon():
 
   def radon_plan_setup(self, image=None, imageDim=None, nTheta=None, nRho=None, rhoMax=None):
     if (image is None) and (imageDim is not None):
-      imDim = np.asarray(imageDim, dtype=np.int)
+      imDim = np.asarray(imageDim, dtype=np.int64)
     elif (image is not None):
       imDim =  np.shape(image)[-2:] # this will catch if someone sends in a [1 x N x M] image
     else:
@@ -259,11 +256,11 @@ class Radon():
     #  reform = False
 
     clvtypesize = 16 # this is the vector size to be used in the openCL implementation.
-    nImCL = np.int32(clvtypesize * (np.int(np.ceil(nIm/clvtypesize))))
+    nImCL = np.int32(clvtypesize * (np.int64(np.ceil(nIm/clvtypesize))))
     # there is something very strange that happens if the number of images
     # is a exact multiple of the max group size (typically 256)
     mxGroupSz = gpu[gpu_id].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
-    #nImCL += np.int(16 * (1 - np.int(np.mod(nImCL, mxGroupSz ) > 0)))
+    #nImCL += np.int64(16 * (1 - np.int64(np.mod(nImCL, mxGroupSz ) > 0)))
     image_align = np.ones((shapeIm[1], shapeIm[2], nImCL), dtype = np.float32)
     image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()
     shpRdn = np.asarray( ((self.nRho+2*padding[0]), (self.nTheta+2*padding[1]), nImCL),dtype=np.uint64)

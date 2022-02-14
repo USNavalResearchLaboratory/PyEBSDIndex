@@ -90,5 +90,3 @@ b = numbanpflip(a, pad, iter)
 #
 #wrk = [numpyflip.remote(a,pad, iter) for i in range(ncpu)]
 #trash = ray.get(wrk)
-
-
