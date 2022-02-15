@@ -13,8 +13,6 @@ guide for how to use PyEBSDIndex.
     PyEBSDIndex is in development. This means that some breaking changes
     and changes to this reference are likely with each release.
 
-.. module:: pyebsdindex
-
 The list of top modules:
 
 .. autosummary::
