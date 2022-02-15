@@ -2,6 +2,8 @@
 
 Python based tool for Hough/Radon based EBSD orientation indexing.
 
+[![Build](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml/badge.svg)](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml)
+
 The pattern processing is based on a GPU pipeline, and is based on the work of S. I.
 Wright and B. L. Adams. Metallurgical Transactions A-Physical Metallurgy and Materials
 Science, 23(3):759–767, 1992, and N. Krieger Lassen. Automated Determination of Crystal
