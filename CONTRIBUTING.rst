@@ -2,6 +2,44 @@
 Contributing
 ============
 
+Building and writing documentation
+==================================
+
+We use `Sphinx <https://www.sphinx-doc.org/en/master/>`_ for documenting functionality.
+Install necessary dependencies to build the documentation::
+
+    pip install --editable .[doc]
+
+Then, build the documentation from the ``doc`` directory::
+
+    cd doc
+    make html
+
+The documentation's HTML pages are built in the ``doc/build/html`` directory from files
+in the `reStructuredText (reST)
+<https://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html>`_ plaintext
+markup language. They should be accessible in the browser by typing
+``file:///your/absolute/path/to/pyebsdindex/doc/build/html/index.html`` in the address
+bar.
+
+Tips for writing Jupyter Notebooks that are meant to be converted to reST text files by
+`nbsphinx <https://nbsphinx.readthedocs.io/en/latest/>`_:
+
+- Use ``_ = ax[0].imshow(...)`` to disable Matplotlib output if a Matplotlib command is
+  the last line in a cell.
+- Refer to our reference with this general MD
+  ``[pcopt.optimize()](../reference.rst#pyebsdindex.pcopt.optimize)``. Remember to add
+  the parentheses ``()`` for functions and methods.
+- Reference external references via standard MD like
+  ``[Signal2D](http://hyperspy.org/hyperspy-doc/current/api/hyperspy._signals.signal2d.html)``.
+- The Sphinx gallery thumbnail used for a notebook is set by adding the
+  ``nbsphinx-thumbnail`` tag to a code cell with an image output. The notebook must be
+  added to the gallery in the `index.rst` to be included in the documentation pages.
+- The Furo Sphinx theme displays the documentation in a light or dark theme, depending
+  on the browser/OS setting. It is important to make sure the documentation is readable
+  with both themes. This means displaying all figures with a white background for axes
+  labels and ticks and figure titles etc. to be readable.
+
 Running and writing tests
 =========================
 
