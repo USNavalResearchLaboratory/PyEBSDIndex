@@ -2,6 +2,11 @@
 Contributing
 ============
 
+PyEBSDIndex is a community maintained project. We welcome contributions in the form of
+bug reports, documentation, code, feature requests, and more. The source code is hosted
+on `GitHub <https://github.com/USNavalResearchLaboratory/PyEBSDIndex>`_. This guide
+provides some tips on how to build documentation and run tests when contributing.
+
 Building and writing documentation
 ==================================
 

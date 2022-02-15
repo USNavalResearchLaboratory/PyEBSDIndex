@@ -26,14 +26,11 @@ version = __version__
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-#    "sphinxcontrib.bibtex",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
-#    "sphinx.ext.linkcode",
-#    "sphinx_autodoc_typehints",
     "sphinx_copybutton",
     "sphinx_gallery.load_style",
     "nbsphinx",

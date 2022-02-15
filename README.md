@@ -19,6 +19,9 @@ Additionally NLPAR pattern processing is included (original distribution
 [NLPAR](https://github.com/USNavalResearchLaboratory/NLPAR); P. T. Brewick, S. I.
 Wright, and D. J. Rowenhorst. Ultramicroscopy, 200:50–61, May 2019.).
 
+Documentation with a user guide, API reference, changelog, and contributing guide is
+available at https://pyebsdindex.readthedocs.io.
+
 ## Installation
 
 The package can only be installed from source at the moment. There is an issue with
