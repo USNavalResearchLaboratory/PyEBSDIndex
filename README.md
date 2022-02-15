@@ -18,9 +18,12 @@ Wright, and D. J. Rowenhorst. Ultramicroscopy, 200:50–61, May 2019.).
 
 ## Installation
 
-The package can only be installed from source at the moment:
+The package can only be installed from source at the moment. There is an issue with
+installing `pyopencl` from `pip` on Windows, so this has to be installed from `conda`
+before installing `PyEBSDIndex`:
 
 ```bash
+conda install pyopencl --channel conda-forge  # Only required on Windows
 git clone https://github.com/USNavalResearchLaboratory/PyEBSDIndex
 cd PyEBSDIndex
 pip install --editable .
