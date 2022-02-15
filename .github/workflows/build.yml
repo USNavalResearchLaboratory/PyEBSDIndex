@@ -22,6 +22,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies and package
         run: |
+          pip install wheel
           pip install --upgrade --editable .'[tests]'
       - name: Display versions of Python, pip and packages
         run: |
