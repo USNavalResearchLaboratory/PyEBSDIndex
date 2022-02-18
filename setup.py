@@ -1,3 +1,4 @@
+from itertools import chain
 from setuptools import setup, find_packages
 
 from pyebsdindex import (
@@ -9,8 +10,19 @@ from pyebsdindex import (
 # tests. From setuptools:
 # https://setuptools.readthedocs.io/en/latest/setuptools.html#declaring-extras-optional-features-with-their-own-dependencies
 extra_feature_requirements = {
+    "doc": [
+        "furo",
+        "nbsphinx >= 0.7",
+        "sphinx >= 3.0.2",
+        "sphinx-copybutton >= 0.2.5",
+        "sphinx-gallery >= 0.6",
+    ],
     "tests": ["coverage >= 5.0", "pytest >= 5.4", "pytest-cov >= 2.8.1"],
 }
+# Create a development project, including both the docs and tests projects
+extra_feature_requirements["dev"] = list(
+    chain(*list(extra_feature_requirements.values()))
+)
 
 
 setup(
@@ -46,6 +58,7 @@ setup(
     maintainer_email=__author_email__,
     project_urls={
         "Bug Tracker": "https://github.com/USNavalResearchLaboratory/PyEBSDIndex/issues",
+        "Documentation": "https://pyebsdindex.readthedocs.io",
         "Source Code": "https://github.com/USNavalResearchLaboratory/PyEBSDIndex",
     },
     # Dependencies

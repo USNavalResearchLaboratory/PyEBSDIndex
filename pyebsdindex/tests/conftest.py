@@ -31,4 +31,15 @@ PATTERN_FILE = os.path.join(DIR_PATH, "data/al_sim_20kv/al_sim_20kv.png")
 
 @pytest.fixture
 def pattern_al_sim_20kv():
+    """20 kV Al pattern dynamically simulated with EMsoft 4.3.
+
+    The pattern has shape (n rows, n columns) = (100, 120),
+    pattern/projection center (PC) of (0.4, 0.6, 0.5) in EDAX'
+    convention, the sample is tilted 70 degrees and the camera elevation
+    is 5.3 degrees. The crystal has the identity rotation, (0, 0, 0) in
+    Euler angles.
+
+    See the data/al_sim_20kv/generate_al_sim_20kv.py file for how it is
+    generated.
+    """
     return plt.imread(PATTERN_FILE)

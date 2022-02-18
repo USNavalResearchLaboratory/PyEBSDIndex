@@ -1,3 +1,4 @@
+# Generation of a dynamically simulated Al 20 kV EBSD pattern.
 import kikuchipy as kp
 import numpy as np
 from orix.quaternion import Rotation
