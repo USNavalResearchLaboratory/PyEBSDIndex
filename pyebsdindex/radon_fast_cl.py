@@ -40,7 +40,7 @@ DEGRAD = np.pi/180.0
 class Radon(radon_fast.Radon):
   def __init__(self, clparams=None, **kwargs):
     radon_fast.Radon.__init__(self,**kwargs)
-    self.setcl(clparams)
+    #self.setcl(clparams)
 
   def setcl(self, clparams=None):
     if clparams is None:
@@ -64,14 +64,14 @@ class Radon(radon_fast.Radon):
       queue = clparams.queue
       mf = clparams.memflags
     else:
-      #clparams = openclparam.OpenClParam()
-      #clparams.get_queue()
-      gpu = self.clparams.gpu
-      gpu_id = self.clparams.gpu_id
-      ctx = self.clparams.ctx
-      prg = self.clparams.prg
-      queue = self.clparams.queue
-      mf = self.clparams.memflags
+      clparams = openclparam.OpenClParam()
+      clparams.get_queue()
+      gpu = clparams.gpu
+      gpu_id = clparams.gpu_id
+      ctx = clparams.ctx
+      prg = clparams.prg
+      queue = clparams.queue
+      mf = clparams.memflags
 
     shapeIm = np.shape(image)
     if image.ndim == 2:
@@ -133,13 +133,13 @@ class Radon(radon_fast.Radon):
       radon_gpu.release()
       radon = radon[:,:, 0:nIm]
       radon_gpu = None
-      clparams = None
-      return radon
+      #clparams = None
+      return radon, clparams
     else:
       rdnIndx_gpu.release()
       image_gpu.release()
 
-    return radon_gpu
+    return radon_gpu, clparams
 
     #if (fixArtifacts == True):
     #  radon[:,:,padding[1]] = radon[:,:,padding[1]+1]
