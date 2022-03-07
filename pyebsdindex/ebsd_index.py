@@ -433,6 +433,7 @@ class IndexerRay():
         if sys.platform != 'darwin':  # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a
           self.openCLParams = clparammodule()
           self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
+          self.openCLParams.get_queue()
           self.useGPU = True
         else:  # MacOS handles GPU memory conflicts much better when the context is destroyed between each
           # run, and has very low overhead for making the context.
