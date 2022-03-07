@@ -442,6 +442,7 @@ class IndexerRay():
           #self.openCLParams.gpu_id = 0
           #self.openCLParams.gpu_id = 1
           self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
+          self.openCLParams.get_queue()
           self.useGPU = True
       except:
         self.openCLParams = None
