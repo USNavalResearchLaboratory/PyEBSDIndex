@@ -27,12 +27,11 @@ import tempfile
 from timeit import default_timer as timer
 
 import matplotlib.pyplot as plt
-import numba
 import numpy as np
 import pyopencl as cl
 
 from pyebsdindex import band_detect, openclparam
-from pyebsdindex import radon_fast_cl as radon_fast
+
 
 #from os import environ
 #environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
@@ -170,22 +169,6 @@ class BandDetect(band_detect.BandDetect):
 
     return bandData
 
-
-  # def calc_rdn(self, patterns, clparams = None, use_gpu=False):
-  #   rdnNorm_gpu = None
-  #   if use_gpu == False:
-  #     rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True, background = self.backgroundsub)
-  #   else:
-  #     try:
-  #       rdnNorm, clparams, rdnNorm_gpu = self.radonPlan.radon_fasterCL(patterns, self.padding,
-  #                                                                    fixArtifacts=True,background = self.backgroundsub,
-  #                                                                    returnBuff = self.CLOps[1], clparams = clparams)
-  #     except Exception as e:
-  #       print(e)
-  #       clparams.queue = None
-  #       rdnNorm = self.radonPlan.radon_faster(patterns,self.padding,fixArtifacts=True, background = self.backgroundsub)
-  #
-  #   return rdnNorm, clparams, rdnNorm_gpu
 
   def radon_fasterCL(self,image,padding = np.array([0,0]), fixArtifacts = False, background = None, returnBuff = True, clparams=None ):
     # this function executes the radon sumations on the GPU

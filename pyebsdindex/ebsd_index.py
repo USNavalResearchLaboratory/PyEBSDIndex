@@ -180,7 +180,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
     n_cpu_nodes = ncpu
 
   try:
-    clparam = indexer.bandDetectPlan.getopenclparam()
+    clparam = band_detect.getopenclparam()
     if clparam is None:
       ngpu = 0
       ngpupnode = 0
@@ -192,7 +192,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
     ngpupnode = 0
 
   ray.shutdown()
-
+  print("num cpu/gpu:", n_cpu_nodes, ngpu)
   #ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
   ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu, _node_ip_address="0.0.0.0")
 
@@ -418,7 +418,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 @ray.remote(num_cpus=1,num_gpus=1)
 class IndexerRay():
   def __init__(self,actorid=0, clparammodule=None):
-    #sys.path.append(path.dirname(path.dirname(__file__)))  # do this to help Ray find the program files
+    sys.path.append((path.dirname(__file__)))  # do this to help Ray find the program files
     #import openclparam # do this to help Ray find the program files
     # device, context, queue, program, mf
     # self.dataout = None
