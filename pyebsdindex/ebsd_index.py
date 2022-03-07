@@ -24,7 +24,7 @@
 
 from os import path, environ
 import multiprocessing
-import queue
+
 import sys
 import time
 from timeit import default_timer as timer
@@ -38,10 +38,10 @@ from pyebsdindex import (
     band_vote,
     ebsd_pattern,
     rotlib,
-    tripletlib,
-    openclparam
+    tripletlib
 )
 from pyebsdindex import band_detect_cl as band_detect
+#from pyebsdindex import band_detect as band_detect
 from pyebsdindex.EBSDImage import IPFcolor
 
 # if sys.platform == 'darwin':
@@ -112,47 +112,29 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
                            peakDetectPlan=None,nRho=90,nTheta=180,tSigma=None,rSigma=None,rhoMaskFrac=0.1,nBands=9,
                            patstart=0,npats=-1,chunksize=528,ncpu=-1,
                            return_indexer_obj=False,ebsd_indexer_obj=None,keep_log=False):
-  n_cpu_nodes = int(multiprocessing.cpu_count())  # int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
-  if ncpu != -1:
-    n_cpu_nodes = ncpu
-
-  try:
-    clparam = openclparam.OpenClParam()
-    if clparam.gpu is None:
-      ngpu = 0
-      ngpupnode = 0
-    else:
-      ngpu = len(clparam.gpu)
-      ngpupnode = ngpu / n_cpu_nodes
-  except:
-    ngpu = 0
-    ngpupnode = 0
-
-  ray.shutdown()
-
-  #ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
-  ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu, _node_ip_address="0.0.0.0")
   pats = None
   if patsIn is None:
     pdim = None
   else:
-    if isinstance(patsIn,ebsd_pattern.EBSDPatterns):
+    if isinstance(patsIn, ebsd_pattern.EBSDPatterns):
       pats = patsIn.patterns
     if type(patsIn) is np.ndarray:
       pats = patsIn
-    if isinstance(patsIn,h5py.Dataset):
+    if isinstance(patsIn, h5py.Dataset):
       shp = patsIn.shape
       if len(shp) == 3:
         pats = patsIn
-      if len(shp) == 2: # just read off disk now.
+      if len(shp) == 2:  # just read off disk now.
         pats = patsIn[()]
-        pats = pats.reshape(1,shp[0], shp[1])
+        pats = pats.reshape(1, shp[0], shp[1])
 
     if pats is None:
       print('Unrecognized input data type')
       return
     pdim = pats.shape[-2:]
 
+
+  # run a test flight to make sure all parameters are set properly before being sent off to the cluster
   if ebsd_indexer_obj == None:
     indexer = EBSDIndexer(filename=filename,phaselist=phaselist, \
                           vendor=vendor,PC=PC,sampleTilt=sampleTilt,camElev=camElev, \
@@ -191,8 +173,32 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
   if npats <= 0:
     npats = npatsTotal - patstart
 
+  # now set up the cluster with the indexer
+
+  n_cpu_nodes = int(multiprocessing.cpu_count())  # int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
+  if ncpu != -1:
+    n_cpu_nodes = ncpu
+
+  try:
+    clparam = indexer.bandDetectPlan.getopenclparam()
+    if clparam is None:
+      ngpu = 0
+      ngpupnode = 0
+    else:
+      ngpu = len(clparam.gpu)
+      ngpupnode = ngpu / n_cpu_nodes
+  except:
+    ngpu = 0
+    ngpupnode = 0
+
+  ray.shutdown()
+
+  #ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
+  ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu, _node_ip_address="0.0.0.0")
+
   # place indexer obj in shared memory store so all workers can use it.
   remote_indexer = ray.put(indexer)
+  clparamfunction = band_detect.getopenclparam
   # set up the jobs
   njobs = (np.ceil(npats / chunksize)).astype(np.long)
   # p_indx_start = [i*chunksize+patStart for i in range(njobs)]
@@ -225,7 +231,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
     chunkave = 0.0
     for i in range(n_cpu_nodes):
       job_pstart_end = p_indx_start_end.pop(0)
-      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(i))
+      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(i, clparamfunction))
       jobs.append(workers[i].index_chunk_ray.remote(pats=None,indexer=remote_indexer, \
                                                     patstart=job_pstart_end[0],npats=job_pstart_end[2]))
       nsubmit += 1
@@ -308,7 +314,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
     chunkave = 0.0
     for i in range(n_cpu_nodes):
       job_pstart_end = p_indx_start_end.pop(0)
-      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(i))
+      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(i,clparamfunction))
       jobs.append(workers[i].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:],
                                                     indexer=remote_indexer, \
                                                     patstart=job_pstart_end[0],npats=job_pstart_end[2]))
@@ -411,9 +417,9 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 
 @ray.remote(num_cpus=1,num_gpus=1)
 class IndexerRay():
-  def __init__(self,actorid=0):
-    sys.path.append(path.dirname(__file__))  # do this to help Ray find the program files
-    import openclparam # do this to help Ray find the program files
+  def __init__(self,actorid=0, clparammodule=None):
+    #sys.path.append(path.dirname(path.dirname(__file__)))  # do this to help Ray find the program files
+    #import openclparam # do this to help Ray find the program files
     # device, context, queue, program, mf
     # self.dataout = None
     # self.indxstart = None
@@ -421,20 +427,23 @@ class IndexerRay():
     # self.rate = None
     self.actorID = actorid
     self.openCLParams = None
-    try:
-      if sys.platform != 'darwin':  # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a
-        self.openCLParams = openclparam.OpenClParam()
-        self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
-
-      else:  # MacOS handles GPU memory conflicts much better when the context is destroyed between each
-        # run, and has very low overhead for making the context.
-        #pass
-        self.openCLParams = openclparam.OpenClParam()
-        #self.openCLParams.gpu_id = 0
-        #self.openCLParams.gpu_id = 1
-        self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
-    except:
-      self.openCLParams = None
+    self.useGPU = False
+    if clparammodule is not None:
+      try:
+        if sys.platform != 'darwin':  # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a
+          self.openCLParams = clparammodule()
+          self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
+          self.useGPU = True
+        else:  # MacOS handles GPU memory conflicts much better when the context is destroyed between each
+          # run, and has very low overhead for making the context.
+          #pass
+          self.openCLParams = clparammodule()
+          #self.openCLParams.gpu_id = 0
+          #self.openCLParams.gpu_id = 1
+          self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
+          self.useGPU = True
+      except:
+        self.openCLParams = None
 
   def index_chunk_ray(self,pats=None,indexer=None,patstart=0,npats=-1):
     try:

@@ -30,9 +30,6 @@ import matplotlib.pyplot as plt
 import numba
 import numpy as np
 import pyopencl as cl
-from scipy.ndimage import gaussian_filter
-from scipy.ndimage import grey_dilation as scipy_grey_dilation
-
 
 from pyebsdindex import band_detect, openclparam
 from pyebsdindex import radon_fast_cl as radon_fast
@@ -50,9 +47,15 @@ RADEG = 180.0/np.pi
 class BandDetect(band_detect.BandDetect):
   def __init__( self, **kwargs):
     band_detect.BandDetect.__init__(self, **kwargs)
+    self.useCPU = False
 
 
-  def find_bands(self, patternsIn, verbose=0, clparams=None, chunksize=528):
+  def find_bands(self, patternsIn, verbose=0, clparams=None, chunksize=528, useCPU=None, **kwargs):
+    if useCPU is None:
+      useCPU = self.useCPU
+    if useCPU == True:
+      return band_detect.BandDetect.find_bands(patternsIn, verbose=verbose, chunksize=-1, **kwargs)
+
     tic0 = timer()
     tic = timer()
     ndim = patternsIn.ndim
@@ -100,7 +103,7 @@ class BandDetect(band_detect.BandDetect):
 
       convtime += timer()-tic1
       tic1 = timer()
-      lMaxRdn, clparams =  self.rdn_local_maxCL(rdnConv, clparams=clparams, returnBuff=self.CLOps[3])
+      lMaxRdn, clparams =  self.rdn_local_maxCL(rdnConv, clparams=clparams, returnBuff=True)
       lmaxtime +=  timer()-tic1
       tic1 = timer()
 
@@ -660,3 +663,8 @@ class BandDetect(band_detect.BandDetect):
 
 
     return (maxval,aveval,maxlocxy,aveloc,valid)
+
+def getopenclparam():
+  clparam = openclparam.OpenClParam()
+
+  return clparam

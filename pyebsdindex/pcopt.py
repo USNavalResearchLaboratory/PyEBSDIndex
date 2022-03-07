@@ -88,9 +88,9 @@ def optimize(pats, indexer, PC0=None, batch=False):
     SciPy's Nelder-Mead minimization function is used with a tolerance
     `fatol` of 0.00001 between each iteration.
     """
-    indxerCPU = copy.deepcopy(indexer)
-    indxerCPU.bandDetectPlan.CLOps = [False, False, False, False]
-    banddat = indxerCPU.bandDetectPlan.find_bands(pats)
+
+
+    banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
     if PC0 is None:
         PC0 = indexer.PC
