@@ -649,5 +649,6 @@ class BandDetect(band_detect.BandDetect):
 
 def getopenclparam():
   clparam = openclparam.OpenClParam()
+  clparam.get_queue()
 
   return clparam
