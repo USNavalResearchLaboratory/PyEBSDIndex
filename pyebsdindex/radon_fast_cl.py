@@ -50,7 +50,7 @@ class Radon(radon_fast.Radon):
       self.clparams = clparams
 
 
-  def radon_faster(self,image,padding = np.array([0,0]),fixArtifacts = False, background = None, returnBuff = True, clparams=None ):
+  def radon_fasterCL(self,image,padding = np.array([0,0]), fixArtifacts = False, background = None, returnBuff = True, clparams=None ):
 
     tic = timer()
     # make sure we have an OpenCL environment

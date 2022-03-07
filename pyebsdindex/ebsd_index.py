@@ -35,13 +35,13 @@ import ray
 import h5py
 
 from pyebsdindex import (
-    band_detect,
     band_vote,
     ebsd_pattern,
     rotlib,
     tripletlib,
     openclparam
 )
+from pyebsdindex import band_detect_cl as band_detect
 from pyebsdindex.EBSDImage import IPFcolor
 
 # if sys.platform == 'darwin':
