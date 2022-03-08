@@ -119,6 +119,7 @@ class BandDetect(band_detect.BandDetect):
         bandData['maxloc'][chnk[0]:chnk[1]] = bandDataChunk[2][0:nPatsChunk, :, :]
         bandData['aveloc'][chnk[0]:chnk[1]] = bandDataChunk[3][0:nPatsChunk, :, :]
         bandData['valid'][chnk[0]:chnk[1]] = bandDataChunk[4][0:nPatsChunk, :]
+        bandData['width'][chnk[0]:chnk[1]] = bandDataChunk[5][0:nPatsChunk, :]
         bandData['maxloc'][chnk[0]:chnk[1]] -= self.padding.reshape(1, 1, 2)
         bandData['aveloc'][chnk[0]:chnk[1]] -= self.padding.reshape(1, 1, 2)
         #bandDataChunk, rdnConvBuf = self.band_label(chnk[1]-chnk[0], rdnConv, rdnNorm, lMaxRdn,
@@ -169,7 +170,13 @@ class BandDetect(band_detect.BandDetect):
 
         plt.imshow(im2show, origin='lower', cmap='gray')
         #plt.scatter(y = bandData['aveloc'][-1,:,0], x = bandData['aveloc'][-1,:,1]+self.peakPad[1], c ='r', s=5)
-        plt.scatter(y=bandData['aveloc'][-1,:,0],x=bandData['aveloc'][-1,:,1],c='r',s=5)
+        width = bandData['width'][-1, :]
+        width /= width.min()
+        width *= 2
+        plt.scatter(y=bandData['aveloc'][-1,:,0],x=bandData['aveloc'][-1,:,1],c='r',s=width)
+
+        for pt in range(self.nBands):
+          plt.annotate(str(pt+1), (np.squeeze(bandData['aveloc'][-1,pt,1]), np.squeeze(bandData['aveloc'][-1,pt,0])))
         plt.xlim(0,self.nTheta)
         plt.ylim(0,self.nRho)
         plt.show()
@@ -619,6 +626,8 @@ class BandDetect(band_detect.BandDetect):
     maxloc_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=maxloc.nbytes)
     aveval = np.zeros((nIm,self.nBands),dtype=np.float32) - 2.0e6
     aveval_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=aveval.nbytes)
+    width = np.zeros((nIm, self.nBands), dtype=np.float32)
+    width_gpu = cl.Buffer(ctx, mf.WRITE_ONLY, size=width.nbytes)
     aveloc = np.zeros((nIm,self.nBands,2),dtype=np.float32)
     aveloc_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=aveloc.nbytes)
     rhoMaskTrim = np.int64((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
@@ -628,6 +637,7 @@ class BandDetect(band_detect.BandDetect):
                  lMaxRdn_gpu,rdnConv_gpu,
                  maxloc_gpu, maxval_gpu,
                  aveloc_gpu,aveval_gpu,
+                 width_gpu,
                  np.int64(shp[1]),np.int64(shp[0]),
                  np.int64(self.padding[1]),rhoMaskTrim,np.int64(self.nBands) )
 
@@ -635,7 +645,8 @@ class BandDetect(band_detect.BandDetect):
     cl.enqueue_copy(queue,maxval,maxval_gpu,is_blocking=False)
     cl.enqueue_copy(queue,maxloc,maxloc_gpu,is_blocking=False)
     cl.enqueue_copy(queue,aveval,aveval_gpu,is_blocking=False)
-    cl.enqueue_copy(queue,aveloc,aveloc_gpu,is_blocking=True)
+    cl.enqueue_copy(queue,aveloc,aveloc_gpu,is_blocking=False)
+    cl.enqueue_copy(queue, width, width_gpu, is_blocking=True)
 
     #rdnConv_out = np.zeros((nRp,nTp,nIm),dtype=np.float32)
     #cl.enqueue_copy(queue,rdnConv_out,rdnConv_gpu,is_blocking=True)
@@ -645,6 +656,7 @@ class BandDetect(band_detect.BandDetect):
     maxloc_gpu.release()
     aveval_gpu.release()
     aveloc_gpu.release()
+    width_gpu.release()
     queue.finish()
 
     maxlocxy = np.zeros((nIm, self.nBands, 2),dtype=np.float32)
@@ -655,7 +667,7 @@ class BandDetect(band_detect.BandDetect):
 
 
 
-    return (maxval,aveval,maxlocxy,aveloc,valid)
+    return (maxval,aveval,maxlocxy,aveloc,valid, width)
 
 def getopenclparam():
   clparam = openclparam.OpenClParam()

@@ -304,8 +304,14 @@ class BandDetect:
       im2show[-rhoMaskTrim:,:] = 0
 
       plt.imshow(im2show, origin='lower', cmap='gray')
-      #plt.scatter(y = bandData['aveloc'][-1,:,0], x = bandData['aveloc'][-1,:,1]+self.peakPad[1], c ='r', s=5)
-      plt.scatter(y=bandData['aveloc'][-1,:,0],x=bandData['aveloc'][-1,:,1],c='r',s=5)
+      width = bandData['width'][-1, :]
+      width /= width.min()
+      width *= 2
+      plt.scatter(y=bandData['aveloc'][-1, :, 0], x=bandData['aveloc'][-1, :, 1], c='r', s=width)
+
+      for pt in range(self.nBands):
+        plt.annotate(str(pt + 1),
+                     (np.squeeze(bandData['aveloc'][-1, pt, 1]), np.squeeze(bandData['aveloc'][-1, pt, 0])))
       plt.xlim(0,self.nTheta)
       plt.ylim(0,self.nRho)
       plt.show()
