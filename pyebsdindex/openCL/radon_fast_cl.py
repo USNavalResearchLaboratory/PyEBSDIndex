@@ -23,12 +23,11 @@ The US Naval Research Laboratory Date: 21 Aug 2020"""
 from os import environ
 from timeit import default_timer as timer
 
-from numba import jit, prange
 import numpy as np
 import pyopencl as cl
 
-from pyebsdindex import radon_fast, openclparam
-
+from pyebsdindex import radon_fast
+from pyebsdindex.opencl import openclparam
 
 environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 

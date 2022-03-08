@@ -30,8 +30,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pyopencl as cl
 
-from pyebsdindex import band_detect, openclparam
-
+from pyebsdindex import band_detect
+from pyebsdindex.opencl import openclparam
 
 #from os import environ
 #environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
@@ -55,6 +55,10 @@ class BandDetect(band_detect.BandDetect):
 
     if useCPU == True:
       return band_detect.BandDetect.find_bands(self, patternsIn, verbose=verbose, chunksize=-1, **kwargs)
+    #if clparams is None:
+    #  print('noclparams')
+    #else:
+    #  print(type(clparams.queue))
 
     try:
       tic0 = timer()
@@ -101,7 +105,7 @@ class BandDetect(band_detect.BandDetect):
         rdntime += timer() - tic1
         tic1 = timer()
         rdnConv, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True)
-
+        rdnNorm.release()
         convtime += timer()-tic1
         tic1 = timer()
         lMaxRdn, clparams =  self.rdn_local_maxCL(rdnConv, clparams=clparams, returnBuff=True)
@@ -109,6 +113,7 @@ class BandDetect(band_detect.BandDetect):
         tic1 = timer()
 
         bandDataChunk = self.band_labelCL(rdnConv, lMaxRdn, clparams=clparams)
+        lMaxRdn.release()
         bandData['max'][chnk[0]:chnk[1]] = bandDataChunk[0][0:nPatsChunk, :]
         bandData['avemax'][chnk[0]:chnk[1]] = bandDataChunk[1][0:nPatsChunk, :]
         bandData['maxloc'][chnk[0]:chnk[1]] = bandDataChunk[2][0:nPatsChunk, :, :]
@@ -128,14 +133,15 @@ class BandDetect(band_detect.BandDetect):
           cl.enqueue_copy(clparams.queue,rdnConvarray,rdnConv,is_blocking=True)
           rdnConvarray = rdnConvarray[:,:,0:chnk[1]-chnk[0] ]
 
-
+        rdnConv.release()
         blabeltime += timer() - tic1
 
       tottime = timer() - tic0
       # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
-      if clparams is not None:
-        clparams.queue.finish()
-        clparams.queue = None
+
+      #if clparams is not None:
+        #clparams.queue.finish()
+        #clparams.queue = None
 
       if verbose > 0:
         print('Radon Time:',rdntime)

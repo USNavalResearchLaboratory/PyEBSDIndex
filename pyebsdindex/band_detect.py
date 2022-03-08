@@ -33,7 +33,8 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage import grey_dilation as scipy_grey_dilation
 
-from pyebsdindex import openclparam, radon_fast
+from pyebsdindex import  radon_fast
+
 
 
 

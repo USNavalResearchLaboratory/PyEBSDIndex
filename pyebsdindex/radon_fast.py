@@ -25,12 +25,6 @@ from timeit import default_timer as timer
 
 from numba import jit, prange
 import numpy as np
-import pyopencl as cl
-
-from pyebsdindex import openclparam
-
-
-environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
 RADDEG = 180.0/np.pi
 DEGRAD = np.pi/180.0

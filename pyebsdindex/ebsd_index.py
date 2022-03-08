@@ -40,7 +40,7 @@ from pyebsdindex import (
     rotlib,
     tripletlib
 )
-from pyebsdindex import band_detect_cl as band_detect
+from pyebsdindex.opencl import band_detect_cl as band_detect
 #from pyebsdindex import band_detect as band_detect
 from pyebsdindex.EBSDImage import IPFcolor
 

@@ -23,7 +23,6 @@ The US Naval Research Laboratory Date: 21 Aug 2020'''
 
 import numpy as np
 from os import path
-import importlib
 import pyopencl as cl
 from os import environ
 environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
