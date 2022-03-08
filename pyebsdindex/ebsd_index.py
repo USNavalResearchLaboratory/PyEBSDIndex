@@ -449,6 +449,7 @@ class IndexerRay():
 
   def index_chunk_ray(self,pats=None,indexer=None,patstart=0,npats=-1):
     try:
+      print(type(self.openCLParams.ctx))
       tic = timer()
       dataout,indxstart,npatsout = indexer.index_pats(patsin=pats,patstart=patstart,npats=npats,
                                                       clparams=self.openCLParams, chunksize = -1)
