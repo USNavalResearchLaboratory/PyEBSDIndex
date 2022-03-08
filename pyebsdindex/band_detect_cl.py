@@ -52,8 +52,9 @@ class BandDetect(band_detect.BandDetect):
   def find_bands(self, patternsIn, verbose=0, clparams=None, chunksize=528, useCPU=None, **kwargs):
     if useCPU is None:
       useCPU = self.useCPU
+
     if useCPU == True:
-      return band_detect.BandDetect.find_bands(patternsIn, verbose=verbose, chunksize=-1, **kwargs)
+      return band_detect.BandDetect.find_bands(self, patternsIn, verbose=verbose, chunksize=-1, **kwargs)
 
     try:
       tic0 = timer()
@@ -168,7 +169,7 @@ class BandDetect(band_detect.BandDetect):
         plt.show()
 
     except: # something went wrong - try the CPU
-      bandData = band_detect.BandDetect.find_bands(patternsIn, verbose=verbose, chunksize=-1, **kwargs)
+      bandData = band_detect.BandDetect.find_bands(self, patternsIn, verbose=verbose, chunksize=-1, **kwargs)
 
     return bandData
 
