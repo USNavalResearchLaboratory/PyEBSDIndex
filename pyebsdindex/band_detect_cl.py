@@ -166,7 +166,7 @@ class BandDetect(band_detect.BandDetect):
       plt.ylim(0,self.nRho)
       plt.show()
 
-
+    clparams.queue = None
     return bandData
 
 
