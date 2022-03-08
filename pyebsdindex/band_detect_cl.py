@@ -55,118 +55,121 @@ class BandDetect(band_detect.BandDetect):
     if useCPU == True:
       return band_detect.BandDetect.find_bands(patternsIn, verbose=verbose, chunksize=-1, **kwargs)
 
-    tic0 = timer()
-    tic = timer()
-    ndim = patternsIn.ndim
-    if ndim == 2:
-      patterns = np.expand_dims(patternsIn, axis=0)
-    else:
-      patterns = patternsIn
-
-    shape = patterns.shape
-    nPats = shape[0]
-
-    bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
-    if chunksize < 0:
-      nchunks = 1
-      chunksize = nPats
-    else:
-      nchunks = (np.ceil(nPats / chunksize)).astype(np.compat.long)
-
-    chunk_start_end = [[i * chunksize,(i + 1) * chunksize] for i in range(nchunks)]
-    chunk_start_end[-1][1] = nPats
-    # these are timers used to gauge performance
-    rdntime = 0.0
-    convtime = 0.0
-    lmaxtime = 0.0
-    blabeltime = 0.0
-
-    for chnk in chunk_start_end:
-      tic1 = timer()
-      nPatsChunk = chnk[1] - chnk[0]
-      #rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns[chnk[0]:chnk[1],:,:], clparams, use_gpu=self.CLOps[0])
-      rdnNorm, clparams = self.radon_fasterCL(patterns[chnk[0]:chnk[1],:,:], self.padding,
-                                                                     fixArtifacts=True, background=self.backgroundsub,
-                                                                     returnBuff=True, clparams=clparams)
-
-      #if (self.EDAXIQ == True): # I think EDAX actually uses the convolved radon for IQ
-        #nTp = self.nTheta + 2 * self.padding[1]
-        #nRp = self.nRho + 2 * self.padding[0]
-        #nImCL = int(rdnNorm_gpu.size/(nTp*nRp*4))
-        #rdnNorm_nocov = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
-        #cl.enqueue_copy(clparams.queue,rdnNorm_nocov,rdnNorm,is_blocking=True)
-
-      rdntime += timer() - tic1
-      tic1 = timer()
-      rdnConv, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True)
-
-      convtime += timer()-tic1
-      tic1 = timer()
-      lMaxRdn, clparams =  self.rdn_local_maxCL(rdnConv, clparams=clparams, returnBuff=True)
-      lmaxtime +=  timer()-tic1
-      tic1 = timer()
-
-      bandDataChunk = self.band_labelCL(rdnConv, lMaxRdn, clparams=clparams)
-      bandData['max'][chnk[0]:chnk[1]] = bandDataChunk[0][0:nPatsChunk, :]
-      bandData['avemax'][chnk[0]:chnk[1]] = bandDataChunk[1][0:nPatsChunk, :]
-      bandData['maxloc'][chnk[0]:chnk[1]] = bandDataChunk[2][0:nPatsChunk, :, :]
-      bandData['aveloc'][chnk[0]:chnk[1]] = bandDataChunk[3][0:nPatsChunk, :, :]
-      bandData['valid'][chnk[0]:chnk[1]] = bandDataChunk[4][0:nPatsChunk, :]
-      bandData['maxloc'][chnk[0]:chnk[1]] -= self.padding.reshape(1, 1, 2)
-      bandData['aveloc'][chnk[0]:chnk[1]] -= self.padding.reshape(1, 1, 2)
-      #bandDataChunk, rdnConvBuf = self.band_label(chnk[1]-chnk[0], rdnConv, rdnNorm, lMaxRdn,
-      #                                    rdnConv_gpu,rdnConv_gpu,lMaxRdn_gpu,
-      #                                    use_gpu = self.CLOps[3], clparams=clparams )
-
-      if (verbose > 1) and (chnk[1] == nPats): # need to pull the radonconv off the gpu
-        nTp = self.nTheta + 2 * self.padding[1]
-        nRp = self.nRho + 2 * self.padding[0]
-        nImCL = int(rdnConv.size / (nTp * nRp * 4))
-        rdnConvarray = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
-        cl.enqueue_copy(clparams.queue,rdnConvarray,rdnConv,is_blocking=True)
-        rdnConvarray = rdnConvarray[:,:,0:chnk[1]-chnk[0] ]
-
-
-      blabeltime += timer() - tic1
-
-    tottime = timer() - tic0
-    # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
-    if clparams is not None:
-      clparams.queue.finish()
-      clparams.queue = None
-
-    if verbose > 0:
-      print('Radon Time:',rdntime)
-      print('Convolution Time:', convtime)
-      print('Peak ID Time:', lmaxtime)
-      print('Band Label Time:', blabeltime)
-      print('Total Band Find Time:',tottime)
-    if verbose > 1:
-      plt.clf()
-
-      if len(rdnConvarray.shape) == 3:
-        im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
+    try:
+      tic0 = timer()
+      tic = timer()
+      ndim = patternsIn.ndim
+      if ndim == 2:
+        patterns = np.expand_dims(patternsIn, axis=0)
       else:
-        im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1]]
+        patterns = patternsIn
 
-      rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
-      mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
-      stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+      shape = patterns.shape
+      nPats = shape[0]
 
-      #im2show -= mean
-      #im2show /= stdv
-      #im2show += 7
-      im2show[0:rhoMaskTrim,:] = 0
-      im2show[-rhoMaskTrim:,:] = 0
+      bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
+      if chunksize < 0:
+        nchunks = 1
+        chunksize = nPats
+      else:
+        nchunks = (np.ceil(nPats / chunksize)).astype(np.compat.long)
 
-      plt.imshow(im2show, origin='lower', cmap='gray')
-      #plt.scatter(y = bandData['aveloc'][-1,:,0], x = bandData['aveloc'][-1,:,1]+self.peakPad[1], c ='r', s=5)
-      plt.scatter(y=bandData['aveloc'][-1,:,0],x=bandData['aveloc'][-1,:,1],c='r',s=5)
-      plt.xlim(0,self.nTheta)
-      plt.ylim(0,self.nRho)
-      plt.show()
+      chunk_start_end = [[i * chunksize,(i + 1) * chunksize] for i in range(nchunks)]
+      chunk_start_end[-1][1] = nPats
+      # these are timers used to gauge performance
+      rdntime = 0.0
+      convtime = 0.0
+      lmaxtime = 0.0
+      blabeltime = 0.0
 
-    clparams.queue = None
+      for chnk in chunk_start_end:
+        tic1 = timer()
+        nPatsChunk = chnk[1] - chnk[0]
+        #rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns[chnk[0]:chnk[1],:,:], clparams, use_gpu=self.CLOps[0])
+        rdnNorm, clparams = self.radon_fasterCL(patterns[chnk[0]:chnk[1],:,:], self.padding,
+                                                                       fixArtifacts=True, background=self.backgroundsub,
+                                                                       returnBuff=True, clparams=clparams)
+
+        #if (self.EDAXIQ == True): # I think EDAX actually uses the convolved radon for IQ
+          #nTp = self.nTheta + 2 * self.padding[1]
+          #nRp = self.nRho + 2 * self.padding[0]
+          #nImCL = int(rdnNorm_gpu.size/(nTp*nRp*4))
+          #rdnNorm_nocov = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
+          #cl.enqueue_copy(clparams.queue,rdnNorm_nocov,rdnNorm,is_blocking=True)
+
+        rdntime += timer() - tic1
+        tic1 = timer()
+        rdnConv, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True)
+
+        convtime += timer()-tic1
+        tic1 = timer()
+        lMaxRdn, clparams =  self.rdn_local_maxCL(rdnConv, clparams=clparams, returnBuff=True)
+        lmaxtime +=  timer()-tic1
+        tic1 = timer()
+
+        bandDataChunk = self.band_labelCL(rdnConv, lMaxRdn, clparams=clparams)
+        bandData['max'][chnk[0]:chnk[1]] = bandDataChunk[0][0:nPatsChunk, :]
+        bandData['avemax'][chnk[0]:chnk[1]] = bandDataChunk[1][0:nPatsChunk, :]
+        bandData['maxloc'][chnk[0]:chnk[1]] = bandDataChunk[2][0:nPatsChunk, :, :]
+        bandData['aveloc'][chnk[0]:chnk[1]] = bandDataChunk[3][0:nPatsChunk, :, :]
+        bandData['valid'][chnk[0]:chnk[1]] = bandDataChunk[4][0:nPatsChunk, :]
+        bandData['maxloc'][chnk[0]:chnk[1]] -= self.padding.reshape(1, 1, 2)
+        bandData['aveloc'][chnk[0]:chnk[1]] -= self.padding.reshape(1, 1, 2)
+        #bandDataChunk, rdnConvBuf = self.band_label(chnk[1]-chnk[0], rdnConv, rdnNorm, lMaxRdn,
+        #                                    rdnConv_gpu,rdnConv_gpu,lMaxRdn_gpu,
+        #                                    use_gpu = self.CLOps[3], clparams=clparams )
+
+        if (verbose > 1) and (chnk[1] == nPats): # need to pull the radonconv off the gpu
+          nTp = self.nTheta + 2 * self.padding[1]
+          nRp = self.nRho + 2 * self.padding[0]
+          nImCL = int(rdnConv.size / (nTp * nRp * 4))
+          rdnConvarray = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
+          cl.enqueue_copy(clparams.queue,rdnConvarray,rdnConv,is_blocking=True)
+          rdnConvarray = rdnConvarray[:,:,0:chnk[1]-chnk[0] ]
+
+
+        blabeltime += timer() - tic1
+
+      tottime = timer() - tic0
+      # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
+      if clparams is not None:
+        clparams.queue.finish()
+        clparams.queue = None
+
+      if verbose > 0:
+        print('Radon Time:',rdntime)
+        print('Convolution Time:', convtime)
+        print('Peak ID Time:', lmaxtime)
+        print('Band Label Time:', blabeltime)
+        print('Total Band Find Time:',tottime)
+      if verbose > 1:
+        plt.clf()
+
+        if len(rdnConvarray.shape) == 3:
+          im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
+        else:
+          im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1]]
+
+        rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
+        mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+        stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+
+        #im2show -= mean
+        #im2show /= stdv
+        #im2show += 7
+        im2show[0:rhoMaskTrim,:] = 0
+        im2show[-rhoMaskTrim:,:] = 0
+
+        plt.imshow(im2show, origin='lower', cmap='gray')
+        #plt.scatter(y = bandData['aveloc'][-1,:,0], x = bandData['aveloc'][-1,:,1]+self.peakPad[1], c ='r', s=5)
+        plt.scatter(y=bandData['aveloc'][-1,:,0],x=bandData['aveloc'][-1,:,1],c='r',s=5)
+        plt.xlim(0,self.nTheta)
+        plt.ylim(0,self.nRho)
+        plt.show()
+
+    except: # something went wrong - try the CPU
+      bandData = band_detect.BandDetect.find_bands(patternsIn, verbose=verbose, chunksize=-1, **kwargs)
+
     return bandData
 
 
