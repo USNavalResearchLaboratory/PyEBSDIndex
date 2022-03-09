@@ -22,9 +22,6 @@
 
 """Optimization of the pattern center (PC) of EBSD patterns."""
 
-
-import copy
-
 import numpy as np
 import pyswarms as pso
 import scipy.optimize as opt
@@ -73,7 +70,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
       Initial guess of PC. If not given, `indexer.PC` is used.
     batch : bool, optional
       Default is False which indicates the fit for a set of patterns
-      should be optimized using the cummalitive fit for all the patterns,
+      should be optimized using the cumulative fit for all the patterns,
       and one PC will be returned.
       If set to True, then a optimization is run for each individual pattern,
       and an array of PC values will be returned.

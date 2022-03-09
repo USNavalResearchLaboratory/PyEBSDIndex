@@ -22,7 +22,7 @@
 
 """Setup and handling of Hough indexing runs of EBSD patterns."""
 
-from os import path, environ
+from os import path
 import multiprocessing
 
 import sys
@@ -40,9 +40,13 @@ from pyebsdindex import (
     rotlib,
     tripletlib
 )
-from pyebsdindex.opencl import band_detect_cl as band_detect
-#from pyebsdindex import band_detect as band_detect
 from pyebsdindex.EBSDImage import IPFcolor
+
+try:
+    from pyebsdindex.opencl import band_detect_cl as band_detect
+except ImportError:
+    from pyebsdindex import band_detect as band_detect
+
 
 # if sys.platform == 'darwin':
 #   if ray.__version__ < '1.1.0':  # this fixes an issue when running locally on a VPN

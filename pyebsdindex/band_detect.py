@@ -29,14 +29,10 @@ from timeit import default_timer as timer
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
-
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage import grey_dilation as scipy_grey_dilation
 
-from pyebsdindex import  radon_fast
-
-
-
+from pyebsdindex import radon_fast
 
 
 tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
@@ -44,7 +40,6 @@ tempdir = tempdir.joinpath('numba')
 environ["NUMBA_CACHE_DIR"] = str(tempdir)
 
 RADEG = 180.0/np.pi
-
 
 
 class BandDetect:
