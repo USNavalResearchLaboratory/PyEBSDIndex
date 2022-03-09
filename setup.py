@@ -33,13 +33,15 @@ setup(
     license="Custom",
     python_requires=">=3.8",
     description=__description__,
+    long_description=open("README.md", encoding="utf-8").read(),
+    long_description_content_type="text/markdown",
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
-        "License :: Custom",
+        "License :: Other/Proprietary License",
         "Natural Language :: English",
         "Operating System :: OS Independent",
         "Topic :: Scientific/Engineering",
@@ -54,7 +56,7 @@ setup(
     zip_safe=True,
     # Contact
     author=__credits__,
-    download_url="https://github.com/USNavalResearchLaboratory/PyEBSDIndex",
+    download_url="https://pypi.python.org/pypi/pyebsdindex",
     maintainer=__author__,
     maintainer_email=__author_email__,
     project_urls={
@@ -62,6 +64,7 @@ setup(
         "Documentation": "https://pyebsdindex.readthedocs.io",
         "Source Code": "https://github.com/USNavalResearchLaboratory/PyEBSDIndex",
     },
+    url="https://pyebsdindex.readthedocs.io",
     # Dependencies
     extras_require=extra_feature_requirements,
     install_requires=[
@@ -70,8 +73,6 @@ setup(
         "matplotlib",
         "numpy",
         "numba",
-        #"ocl_icd_wrapper_apple;sys_platform == 'darwin'",
-        #"ocl-icd-system;sys_platform == 'linux'",
         "pyswarms",
         "ray[default]",
         "scipy",
@@ -81,7 +82,10 @@ setup(
     package_dir={"pyebsdindex": "pyebsdindex"},
     include_package_data=True,
     package_data={
-        "": ["License", "README.md"],
-        "pyebsdindex": ["*.py", "*.cl"],
+        "pyebsdindex": [
+            "*.py",
+            "*.cl",
+            "tests/data/al_sim_20kv/al_sim_20kv.png",
+        ],
     },
 )
