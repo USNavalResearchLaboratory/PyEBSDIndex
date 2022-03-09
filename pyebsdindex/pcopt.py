@@ -22,9 +22,6 @@
 
 """Optimization of the pattern center (PC) of EBSD patterns."""
 
-
-import copy
-
 import numpy as np
 import pyswarms as pso
 import scipy.optimize as opt
@@ -72,7 +69,11 @@ def optimize(pats, indexer, PC0=None, batch=False):
     PC0 : list, optional
       Initial guess of PC. If not given, `indexer.PC` is used.
     batch : bool, optional
-      Default is False.
+      Default is False which indicates the fit for a set of patterns
+      should be optimized using the cumulative fit for all the patterns,
+      and one PC will be returned.
+      If set to True, then a optimization is run for each individual pattern,
+      and an array of PC values will be returned.
 
     Returns
     -------
@@ -84,9 +85,9 @@ def optimize(pats, indexer, PC0=None, batch=False):
     SciPy's Nelder-Mead minimization function is used with a tolerance
     `fatol` of 0.00001 between each iteration.
     """
-    indxerCPU = copy.deepcopy(indexer)
-    indxerCPU.bandDetectPlan.CLOps = [False, False, False, False]
-    banddat = indxerCPU.bandDetectPlan.find_bands(pats)
+
+
+    banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
     if PC0 is None:
         PC0 = indexer.PC
@@ -153,10 +154,10 @@ def optimize_pso(pats, indexer, PC0=None, batch=False):
     return PCoutRet
 
 
-def file_opt(fobj, indexer):
+def file_opt(fobj, indexer, stride=200, groupsz = 3):
     nCols = fobj.nCols
     nRows = fobj.nRows
-    stride = 20
+    #stride = 20
     pcopt = np.zeros((int(nRows / stride), int(nCols / stride), 3), dtype=np.float32)
 
     for i in range(int(nRows / stride)):
@@ -166,7 +167,7 @@ def file_opt(fobj, indexer):
             jj = j * stride
 
             pats = fobj.read_data(
-                returnArrayOnly=True, convertToFloat=True, patStartEnd=[ii*nCols + jj, ii*nCols + jj + 1]
+                returnArrayOnly=True, convertToFloat=True, patStartCount=[ii*nCols + jj, groupsz]
             )
 
             pc = optimize(pats, indexer)

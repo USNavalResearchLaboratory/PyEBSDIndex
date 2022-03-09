@@ -346,6 +346,7 @@ void dirtsort( __global float *maxval1d, __global long int *maxloc1d,
 __kernel void maxlabel( __global const uchar *maxlocin,__global const float *maxvalin,
                         __global long int *maxloc,__global float *maxval,
                         __global float2 *aveloc,__global float *aveval,
+                        __global float *width,
                         const long imszx, const long imszy, 
                         const long padx, const long pady, const long nmax)
 {
@@ -355,7 +356,7 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
   const unsigned long int z = get_global_id(0);
   const unsigned long int nImChunk = get_global_size(0);
   uchar imVal1;
-  float imVal2; 
+  float imVal2, imValyp1, imValym1; 
   const long lnmax = (long) nmax; 
   long int indy, indxy,i, j,k;
   //__global long int maxloc1d[32];// = {0};
@@ -420,7 +421,9 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       //aveloc[z*nmax + i] = (float2) (avetempx,avetempy);
       aveloc[z*lnmax + i] = avetempxy;
       aveval[z*lnmax + i] = avetempweight/9.0;
-
+      imValyp1 = maxvalin[((y+1)*imszx+x)*nImChunk+z];
+      imValym1 = maxvalin[((y-1)*imszx+x)*nImChunk+z];
+      width[z*lnmax + i] = 1.0 / (maxval[z*lnmax+i] - 0.5 * (imValyp1 + imValym1) + 1e-12) ;
     }
     else{
       break; // no more detected peaks
