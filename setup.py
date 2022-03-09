@@ -18,6 +18,7 @@ extra_feature_requirements = {
         "sphinx-gallery >= 0.6",
     ],
     "tests": ["coverage >= 5.0", "pytest >= 5.4", "pytest-cov >= 2.8.1"],
+    "gpu": ["pyopencl"],
 }
 # Create a development project, including both the docs and tests projects
 extra_feature_requirements["dev"] = list(
@@ -69,7 +70,6 @@ setup(
         "matplotlib",
         "numpy",
         "numba",
-        "pyopencl",
         #"ocl_icd_wrapper_apple;sys_platform == 'darwin'",
         #"ocl-icd-system;sys_platform == 'linux'",
         "pyswarms",
