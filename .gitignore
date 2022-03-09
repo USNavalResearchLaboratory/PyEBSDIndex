@@ -8,6 +8,7 @@ report.log
 # Python
 **/__pycache__
 *.egg-info
+dist/
 
 # Jupyter
 **.ipynb_checkpoints
