@@ -24,13 +24,27 @@ available at https://pyebsdindex.readthedocs.io.
 
 ## Installation
 
-The package can only be installed from source at the moment. There is an issue with
-installing `pyopencl` from `pip` on Windows, so this has to be installed from `conda`
-before installing `PyEBSDIndex`:
+The package can be installed from the
+[Python Package Index](https://pypi.org/project/pyebsdindex) (`pip`) or from source on
+all operating systems:
 
 ```bash
-conda install pyopencl --channel conda-forge  # Only required on Windows
+pip install pyebsdindex
+```
+
+Installing with optional GPU support via `pyopencl`:
+
+```bash
+pip install pyebsdindex[gpu]
+```
+
+Please refer to the [pyopencl](https://documen.tician.de/pyopencl/misc.html)
+installation documentation in case installation fails.
+
+Installing the package from source with optional dependencies for running tests
+
+```bash
 git clone https://github.com/USNavalResearchLaboratory/PyEBSDIndex
 cd PyEBSDIndex
-pip install --editable .
+pip install --editable .[tests]
 ```
