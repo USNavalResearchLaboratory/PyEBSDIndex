@@ -364,8 +364,11 @@ class BandDetect:
 
     # This translation from the Radon to theta and rho assumes that the first pixel read
     # in off the detector is in the top left corner.
-    theta = np.pi - self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1],dtype=np.int64)] / RADEG
-    rho = -1.0*self.radonPlan.rho[np.array(bandData['aveloc'][:,:,0],dtype=np.int64)]
+
+    #theta = np.pi - self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1],dtype=np.int64)] / RADEG
+    #rho = -1.0 * self.radonPlan.rho[np.array(bandData['aveloc'][:,:,0],dtype=np.int64)]
+    theta =  np.pi - np.interp(bandData['aveloc'][:,:,1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta) / RADEG
+    rho = -1.0 * np.interp(bandData['aveloc'][:,:,0], np.arange(self.radonPlan.nRho), self.radonPlan.rho)
 
     # from this point on, we will assume the image origin and t-vector (aka pattern center) is described
     # at the bottom left of the pattern
