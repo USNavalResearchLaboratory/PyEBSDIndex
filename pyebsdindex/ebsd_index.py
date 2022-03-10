@@ -422,8 +422,8 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 @ray.remote(num_cpus=1,num_gpus=1)
 class IndexerRay():
   def __init__(self,actorid=0, clparammodule=None):
-    sys.path.append((path.dirname(__file__)))  # do this to help Ray find the program files
-    #import openclparam # do this to help Ray find the program files
+    sys.path.append((path.dirname(path.dirname(__file__))))  # do this to help Ray find the program files
+    # import openclparam # do this to help Ray find the program files
     # device, context, queue, program, mf
     # self.dataout = None
     # self.indxstart = None
