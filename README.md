@@ -24,6 +24,8 @@ Documentation with a user guide, API reference, changelog, and contributing guid
 available at https://pyebsdindex.readthedocs.io.
 
 ## Installation
+In order to avoid potential conflicts with other system python packages, it is strongly recommended 
+to use a virtual environment, such as venv or conda environments.  
 
 The package can be installed from the
 [Python Package Index](https://pypi.org/project/pyebsdindex) (`pip`) or from source on
@@ -48,4 +50,15 @@ Installing the package from source with optional dependencies for running tests
 git clone https://github.com/USNavalResearchLaboratory/PyEBSDIndex
 cd PyEBSDIndex
 pip install --editable .[tests]
+```
+
+Also, if you want to run the example jupyter notebooks in the documentation, 
+you will need to install jypterlab:
+
+```bash
+pip install jupyterlab
+```
+or 
+```bash
+conda install jupyterlab
 ```
