@@ -4,6 +4,7 @@ Python based tool for Hough/Radon based EBSD orientation indexing.
 
 [![Build status](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml/badge.svg)](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml)
 [![Documentation status](https://readthedocs.org/projects/pyebsdindex/badge/?version=latest)](https://pyebsdindex.readthedocs.io/en/latest/)
+[![PyPI version](https://img.shields.io/pypi/v/pyebsdindex.svg)](https://pypi.python.org/pypi/pyebsdindex)
 
 The pattern processing is based on a GPU pipeline, and is based on the work of S. I.
 Wright and B. L. Adams. Metallurgical Transactions A-Physical Metallurgy and Materials
@@ -23,6 +24,8 @@ Documentation with a user guide, API reference, changelog, and contributing guid
 available at https://pyebsdindex.readthedocs.io.
 
 ## Installation
+In order to avoid potential conflicts with other system python packages, it is strongly recommended 
+to use a virtual environment, such as venv or conda environments.  
 
 The package can be installed from the
 [Python Package Index](https://pypi.org/project/pyebsdindex) (`pip`) or from source on
@@ -47,4 +50,15 @@ Installing the package from source with optional dependencies for running tests
 git clone https://github.com/USNavalResearchLaboratory/PyEBSDIndex
 cd PyEBSDIndex
 pip install --editable .[tests]
+```
+
+Also, if you want to run the example jupyter notebooks in the documentation, 
+you will need to install jypterlab:
+
+```bash
+pip install jupyterlab
+```
+or 
+```bash
+conda install jupyterlab
 ```
