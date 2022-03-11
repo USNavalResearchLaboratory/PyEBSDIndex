@@ -69,7 +69,6 @@ setup(
     extras_require=extra_feature_requirements,
     install_requires=[
         "h5py",
-        "jupyterlab",
         "matplotlib",
         "numpy",
         "numba",
