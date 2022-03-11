@@ -4,6 +4,7 @@ Python based tool for Hough/Radon based EBSD orientation indexing.
 
 [![Build status](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml/badge.svg)](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml)
 [![Documentation status](https://readthedocs.org/projects/pyebsdindex/badge/?version=latest)](https://pyebsdindex.readthedocs.io/en/latest/)
+[![PyPI version](https://img.shields.io/pypi/v/pyebsdindex.svg)](https://pypi.python.org/pypi/pyebsdindex)
 
 The pattern processing is based on a GPU pipeline, and is based on the work of S. I.
 Wright and B. L. Adams. Metallurgical Transactions A-Physical Metallurgy and Materials
