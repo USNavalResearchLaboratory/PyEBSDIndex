@@ -40,7 +40,7 @@ environ["NUMBA_CACHE_DIR"] = str(tempdir)
 
 
 class BandVote:
-  def __init__(self, tripLib, angTol=3.0, high_fidelity=False):
+  def __init__(self, tripLib, angTol=3.0, high_fidelity=True):
     self.tripLib = tripLib
     self.phase_name = self.tripLib.phaseName
     self.phase_sym = self.tripLib.symmetry
@@ -238,13 +238,22 @@ class BandVote:
     AB, weights = self.orientation_refine_loops_am(nGood, whGood, poles, bandnorms, polematch, n2Fit)
 
     wh_weight = np.nonzero(weights < 359.0)[0]
-    expw  = weights[wh_weight]
-    expw = np.exp(-expw/(0.5*(expw.max()-expw.min())))
-    expw /= np.sum(expw)
     quats = rotlib.om2quL(AB[wh_weight, :, :])
-    #print("triad", timer()-tic)
-    avequat = rotlib.quatave(quats * np.expand_dims(expw, axis=-1))
 
+    expw  = weights[wh_weight]
+
+    rng = expw.max()-expw.min()
+    #print(rng, len(wh_weight))
+    if rng > 1e-6:
+      expw -= expw.min()
+      #print(np.arccos(1.0 - expw)*RADEG)
+      expw = np.exp(-expw/(0.5*(rng)))
+      expw /= np.sum(expw)
+
+      #print(expw*len(wh_weight))
+      avequat = rotlib.quatave(quats * np.expand_dims(expw, axis=-1))
+    else:
+      avequat = rotlib.quatave(quats)
 
 
     test = rotlib.quat_vectorL(avequat,bandnorms[whGood,:])
@@ -550,7 +559,7 @@ class BandVote:
     # from imperfect poles
     counter = 0
 
-    pflt = np.asarray(poles[polematch[whGood], :], dtype=np.float32)
+    pflt = np.transpose(np.asarray(poles[polematch[whGood], :], dtype=np.float32))
     bndnorm = np.transpose(np.asarray(bandnorms[whGood,:], dtype=np.float32))
 
     A = np.zeros((3, 3), dtype=np.float32)
@@ -616,22 +625,24 @@ class BandVote:
           R = A.dot(B)
           AB[counter,:,:] = A.dot(B)
 
-          # test the fit of each canidate
+          # test the fit of each candidate
           testp = (R.dot(bndnorm))
-          test = pflt.dot(testp)
-
-          angfitTry = np.zeros((nGood), dtype=np.float32)
+          #test = pflt.dot(testp)
+          test = np.sum(pflt*testp, axis=0)
+          #print(test.shape)
+          #angfitTry = np.zeros((nGood), dtype=np.float32)
           # angfitTry = np.max(test,axis=0)
-          for qq in range(nGood):
-            angfitTry[qq] = np.max(test[:, qq])
-            angfitTry[qq] = -1.0 if angfitTry[qq] < -1.0 else angfitTry[qq]
-            angfitTry[qq] = 1.0 if angfitTry[qq] > 1.0 else angfitTry[qq]
-          angfitTry = np.mean(np.arccos(angfitTry) * RADEG)
-
+          #for qq in range(nGood):
+          #  angfitTry[qq] = np.max(test[:, qq])
+          #  angfitTry[qq] = -1.0 if angfitTry[qq] < -1.0 else angfitTry[qq]
+          #  angfitTry[qq] = 1.0 if angfitTry[qq] > 1.0 else angfitTry[qq]
+          #angfitTry = np.mean(np.arccos(angfitTry) * RADEG)
+          #print(test)
 
 
           #whgood2[counter] = 1
-          whgood2[counter] = np.float32(angfitTry)
+          whgood2[counter] = 1.0 - np.mean(test)
+          #print(1.0 - np.mean(test))
           counter += 1
         else:  # the two are parallel - throwout the result.
           whgood2[counter] = np.float32(360.0)

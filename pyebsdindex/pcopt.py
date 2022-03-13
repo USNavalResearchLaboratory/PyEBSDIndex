@@ -89,8 +89,25 @@ def optimize(pats, indexer, PC0=None, batch=False):
 
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
+
+
+
     if PC0 is None:
         PC0 = indexer.PC
+    emsoftflag = False
+    if indexer.vendor == 'EMSOFT': # convert to EDAX for optimization
+        emsoftflag = True
+        indexer.vendor = 'EDAX'
+        delta = indexer.PC
+        PC0in = PC0
+        PCtemp = PC0[0:3]
+        PCtemp[0] *= -1.0
+        PCtemp[0] += 0.5 * indexer.bandDetectPlan.patDim[1]
+        PCtemp[1] += 0.5 * indexer.bandDetectPlan.patDim[0]
+        PCtemp /= indexer.bandDetectPlan.patDim[1]
+        PCtemp[2] /= delta[3]
+        PC0 = PCtemp
+
 
     if not batch:
         PCopt = opt.minimize(optfunction, PC0, args=(indexer, banddat), method='Nelder-Mead', options={'fatol': 0.00001})
@@ -100,6 +117,33 @@ def optimize(pats, indexer, PC0=None, batch=False):
         for i in range(npoints):
             PCopt = opt.minimize(optfunction, PC0, args=(indexer, banddat[i, :, :]), method='Nelder-Mead')
             PCoutRet[i, :] = PCopt['x']
+
+    if emsoftflag == True: # return original state for indexer
+        indexer.vendor = 'EMSOFT'
+        indexer.PC = delta
+        PC0 = PC0in
+        if PCoutRet.ndim == 2:
+            newout = np.zeros((npoints, 4))
+            PCoutRet[:, 0] -= 0.5
+            PCoutRet[:,0:3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[:, 1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
+            PCoutRet[:,0] *= -1.0
+            PCoutRet[:, 2] *= delta[3]
+            newout[:, 0:3] = PCoutRet
+            newout[:, 3] = delta[3]
+            PCoutRet = newout
+        else:
+            newout = np.zeros((4))
+            PCoutRet[0] -= 0.5
+            PCoutRet[0:3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
+            PCoutRet[0] *= -1.0
+            PCoutRet[2] *= delta[3]
+            newout[0:3] = PCoutRet
+            newout[3] = delta[3]
+            PCoutRet = newout
+
+
     return PCoutRet
 
 
