@@ -702,6 +702,7 @@ class BandVote:
     q[0] = gamma
     q[1:4] = X[0:3]
     q /= qn
+    q *= np.sign(gamma)
 
     return q, lam
 
