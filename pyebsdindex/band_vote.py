@@ -58,8 +58,6 @@ class BandVote:
       LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
     self.LUT = np.asarray(LUT).copy()
 
-
-
   def tripvote(self, band_norms, goNumba = True, verbose=0):
     tic0 = timer()
     nfam = self.tripLib.family.shape[0]
@@ -159,7 +157,9 @@ class BandVote:
     cm2 = 0.0
     if nMatch >=2:
       if self.high_fidelity == True:
-        avequat, fit = self.refine_orientation(bandnorms,whGood,polematch)
+        avequat, fit = self.refine_orientation_quest(bandnorms, whGood, polematch)
+        fit = np.arccos(fit)*RADEG
+        #avequat, fit = self.refine_orientation(bandnorms,whGood,polematch)
       else:
         avequat = rotlib.om2qu(R)
       whmatch = np.nonzero(polematch >= 0)[0]
@@ -249,9 +249,11 @@ class BandVote:
       #print(np.arccos(1.0 - expw)*RADEG)
       expw = np.exp(-expw/(0.5*(rng)))
       expw /= np.sum(expw)
-
+      #print(quats)
+      #print(expw)
       #print(expw*len(wh_weight))
       avequat = rotlib.quatave(quats * np.expand_dims(expw, axis=-1))
+      #print(avequat)
     else:
       avequat = rotlib.quatave(quats)
 
@@ -267,6 +269,17 @@ class BandVote:
 
     #print('fitting: ',timer() - tic)
     return avequat, fit
+
+  def refine_orientation_quest(self,bandnorms, whGood, polematch):
+    tic = timer()
+    poles = self.tripLib.completelib['polesCart']
+    nGood = whGood.size
+    whGood = np.asarray(whGood,dtype=np.int64)
+    #weights = np.ones((nGood), dtype=np.float32)
+    avequat, fit = self.orientation_quest(nGood, whGood, poles, bandnorms, polematch)#, weights)
+
+    return avequat, fit
+
 
   @staticmethod
   @numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
@@ -648,6 +661,49 @@ class BandVote:
           whgood2[counter] = np.float32(360.0)
           counter += 1
     return AB,whgood2
+
+  @staticmethod
+  @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
+  def orientation_quest(nGood, whGood, poles, bandnorms, polematch): #, weights):
+    # this uses the Quaternion Estimator AKA quest algorithm.
+
+    pflt = (np.asarray(poles[polematch[whGood], :], dtype=np.float32))
+    bndnorm = (np.asarray(bandnorms[whGood, :], dtype=np.float32))
+    wn = np.ones((nGood,1), dtype=np.float32)/np.float32(nGood)  #(weights[whGood]).reshape(nGood,1)
+    I = np.zeros((3,3), dtype=np.float32)
+    I[0,0] = 1.0 ; I[1,1] = 1.0 ; I[2,2] = 1.0
+    q = np.zeros((4), dtype=np.float32)
+
+    B = (wn * bndnorm).T @ pflt
+    S = B + B.T
+    z = np.asarray(np.sum(wn * np.cross(bndnorm, pflt), axis = 0), dtype=np.float32)
+    S2 = S @ S
+    det = np.linalg.det(S)
+    k = (S[1,1]*S[2,2] - S[1,2]*S[2,1]) + (S[0,0]*S[2,2] - S[0,2]*S[2,0]) + (S[0,0]*S[1,1] - S[1,0]*S[0,1])
+    sig = 0.5 * (S[0,0] + S[1,1] + S[2,2])
+    sig2 = sig * sig
+    d = z.T @ S2 @ z
+    c = det + (z.T @ S @ z)
+    b = sig2 + (z.T @ z)
+    a = sig2 -k
+
+    lam = 1.0
+    for i in range(3):
+      lam = lam - (lam**4 - (a + b) * lam**2 - c * lam + (a * b + c * sig - d))/ (4 * lam**3 - 2 * (a + b) * lam - c)
+
+
+    beta = lam - sig
+    alpha = lam ** 2 - sig2 + k
+    gamma = (lam + sig) * alpha - det
+    X = np.asarray( (alpha * I + beta * S + S2), dtype=np.float32)  @ z
+    qn = np.float32(0.0)
+    qn += gamma ** 2 + X[0] **2 + X[1] **2 + X[2] **2
+    qn = np.sqrt(qn)
+    q[0] = gamma
+    q[1:4] = X[0:3]
+    q /= qn
+
+    return q, lam
 
   def pairVoteOrientation(self,bandnormsIN,goNumba=True):
     tic0 = timer()
