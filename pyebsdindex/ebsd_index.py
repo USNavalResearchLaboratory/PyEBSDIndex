@@ -719,6 +719,7 @@ class EBSDIndexer:
         qref2detect = self.refframe2detector()
         q = q.reshape(nPhases * npoints, 4)
         q = rotlib.quat_multiply(q, qref2detect)
+        q = rotlib.quatnorm(q)
         q = q.reshape(nPhases, npoints, 4)
         indxData['quat'][0:nPhases, :, :] = q
         if nPhases > 1:
@@ -750,7 +751,7 @@ class EBSDIndexer:
 
         return quatref2detect
 
-    def pcCorrect(self, xy=[0.0, 0.0]):  # at somepoint we will put some methods here for correcting the PC
+    def pcCorrect(self, xy=[[0.0, 0.0]]):  # at somepoint we will put some methods here for correcting the PC
         # depending on the location within the scan.  Need to correct band_detect.radon2pole to accept a
         # PC for each point
         pass

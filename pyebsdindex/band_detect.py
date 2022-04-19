@@ -256,7 +256,7 @@ class BandDetect:
 
     for chnk in chunk_start_end:
       tic1 = timer()
-      rdnNorm = self.radonPlan.radon_faster(patterns[chnk[0]:chnk[1],:,:], self.padding, fixArtifacts=True, background=self.backgroundsub)
+      rdnNorm = self.radonPlan.radon_faster(patterns[chnk[0]:chnk[1],:,:], self.padding, fixArtifacts=False, background=self.backgroundsub)
       rdntime += timer() - tic1
       tic1 = timer()
       rdnConv = self.rdn_conv(rdnNorm)
