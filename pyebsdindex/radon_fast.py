@@ -59,16 +59,17 @@ class Radon:
     self.imDim = imDim
     if (nTheta is not None) : self.nTheta = nTheta
     if (nRho is not None): self.nRho = nRho
-    self.rhoMax = rhoMax if (rhoMax is not None) else np.round(np.linalg.norm(imDim)*0.5)
+    #self.rhoMax = rhoMax if (rhoMax is not None) else np.round(np.linalg.norm(imDim)*0.5)
+    self.rhoMax = rhoMax if (rhoMax is not None) else (np.linalg.norm(imDim) * 0.5)
 
     deltaRho = float(2 * self.rhoMax) / (self.nRho)
     self.theta = np.arange(self.nTheta, dtype = np.float32)*180.0/self.nTheta
     self.rho = np.arange(self.nRho, dtype = np.float32)*deltaRho - (self.rhoMax-deltaRho)
 
-    #xmin = -1.0*(self.imDim[0]-1)*0.5
-    #ymin = -1.0*(self.imDim[1]-1)*0.5
     xmin = -1.0*(self.imDim[1]-1)*0.5
     ymin = -1.0*(self.imDim[0]-1)*0.5
+    #xmin = -1.0 * (self.imDim[1]) * 0.5
+    #ymin = -1.0 * (self.imDim[0]) * 0.5
 
     #self.radon = np.zeros([self.nRho, self.nTheta])
     sTheta = np.sin(self.theta*DEGRAD)
@@ -90,7 +91,8 @@ class Radon:
       if thetatest[i]:
         b1 /= sTheta[i]
         b1 = b1.reshape(self.nRho, 1)
-        indx_y = np.floor(a[i]*m+b1).astype(np.int64)
+        #indx_y = np.floor(a[i]*m+b1).astype(np.int64)
+        indx_y = np.round(a[i] * m + b1).astype(np.int64)
         indx_y = np.where(indx_y < 0, outofbounds, indx_y)
         indx_y = np.where(indx_y >= self.imDim[0], outofbounds, indx_y)
         #indx_y = np.clip(indx_y, 0, self.imDim[1])
@@ -99,10 +101,11 @@ class Radon:
       else:
         b1 /= cTheta[i]
         b1 = b1.reshape(self.nRho, 1)
-        if cTheta[i] > 0:
-          indx_x = np.floor(a[i]*n + b1).astype(np.int64)
-        else:
-          indx_x = np.ceil(a[i] * n + b1).astype(np.int64)
+        #if cTheta[i] > 0:
+          #indx_x = np.floor(a[i]*n + b1).astype(np.int64)
+        #else:
+          #indx_x = np.ceil(a[i] * n + b1).astype(np.int64)
+        indx_x = np.round(a[i] * n + b1).astype(np.int64)
         indx_x = np.where(indx_x < 0, outofbounds, indx_x)
         indx_x = np.where(indx_x >= self.imDim[1], outofbounds, indx_x)
         indx1D = np.clip(indx_x+self.imDim[1]*n, 0, outofbounds)
