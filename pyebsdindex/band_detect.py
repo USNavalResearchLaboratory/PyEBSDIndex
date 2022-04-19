@@ -152,7 +152,7 @@ class BandDetect:
       recalc_masks = True
 
     if (self.rSigma is None) and (self.dRho is not None):
-      self.rSigma = 0.25/np.float32(self.dRho)
+      self.rSigma = 0.5/np.float32(self.dRho)
       recalc_masks = True
 
     if recalc_masks == True:
@@ -256,7 +256,7 @@ class BandDetect:
 
     for chnk in chunk_start_end:
       tic1 = timer()
-      rdnNorm = self.radonPlan.radon_faster(patterns[chnk[0]:chnk[1],:,:], self.padding, fixArtifacts=True, background=self.backgroundsub)
+      rdnNorm = self.radonPlan.radon_faster(patterns[chnk[0]:chnk[1],:,:], self.padding, fixArtifacts=False, background=self.backgroundsub)
       rdntime += timer() - tic1
       tic1 = timer()
       rdnConv = self.rdn_conv(rdnNorm)
@@ -364,26 +364,42 @@ class BandDetect:
 
     # This translation from the Radon to theta and rho assumes that the first pixel read
     # in off the detector is in the top left corner.
-    theta = np.pi - self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1],dtype=np.int64)] / RADEG
-    rho = -1.0*self.radonPlan.rho[np.array(bandData['aveloc'][:,:,0],dtype=np.int64)]
+
+    #theta = np.pi - self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1],dtype=np.int64)] / RADEG
+    #rho = -1.0 * self.radonPlan.rho[np.array(bandData['aveloc'][:,:,0],dtype=np.int64)]
+    theta =  np.pi - np.interp(bandData['aveloc'][:,:,1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta) / RADEG
+    rho = -1.0 * np.interp(bandData['aveloc'][:,:,0], np.arange(self.radonPlan.nRho), self.radonPlan.rho)
 
     # from this point on, we will assume the image origin and t-vector (aka pattern center) is described
     # at the bottom left of the pattern
     stheta = np.sin(theta)
     ctheta = np.cos(theta)
 
-    t = np.asfarray(PC).copy()
-    shapet = t.shape
-    if len(shapet) < 2:
-      t = np.tile(t, nPats).reshape(nPats,3)
-    else:
-      if shapet[0] != nPats:
-        t = np.tile(t[0,:], nPats).reshape(nPats,3)
+    pctemp =  np.asfarray(PC).copy()
+    shapet = pctemp.shape
+    if ven != 'EMSOFT':
+      if len(shapet) < 2:
+        pctemp = np.tile(pctemp, nPats).reshape(nPats,3)
+      else:
+        if shapet[0] != nPats:
+          pctemp = np.tile(pctemp[0,:], nPats).reshape(nPats,3)
+      t = pctemp
+    else: # EMSOFT pc to ebsdindex needs four numbers for PC
+      if len(shapet) < 2:
+        pctemp = np.tile(pctemp, nPats).reshape(nPats,4)
+      else:
+        if shapet[0] != nPats:
+          pctemp = np.tile(pctemp[0,:], nPats).reshape(nPats,4)
+      t = pctemp[:,0:3]
+      t[:,2] /= pctemp[:,3] # normalize by pixel size
+
+
 
     dimf = np.array(self.patDim, dtype=np.float32)
     if ven in ['EDAX', 'OXFORD']:
       t *= np.array([dimf[1], dimf[1], -dimf[1]])
     if ven == 'EMSOFT':
+      t[:, 0] *= -1.0
       t += np.array([dimf[1] / 2.0, dimf[0] / 2.0, 0.0])
       t[:, 2] *= -1.0
     if ven in ['KIKUCHIPY', 'BRUKER']:
@@ -391,6 +407,7 @@ class BandDetect:
       t[:, 1] = dimf[0] - t[:, 1]
     # describes the translation from the bottom left corner of the pattern image to the point on the detector
     # perpendicular to where the beam contacts the sample.
+
 
     t = np.tile(t.reshape(nPats,1, 3), (1, nBands,1))
 

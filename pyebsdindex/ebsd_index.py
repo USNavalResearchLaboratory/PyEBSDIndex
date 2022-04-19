@@ -422,8 +422,8 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 @ray.remote(num_cpus=1,num_gpus=1)
 class IndexerRay():
   def __init__(self,actorid=0, clparammodule=None):
-    sys.path.append((path.dirname(__file__)))  # do this to help Ray find the program files
-    #import openclparam # do this to help Ray find the program files
+    sys.path.append((path.dirname(path.dirname(__file__))))  # do this to help Ray find the program files
+    # import openclparam # do this to help Ray find the program files
     # device, context, queue, program, mf
     # self.dataout = None
     # self.indxstart = None
@@ -719,6 +719,7 @@ class EBSDIndexer:
         qref2detect = self.refframe2detector()
         q = q.reshape(nPhases * npoints, 4)
         q = rotlib.quat_multiply(q, qref2detect)
+        q = rotlib.quatnorm(q)
         q = q.reshape(nPhases, npoints, 4)
         indxData['quat'][0:nPhases, :, :] = q
         if nPhases > 1:
@@ -750,7 +751,7 @@ class EBSDIndexer:
 
         return quatref2detect
 
-    def pcCorrect(self, xy=[0.0, 0.0]):  # at somepoint we will put some methods here for correcting the PC
+    def pcCorrect(self, xy=[[0.0, 0.0]]):  # at somepoint we will put some methods here for correcting the PC
         # depending on the location within the scan.  Need to correct band_detect.radon2pole to accept a
         # PC for each point
         pass

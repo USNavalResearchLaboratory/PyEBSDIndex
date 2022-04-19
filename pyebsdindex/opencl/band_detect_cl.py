@@ -92,7 +92,7 @@ class BandDetect(band_detect.BandDetect):
         nPatsChunk = chnk[1] - chnk[0]
         #rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns[chnk[0]:chnk[1],:,:], clparams, use_gpu=self.CLOps[0])
         rdnNorm, clparams = self.radon_fasterCL(patterns[chnk[0]:chnk[1],:,:], self.padding,
-                                                                       fixArtifacts=True, background=self.backgroundsub,
+                                                                       fixArtifacts=False, background=self.backgroundsub,
                                                                        returnBuff=True, clparams=clparams)
 
         #if (self.EDAXIQ == True): # I think EDAX actually uses the convolved radon for IQ
@@ -120,7 +120,7 @@ class BandDetect(band_detect.BandDetect):
         bandData['aveloc'][chnk[0]:chnk[1]] = bandDataChunk[3][0:nPatsChunk, :, :]
         bandData['valid'][chnk[0]:chnk[1]] = bandDataChunk[4][0:nPatsChunk, :]
         bandData['width'][chnk[0]:chnk[1]] = bandDataChunk[5][0:nPatsChunk, :]
-        bandData['maxloc'][chnk[0]:chnk[1]] -= self.padding.reshape(1, 1, 2)
+        bandData['maxloc'][chnk[0]:chnk[1]] -= self.padding.reshape(1, 1, 2) 
         bandData['aveloc'][chnk[0]:chnk[1]] -= self.padding.reshape(1, 1, 2)
         #bandDataChunk, rdnConvBuf = self.band_label(chnk[1]-chnk[0], rdnConv, rdnNorm, lMaxRdn,
         #                                    rdnConv_gpu,rdnConv_gpu,lMaxRdn_gpu,
