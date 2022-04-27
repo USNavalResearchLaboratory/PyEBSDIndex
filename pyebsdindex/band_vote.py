@@ -58,12 +58,13 @@ class BandVote:
       LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
     self.LUT = np.asarray(LUT).copy()
 
-  def tripvote(self, band_norms, goNumba = True, verbose=0):
+  def tripvote(self, band_norms, band_intensity = None, goNumba = True, verbose=0):
     tic0 = timer()
     nfam = self.tripLib.family.shape[0]
     bandnorms = np.squeeze(band_norms)
     n_bands = np.int64(bandnorms.size/3)
-
+    if band_intensity is None:
+      band_intensity = np.ones((n_bands))
     tic = timer()
     bandangs = np.abs(bandnorms.dot(bandnorms.T))
     bandangs = np.clip(bandangs, -1.0, 1.0)
@@ -157,8 +158,9 @@ class BandVote:
     cm2 = 0.0
     if nMatch >=2:
       if self.high_fidelity == True:
-        avequat, fit = self.refine_orientation_quest(bandnorms, whGood, polematch)
-        fit = np.arccos(fit)*RADEG
+
+        avequat, fit = self.refine_orientation_quest(bandnorms, whGood, polematch, weights=band_intensity)
+        fit = np.arccos(np.clip(fit, -1.0, 1.0))*RADEG
         #avequat, fit = self.refine_orientation(bandnorms,whGood,polematch)
       else:
         avequat = rotlib.om2qu(R)
@@ -270,13 +272,20 @@ class BandVote:
     #print('fitting: ',timer() - tic)
     return avequat, fit
 
-  def refine_orientation_quest(self,bandnorms, whGood, polematch):
+  def refine_orientation_quest(self,bandnorms, whGood, polematch, weights = None):
     tic = timer()
     poles = self.tripLib.completelib['polesCart']
-    nGood = whGood.size
     whGood = np.asarray(whGood,dtype=np.int64)
-    #weights = np.ones((nGood), dtype=np.float32)
-    avequat, fit = self.orientation_quest(nGood, whGood, poles, bandnorms, polematch)#, weights)
+
+    if weights is None:
+      weights = np.ones((bandnorms.shape[0]), dtype=np.float64)
+    weightsn = weights[whGood]
+    weightsn /= np.sum(weightsn)
+    #print(weightsn)
+    pflt = (np.asarray(poles[polematch[whGood], :], dtype=np.float64))
+    bndnorm = (np.asarray(bandnorms[whGood, :], dtype=np.float64))
+
+    avequat, fit = self.orientation_quest(pflt, bndnorm, weightsn)
 
     return avequat, fit
 
@@ -664,19 +673,25 @@ class BandVote:
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
-  def orientation_quest(nGood, whGood, poles, bandnorms, polematch): #, weights):
+  def orientation_quest(poles, bandnorms, weights):
     # this uses the Quaternion Estimator AKA quest algorithm.
 
-    pflt = (np.asarray(poles[polematch[whGood], :], dtype=np.float32))
-    bndnorm = (np.asarray(bandnorms[whGood, :], dtype=np.float32))
-    wn = np.ones((nGood,1), dtype=np.float32)/np.float32(nGood)  #(weights[whGood]).reshape(nGood,1)
-    I = np.zeros((3,3), dtype=np.float32)
+    #pflt = (np.asarray(poles[polematch[whGood], :], dtype=np.float32))
+    #bndnorm = (np.asarray(bandnorms[whGood, :], dtype=np.float32))
+    pflt = np.asarray(poles, dtype=np.float64)
+    bndnorm = np.asarray(bandnorms, dtype=np.float64)
+    npoles = pflt.shape[0]
+    wn = (np.asarray(weights, dtype=np.float64)).reshape(npoles, 1)
+    #wn = np.ones((nGood,1), dtype=np.float32)/np.float32(nGood)  #(weights[whGood]).reshape(nGood,1)
+    wn /= np.sum(wn)
+
+    I = np.zeros((3,3), dtype=np.float64)
     I[0,0] = 1.0 ; I[1,1] = 1.0 ; I[2,2] = 1.0
-    q = np.zeros((4), dtype=np.float32)
+    q = np.zeros((4), dtype=np.float64)
 
     B = (wn * bndnorm).T @ pflt
     S = B + B.T
-    z = np.asarray(np.sum(wn * np.cross(bndnorm, pflt), axis = 0), dtype=np.float32)
+    z = np.asarray(np.sum(wn * np.cross(bndnorm, pflt), axis = 0), dtype=np.float64)
     S2 = S @ S
     det = np.linalg.det(S)
     k = (S[1,1]*S[2,2] - S[1,2]*S[2,1]) + (S[0,0]*S[2,2] - S[0,2]*S[2,0]) + (S[0,0]*S[1,1] - S[1,0]*S[0,1])
@@ -688,15 +703,21 @@ class BandVote:
     a = sig2 -k
 
     lam = 1.0
-    for i in range(3):
+    tol = 1.0e-6
+    iter = 0
+    dlam = 1e6
+    #for i in range(10):
+    while (dlam > tol) and (iter < 10):
+      lam0 = lam
       lam = lam - (lam**4 - (a + b) * lam**2 - c * lam + (a * b + c * sig - d))/ (4 * lam**3 - 2 * (a + b) * lam - c)
-
+      dlam = np.fabs(lam0-lam)
+      iter += 1
 
     beta = lam - sig
     alpha = lam ** 2 - sig2 + k
     gamma = (lam + sig) * alpha - det
-    X = np.asarray( (alpha * I + beta * S + S2), dtype=np.float32)  @ z
-    qn = np.float32(0.0)
+    X = np.asarray( (alpha * I + beta * S + S2), dtype=np.float64)  @ z
+    qn = np.float64(0.0)
     qn += gamma ** 2 + X[0] **2 + X[1] **2 + X[2] **2
     qn = np.sqrt(qn)
     q[0] = gamma

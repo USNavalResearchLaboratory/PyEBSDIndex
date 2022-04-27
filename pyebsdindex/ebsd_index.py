@@ -571,7 +571,7 @@ class EBSDIndexer:
                 self.bandDetectPlan.band_detect_setup(patDim=patDim)
 
         self.dataTemplate = np.dtype([
-            ('quat', np.float32, 4),
+            ('quat', np.float64, 4),
             ('iq', np.float32),
             ('pq', np.float32),
             ('cm', np.float32),
@@ -703,7 +703,7 @@ class EBSDIndexer:
                 for j in range(len(self.phaseLib)):
                   (
                     avequat, fit, cm, bandmatch, nMatch, matchAttempts, totvotes
-                  ) = self.phaseLib[j].tripvote(bandNorm1, goNumba=True, verbose=verbose)
+                  ) = self.phaseLib[j].tripvote(bandNorm1, band_intensity = bDat1['avemax'], goNumba=True, verbose=verbose)
                   # avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].pairVoteOrientation(bandNorm1,goNumba=True)
                   if nMatch >= 3:
                       q[j, i, :] = avequat

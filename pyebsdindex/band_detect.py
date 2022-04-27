@@ -292,9 +292,10 @@ class BandDetect:
       mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
       stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
 
-      #im2show -= mean
-      #im2show /= stdv
-      #im2show += 7
+      im2show -= mean
+      im2show /= stdv
+      im2show = im2show.clip(-4, None)
+      im2show += 6
       im2show[0:rhoMaskTrim,:] = 0
       im2show[-rhoMaskTrim:,:] = 0
 
@@ -526,10 +527,12 @@ class BandDetect:
                                dtype=np.float32)  # location of the max based on the nearest neighbor interpolation
     bandData_width = np.zeros((nP,nB),dtype=np.float32) # a metric of the band width
 
-    nnc = np.array([-2,-1,0,1,2,-2,-1,0,1,2,-2,-1,0,1,2],dtype=np.float32)
-    nnr = np.array([-1,-1,-1,-1,-1,0,0,0,0,0,1,1,1,1,1],dtype=np.float32)
-    nnN = numba.float32(15)
-
+    #nnc = np.array([-2,-1,0,1,2,-2,-1,0,1,2,-2,-1,0,1,2],dtype=np.float32)
+    #nnr = np.array([-1,-1,-1,-1,-1,0,0,0,0,0,1,1,1,1,1],dtype=np.float32)
+    #nnN = numba.float32(15)
+    nnc = np.array([-1,0,1,-1,0,1,-1,0,1],dtype=np.float32)
+    nnr = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1], dtype=np.float32)
+    nnN = numba.float32(9)
     for q in range(nPats):
       # rdnConv_q = np.copy(rdnConv[:,:,q])
       # rdnPad_q = np.copy(rdnPad[:,:,q])
@@ -546,13 +549,32 @@ class BandDetect:
         bandData_maxloc[q,i,:] = np.array([r,c])
         bandData_max[q,i] = rdnPad[r,c,q]
         bandData_width[q, i] = 1.0 / (bandData_max[q,i] - 0.5* (rdnPad[r+1, c, q] + rdnPad[r-1, c, q]) + 1.0e-12)
-        # nn = rdnPad_q[r - 1:r + 2,c - 2:c + 3].ravel()
-        nn = rdnConv[r - 1:r + 2,c - 2:c + 3,q].ravel()
+
+        #center of mass peak localization
+        #nn = rdnConv[r - 1:r + 2,c - 2:c + 3,q].ravel()
+        #sumnn = (np.sum(nn) + 1.e-12)
+        #nn /= sumnn
+        #bandData_avemax[q,i] = sumnn / nnN
+        #rnn = np.sum(nn * (np.float32(r) + nnr))
+        #cnn = np.sum(nn * (np.float32(c) + nnc))
+
+        # taylor expansion quadratic
+        nn = rdnConv[r - 1:r + 2,c - 1:c + 2,q].copy()
         sumnn = (np.sum(nn) + 1.e-12)
         nn /= sumnn
         bandData_avemax[q,i] = sumnn / nnN
-        rnn = np.sum(nn * (np.float32(r) + nnr))
-        cnn = np.sum(nn * (np.float32(c) + nnc))
+        # rnn = np.sum(nn * (np.float32(r) + nnr))
+        # cnn = np.sum(nn * (np.float32(c) + nnc))
+        dx  = 0.5*(nn[1,2] - nn[1,0])
+        dy  = 0.5*(nn[2,1] - nn[0,1])
+        dxx = nn[1,2] + nn[1,0] - 2 * nn[1,1]
+        dyy = nn[2, 1] + nn[0, 2] - 2 * nn[1, 1]
+        dxy = 0.25*(nn[2,2] - nn [0,2] - nn[2,0] + nn[0,0])
+        #det = 1.0 / (dxx * dyy - dxy * dxy)
+        det = (dxx * dyy - dxy * dxy)
+        det = det if np.fabs(det) > 1e-12 else 1.0e-12
+        rnn = r - (dxx * dy - dxy * dx) * det
+        cnn = c - (dyy * dx - dxy * dy) * det
         bandData_aveloc[q,i,:] = np.array([rnn,cnn])
         bandData_valid[q,i] = 1
     return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc, bandData_valid, bandData_width

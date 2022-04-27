@@ -162,9 +162,10 @@ class BandDetect(band_detect.BandDetect):
         mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
         stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
 
-        #im2show -= mean
-        #im2show /= stdv
-        #im2show += 7
+        im2show -= mean
+        im2show /= stdv
+        im2show = im2show.clip(-4, None)
+        im2show += 6
         im2show[0:rhoMaskTrim,:] = 0
         im2show[-rhoMaskTrim:,:] = 0
 

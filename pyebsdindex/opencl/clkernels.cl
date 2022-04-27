@@ -357,8 +357,9 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
   const unsigned long int nImChunk = get_global_size(0);
   uchar imVal1;
   float imVal2, imValyp1, imValym1; 
+  float dx, dy, dxx, dyy, dxy, det, w, ix, iy; 
   const long lnmax = (long) nmax; 
-  long int indy, indxy,i, j,k;
+  long int indy, indxy,i, j; //,k;
   //__global long int maxloc1d[32];// = {0};
   //__global float maxval1d[32];// = {-1e12f};
   long int x,y;
@@ -405,25 +406,97 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       //maxloc[(z*lnmax + i)+1] = (float) y;
       avetempxy = (float2) (0.0);
       avetempweight = 1.0e-12;
-      // really basic 9-neighbor peak interpolation
-      for (k=-1; k<=1;++k){
-        indy = (y+k)*imszx;
-        for (j=-1; j<=1;++j){
-          indxy = indy+(x+j);
-          imVal2 = maxvalin[(indxy)*nImChunk+z];
-          avetempxy += ((float2) (y+k, x+j))*imVal2;
-          //avetempx += (x+j)*imVal2;
-          avetempweight += imVal2;
-        }
-      }
-      avetempxy /= avetempweight;
-      //avetempy /= avetempweight;
-      //aveloc[z*nmax + i] = (float2) (avetempx,avetempy);
-      aveloc[z*lnmax + i] = avetempxy;
+      // // really basic 9-neighbor peak interpolation
+      // for (k=-1; k<=1;++k){
+      //   indy = (y+k)*imszx;
+      //   for (j=-1; j<=1;++j){
+      //     indxy = indy+(x+j);
+      //     imVal2 = maxvalin[(indxy)*nImChunk+z];
+      //     avetempxy += ((float2) (y+k, x+j))*imVal2;
+      //     //avetempx += (x+j)*imVal2;
+      //     avetempweight += imVal2;
+      //   }
+      // }
+      // avetempxy /= avetempweight;
+      // aveloc[z*lnmax + i] = avetempxy;
+      // aveval[z*lnmax + i] = avetempweight/9.0;
+      // // band width metric
+      // imValyp1 = maxvalin[((y+1)*imszx+x)*nImChunk+z];
+      // imValym1 = maxvalin[((y-1)*imszx+x)*nImChunk+z];
+      // width[z*lnmax + i] = 1.0 / (maxval[z*lnmax+i] - 0.5 * (imValyp1 + imValym1) + 1e-12) ;
+
+      // More advanced Taylor series approximation 
+      dx = 0.0; dy = 0.0; dxx = 0.0; dyy = 0.0; dxy = 0.0; 
+      indxy = ((y-1)*imszx + (x-1))*nImChunk+z; 
+      imVal2 = maxvalin[indxy]; 
+      avetempweight += imVal2;
+      dxy += imVal2; 
+
+      indxy = ((y-1)*imszx + (x))*nImChunk+z; 
+      imVal2 = maxvalin[indxy]; 
+      avetempweight += imVal2;
+      dy  -= imVal2;
+      dyy += imVal2;
+      imValym1 = imVal2; 
+
+
+      indxy = ((y-1)*imszx + (x+1))*nImChunk+z; 
+      imVal2 = maxvalin[indxy]; 
+      avetempweight += imVal2;
+      dxy -= imVal2;
+
+      indxy = ((y)*imszx + (x-1))*nImChunk+z; 
+      imVal2 = maxvalin[indxy]; 
+      avetempweight += imVal2;
+      dx -= imVal2; 
+      dxx += imVal2; 
+
+      indxy = ((y)*imszx + (x))*nImChunk+z; 
+      imVal2 = maxvalin[indxy]; 
+      avetempweight += imVal2;
+      dxx -= 2.0 * imVal2;
+      dyy -= 2.0 * imVal2;
+      w = imVal2;
+
+      indxy = ((y)*imszx + (x+1))*nImChunk+z; 
+      imVal2 = maxvalin[indxy]; 
+      avetempweight += imVal2;
+      dx  +=  imVal2;
+      dxx +=  imVal2;
+      
+      indxy = ((y+1)*imszx + (x-1))*nImChunk+z; 
+      imVal2 = maxvalin[indxy]; 
+      avetempweight += imVal2;
+      dxy -=  imVal2;
+      
+      indxy = ((y+1)*imszx + (x))*nImChunk+z; 
+      imVal2 = maxvalin[indxy]; 
+      avetempweight += imVal2;
+      dy  +=  imVal2;
+      dyy += imVal2; 
+      imValyp1 = imVal2;
+
+      indxy = ((y+1)*imszx + (x+1))*nImChunk+z; 
+      imVal2 = maxvalin[indxy]; 
+      avetempweight += imVal2;
+      dxy  +=  imVal2;
+
+      dxy *= 0.25;
+      dx  *= 0.5;
+      dy  *= 0.5;
+
+      det = (dxx*dyy - dxy*dxy);
+      det = (fabs(det) > 1.0e-12) ? det : 1.0e-12; 
+      det = 1.0 / det; 
+
+      ix = (float) x - (dyy * dx - dxy * dy) * det; 
+      iy = (float) y - (dxx * dy - dxy * dx) * det; 
+
+      aveloc[z*lnmax + i] = (float2) (iy, ix); 
       aveval[z*lnmax + i] = avetempweight/9.0;
-      imValyp1 = maxvalin[((y+1)*imszx+x)*nImChunk+z];
-      imValym1 = maxvalin[((y-1)*imszx+x)*nImChunk+z];
-      width[z*lnmax + i] = 1.0 / (maxval[z*lnmax+i] - 0.5 * (imValyp1 + imValym1) + 1e-12) ;
+      // band width metric
+      width[z*lnmax + i] = 1.0 / (w - 0.5 * (imValyp1 + imValym1) + 1e-12) ;
+
     }
     else{
       break; // no more detected peaks
