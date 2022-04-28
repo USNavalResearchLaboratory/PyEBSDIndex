@@ -387,7 +387,7 @@ class BandVote:
     #fit = np.float32(360.0)
     #whGood = np.zeros(nBnds, dtype=np.int64) - 1
     nGood = np.int64(-1)
-
+    ij = (-1,-1)
     for ii in range(nBnds-1):
       for jj in range(ii+1,nBnds):
 
@@ -403,12 +403,14 @@ class BandVote:
         ang01 = np.dot(v0,v1)
         if ang01 > np.float32(1.0):
           ang01 = np.float32(1.0-eps)
-        if ang01 < np.float32(-11.0):
+        if ang01 < np.float32(-1.0):
           ang01 = np.float32(-1.0+eps)
 
-        ang01 = np.arccos(ang01) * RADEG
-        if ang01 < angTol:  # the two poles are parallel, send in another two poles if available.
+        paralleltest = np.arccos(np.fabs(ang01)) * RADEG
+        if paralleltest < angTol:  # the two poles are parallel, send in another two poles if available.
           continue
+
+        ang01 = np.arccos(ang01) * RADEG
 
         wh01 = np.nonzero(np.abs(angTable[famIndx[f0],famIndx[f1]:np.int64(famIndx[f1] + nFam[f1])] - ang01) < angTol)[0]
 
@@ -500,6 +502,7 @@ class BandVote:
           whGood_out = whGood
           polematch_out = polematch
           Rout = R
+          ij  = (bnd1,bnd2)
           break
         else:
           if nMatch < nGood:
@@ -508,6 +511,7 @@ class BandVote:
             whGood_out = whGood
             polematch_out = polematch
             Rout = R
+            ij = (bnd1, bnd2)
           elif nMatch == nGood:
             if fitout > fit:
               fitout = np.float32(fit)
@@ -515,10 +519,11 @@ class BandVote:
               whGood_out = whGood
               polematch_out = polematch
               Rout = R
+              ij = (bnd1, bnd2)
       if nMatch >= (n_band_early):
         break
     #quatout = rotlib.om2quL(Rout)
-    return fitout, polematch_out,nMatch, whGood_out, (ii,jj), Rout
+    return fitout, polematch_out,nMatch, whGood_out, ij, Rout
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
