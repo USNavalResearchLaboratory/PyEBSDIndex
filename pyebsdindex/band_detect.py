@@ -75,7 +75,8 @@ class BandDetect:
 
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
-                    ('pqmax', np.float32), ('width', np.float32), ('valid', np.int8)])
+                    ('pqmax', np.float32), ('width', np.float32), ('theta', np.float32), ('rho', np.float32),
+                    ('valid', np.int8)])
 
 
     if (patterns is None) and (patDim is None):
@@ -117,7 +118,6 @@ class BandDetect:
 
     if nRho is not None:
       self.nRho = nRho
-      self.dRho = 180. / self.nRho
       recalc_radon = True
       recalc_masks = True
 
@@ -125,6 +125,7 @@ class BandDetect:
       recalc_radon = True
 
     if recalc_radon == True:
+      #self.rhoMax = 0.5 * np.float32(np.sqrt(np.float32(self.patDim[0])**2  + np.float32(self.patDim[1])**2))
       self.rhoMax = 0.5 * np.float32(self.patDim.min())
       self.dRho = self.rhoMax/np.float32(self.nRho)
       self.radonPlan = radon_fast.Radon(imageDim=self.patDim, nTheta=self.nTheta, nRho=self.nRho, rhoMax=self.rhoMax)
@@ -298,18 +299,24 @@ class BandDetect:
       im2show += 6
       im2show[0:rhoMaskTrim,:] = 0
       im2show[-rhoMaskTrim:,:] = 0
-
-      plt.imshow(im2show, origin='lower', cmap='gray')
+      im2show = np.fliplr(im2show)
+      plt.imshow(im2show, cmap='gray', extent=[self.radonPlan.theta.min(), self.radonPlan.theta.max(),
+                                               self.radonPlan.rho.min(), self.radonPlan.rho.max()],
+                 interpolation='none', zorder=1, aspect='auto')
       width = bandData['width'][-1, :]
       width /= width.min()
       width *= 2
-      plt.scatter(y=bandData['aveloc'][-1, :, 0], x=bandData['aveloc'][-1, :, 1], c='r', s=width)
+      xplt = np.squeeze(
+        180.0 - np.interp(bandData['aveloc'][-1, :, 1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
+      yplt = np.squeeze(
+        -1.0 * np.interp(bandData['aveloc'][-1, :, 0], np.arange(self.radonPlan.nRho), self.radonPlan.rho))
+
+      plt.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
 
       for pt in range(self.nBands):
-        plt.annotate(str(pt + 1),
-                     (np.squeeze(bandData['aveloc'][-1, pt, 1]), np.squeeze(bandData['aveloc'][-1, pt, 0])))
-      plt.xlim(0,self.nTheta)
-      plt.ylim(0,self.nRho)
+        plt.annotate(str(pt + 1), np.squeeze([xplt[pt], yplt[pt]]), color='yellow')
+      plt.xlim(0,180)
+      plt.ylim(-self.rhoMax, self.rhoMax)
       plt.show()
 
 
@@ -370,6 +377,8 @@ class BandDetect:
     #rho = -1.0 * self.radonPlan.rho[np.array(bandData['aveloc'][:,:,0],dtype=np.int64)]
     theta =  np.pi - np.interp(bandData['aveloc'][:,:,1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta) / RADEG
     rho = -1.0 * np.interp(bandData['aveloc'][:,:,0], np.arange(self.radonPlan.nRho), self.radonPlan.rho)
+    bandData['theta'][:] = theta
+    bandData['rho'][:] = rho
 
     # from this point on, we will assume the image origin and t-vector (aka pattern center) is described
     # at the bottom left of the pattern

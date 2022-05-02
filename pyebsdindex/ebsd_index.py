@@ -103,13 +103,13 @@ def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
   if backgroundSub == True:
     indexer.bandDetectPlan.collect_background(fileobj=indexer.fID,patsIn=pats,nsample=1000)
 
-  dataout,indxstart,indxend = indexer.index_pats(patsin=pats,patstart=patstart,npats=npats, \
+  dataout,banddata, indxstart,indxend = indexer.index_pats(patsin=pats,patstart=patstart,npats=npats, \
                                                  clparams=clparams,verbose=verbose, chunksize = chunksize)
 
   if return_indexer_obj == False:
-    return dataout
+    return dataout, banddata
   else:
-    return dataout,indexer
+    return dataout,banddata, indexer
 
 def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
                            vendor=None,PC=None,sampleTilt=70.0,camElev=5.3, \
@@ -159,7 +159,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
   mode = 'memorymode'
   if pats is None:
     mode = 'filemode'
-    temp,indexer = index_pats(patstart=0,npats=1,return_indexer_obj=True,ebsd_indexer_obj=indexer)
+    temp,temp2, indexer = index_pats(patstart=0,npats=1,return_indexer_obj=True,ebsd_indexer_obj=indexer)
 
   if mode == 'filemode':
     npatsTotal = indexer.fID.nPatterns
@@ -170,7 +170,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
       pats = pats.reshape([1,pshape[0],pshape[1]])
     else:
       npatsTotal = pshape[0]
-    temp,indexer = index_pats(pats[0,:,:],patstart=0,npats=1,return_indexer_obj=True,ebsd_indexer_obj=indexer)
+    temp,temp2, indexer = index_pats(pats[0,:,:],patstart=0,npats=1,return_indexer_obj=True,ebsd_indexer_obj=indexer)
 
   if patstart < 0:
     patstart = npatsTotal - patstart
@@ -217,6 +217,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 
   nPhases = len(indexer.phaseLib)
   dataout = np.zeros((nPhases + 1,npats),dtype=indexer.dataTemplate)
+  banddataout = np.zeros((npats, indexer.bandDetectPlan.nBands),dtype=indexer.bandDetectPlan.dataType)
   ndone = 0
   nsubmit = 0
   tic0 = timer()
@@ -250,7 +251,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
       # print("waittime: ",timer() - toc)
       jid = jobs.index(wrker[0])
       try:
-        wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
+        wrkdataout,wrkbanddata, indxstr,indxend,rate = ray.get(wrker[0])
       except:
         # print('a death has occured')
         indxstr = jobs_indx[jid][0]
@@ -260,6 +261,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 
         ticp = timers[jid]
         dataout[:,indxstr - patstart:indxend - patstart] = wrkdataout
+        banddataout[indxstr - patstart:indxend - patstart, :] = wrkbanddata
         npatsdone += rate[1]
         ndone += 1
 
@@ -336,7 +338,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
       jid = jobs.index(wrker[0])
       # print("waittime: ",timer() - toc)
       try:
-        wrkdataout,indxstr,indxend,rate = ray.get(wrker[0])
+        wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
       except:
         indxstr = jobs_indx[jid][0]
         indxend = jobs_indx[jid][1]
@@ -344,6 +346,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
       if rate[0] >= 0:
         ticp = timers[jid]
         dataout[:,indxstr - patstart:indxend - patstart] = wrkdataout
+        banddataout[indxstr - patstart:indxend - patstart, :] = wrkbanddata
         npatsdone += rate[1]
         ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
         chunkave += ratetemp
@@ -415,9 +418,9 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 
   ray.shutdown()
   if return_indexer_obj:
-    return dataout,indexer
+    return dataout,banddataout,indexer
   else:
-    return dataout
+    return dataout,banddataout
 
 @ray.remote(num_cpus=1,num_gpus=1)
 class IndexerRay():
@@ -455,14 +458,14 @@ class IndexerRay():
     try:
       #print(type(self.openCLParams.ctx))
       tic = timer()
-      dataout,indxstart,npatsout = indexer.index_pats(patsin=pats,patstart=patstart,npats=npats,
+      dataout,banddata, indxstart,npatsout = indexer.index_pats(patsin=pats,patstart=patstart,npats=npats,
                                                       clparams=self.openCLParams, chunksize = -1)
       rate = np.array([timer() - tic,npatsout])
-      return dataout,indxstart,indxstart + npatsout,rate
+      return dataout,banddata, indxstart,indxstart + npatsout,rate
     except:
       indxstart = patstart
       indxend = patstart + npats
-      return None,indxstart,indxend,[-1,-1]
+      return None,None, indxstart,indxend,[-1,-1]
 
 
 class EBSDIndexer:
@@ -734,7 +737,7 @@ class EBSDIndexer:
 
         if verbose > 0:
             print('Band Vote Time: ', timer() - tic)
-        return indxData, patstart, npats
+        return indxData, bandData, patstart, npats
 
     def refframe2detector(self):
         ven = str.upper(self.vendor)

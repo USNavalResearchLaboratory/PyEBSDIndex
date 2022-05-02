@@ -687,6 +687,7 @@ class BandVote:
     bndnorm = np.asarray(bandnorms, dtype=np.float64)
     npoles = pflt.shape[0]
     wn = (np.asarray(weights, dtype=np.float64)).reshape(npoles, 1)
+
     #wn = np.ones((nGood,1), dtype=np.float32)/np.float32(nGood)  #(weights[whGood]).reshape(nGood,1)
     wn /= np.sum(wn)
 
@@ -731,7 +732,9 @@ class BandVote:
     if (np.sign(gamma) < 0):
       q *= -1.0
 
-    return q, lam
+    #polesrot = rotlib.quat_vectorL1N(q, pflt, npoles, np.float64, p=1)
+    #pdot = np.sum(polesrot*bndnorm, axis = 1, dtype=np.float64)
+    return q, lam#, pdot
 
   def pairVoteOrientation(self,bandnormsIN,goNumba=True):
     tic0 = timer()
