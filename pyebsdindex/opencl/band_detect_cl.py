@@ -676,7 +676,7 @@ class BandDetect(band_detect.BandDetect):
 
     return (maxval,aveval,maxlocxy,aveloc,valid, width)
 
-def getopenclparam():
-  clparam = openclparam.OpenClParam()
+def getopenclparam(**kwargs):
+  clparam = openclparam.OpenClParam(**kwargs)
 
   return clparam

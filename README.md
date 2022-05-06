@@ -62,3 +62,34 @@ or
 ```bash
 conda install jupyterlab
 ```
+
+## Additional installation notes
+### MacOS
+The latest versions of pyopencl installed from conda-forge do not automatically include linking
+to the MacOS OpenCL framework. If using a conda environment, it may be necessary to install: 
+```bash
+conda install -c conda-forge ocl_icd_wrapper_apple
+```
+
+Apple in recent installs has switched to zsh as the default shell.  It should be noted that zsh sees \[...\]  as a pattern.  Thus commands like: 
+```bash
+pip install pyebsdindex[gpu]
+```
+Will return an error.  "zsh: no matches found: [gpu]".  The solution is to put the comand within '...' such as:
+```bash
+pip install 'pyebsdindex[gpu]'
+```
+
+
+### MacOS with Apple Silicon
+The Ray package used for distributed multi-processing only experimentally supports Apple's ARM64 architecture. More info is available [here](https://docs.ray.io/en/latest/ray-overview/installation.html).  In brief, to run on Apple ARM64, PyEBSDIndex should be installed in a conda environment.  Assuming that Ray has already been installed (perhaps as a dependency) one has activated the conda environment in the terminal, run the commands below (the first two commands are to guarantee that grpcio is fully removed, they may send a message that the packages are not installed.):
+```bash
+pip uninstall ray
+pip uninstall grpcio
+conda install -c conda-forge grpcio
+pip install 'ray[default]'
+```
+
+
+
+

@@ -52,7 +52,8 @@ class BandDetect:
     tSigma=None,
     rSigma=None,
     rhoMaskFrac=0.1,
-    nBands=9
+    nBands=9,
+    **kwargs
 ):
     self.patDim = None
     self.nTheta = nTheta
@@ -588,7 +589,7 @@ class BandDetect:
         bandData_valid[q,i] = 1
     return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc, bandData_valid, bandData_width
 
-def getopenclparam(): # dummy function to maintain compatability with openCL version
+def getopenclparam(**kwargs): # dummy function to maintain compatability with openCL version
   return None
 
 

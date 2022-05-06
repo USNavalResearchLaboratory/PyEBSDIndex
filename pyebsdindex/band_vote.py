@@ -148,7 +148,7 @@ class BandVote:
     n_band_early = np.int64(self.n_band_early_exit)
 
     # this will check the vote, and return the exact band matching to specific poles of the best fitting solution.
-    fit, polematch, nMatch, whGood, ij, R = \
+    fit, polematch, nMatch, whGood, ij, R, fitb = \
       self.band_index_nb(poles, bandRank_arg, bandFam,  famIndx, nFam, angTable, bandnorms, angTol, n_band_early)
 
     if verbose > 2:
@@ -159,7 +159,14 @@ class BandVote:
     if nMatch >=2:
       if self.high_fidelity == True:
 
-        avequat, fit = self.refine_orientation_quest(bandnorms, whGood, polematch, weights=band_intensity)
+        srt = np.argsort(fitb[whGood])
+        whgood6 = whGood[srt[0:np.min([8, whGood.shape[0]])]]
+
+        weights6 = band_intensity[whgood6]
+        pflt6 = (np.asarray(poles[polematch[whgood6], :], dtype=np.float64))
+        bndnorm6 = (np.asarray(bandnorms[whgood6, :], dtype=np.float64))
+
+        avequat, fit = self.refine_orientation_quest(bndnorm6, pflt6 , weights=weights6)
         fit = np.arccos(np.clip(fit, -1.0, 1.0))*RADEG
         #avequat, fit = self.refine_orientation(bandnorms,whGood,polematch)
       else:
@@ -272,18 +279,17 @@ class BandVote:
     #print('fitting: ',timer() - tic)
     return avequat, fit
 
-  def refine_orientation_quest(self,bandnorms, whGood, polematch, weights = None):
+  def refine_orientation_quest(self,bandnorms, polematch, weights = None):
     tic = timer()
-    poles = self.tripLib.completelib['polesCart']
-    whGood = np.asarray(whGood,dtype=np.int64)
+
 
     if weights is None:
       weights = np.ones((bandnorms.shape[0]), dtype=np.float64)
-    weightsn = weights[whGood]
+    weightsn = np.asarray(weights, dtype=np.float64)
     weightsn /= np.sum(weightsn)
     #print(weightsn)
-    pflt = (np.asarray(poles[polematch[whGood], :], dtype=np.float64))
-    bndnorm = (np.asarray(bandnorms[whGood, :], dtype=np.float64))
+    pflt = np.asarray(polematch, dtype=np.float64)
+    bndnorm = np.asarray(bandnorms, dtype=np.float64)
 
     avequat, fit = self.orientation_quest(pflt, bndnorm, weightsn)
 
@@ -383,6 +389,7 @@ class BandVote:
 
     fit = np.float32(360.0)
     fitout = np.float32(360.0)
+    fitbout = np.zeros((nBnds))
     R = np.zeros((1, 3, 3), dtype=np.float32)
     #fit = np.float32(360.0)
     #whGood = np.zeros(nBnds, dtype=np.int64) - 1
@@ -490,14 +497,17 @@ class BandVote:
           #polematch[:] = -1
           #nGood = np.int64(-1)
         else:
+          fitb = angFit
+          #fit = np.mean(fitb[whGood])
           fit = np.float32(0.0)
           for q in range(nGood):
-            fit += np.float32(angFit[whGood[q]])
+            fit += np.float32(fitb[whGood[q]])
           fit /= np.float32(nGood)
 
 
         if nGood >= (n_band_early):
           fitout = fit
+          fitbout = fitb
           nMatch = nGood
           whGood_out = whGood
           polematch_out = polematch
@@ -507,6 +517,7 @@ class BandVote:
         else:
           if nMatch < nGood:
             fitout = np.float32(fit)
+            fitbout = fitb
             nMatch = nGood
             whGood_out = whGood
             polematch_out = polematch
@@ -515,6 +526,7 @@ class BandVote:
           elif nMatch == nGood:
             if fitout > fit:
               fitout = np.float32(fit)
+              fitbout = fitb
               nMatch = nGood
               whGood_out = whGood
               polematch_out = polematch
@@ -523,7 +535,7 @@ class BandVote:
       if nMatch >= (n_band_early):
         break
     #quatout = rotlib.om2quL(Rout)
-    return fitout, polematch_out,nMatch, whGood_out, ij, Rout
+    return fitout, polematch_out,nMatch, whGood_out, ij, Rout, fitbout
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)

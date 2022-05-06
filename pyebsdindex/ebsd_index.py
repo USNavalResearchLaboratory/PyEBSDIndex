@@ -61,7 +61,7 @@ def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
                vendor=None,PC=None,sampleTilt=70.0,camElev=5.3, \
                bandDetectPlan=None,nRho=90,nTheta=180,tSigma=None,rSigma=None,rhoMaskFrac=0.1,nBands=9, \
                backgroundSub=False,patstart=0,npats=-1, \
-               return_indexer_obj=False,ebsd_indexer_obj=None,clparams=None,verbose=0, chunksize = 528):
+               return_indexer_obj=False,ebsd_indexer_obj=None,clparams=None,verbose=0, chunksize = 528, gpu_id=None):
 
   pats = None
   if patsIn is None:
@@ -90,7 +90,7 @@ def index_pats(patsIn=None,filename=None,filenameout=None,phaselist=['FCC'], \
                           vendor=vendor,PC=PC,sampleTilt=sampleTilt,camElev=camElev, \
                           bandDetectPlan=bandDetectPlan, \
                           nRho=nRho,nTheta=nTheta,tSigma=tSigma,rSigma=rSigma,rhoMaskFrac=rhoMaskFrac,nBands=nBands,
-                          patDim=pdim)
+                          patDim=pdim, gpu_id=gpu_id)
   else:
     indexer = ebsd_indexer_obj
 
@@ -115,7 +115,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
                            vendor=None,PC=None,sampleTilt=70.0,camElev=5.3, \
                            peakDetectPlan=None,nRho=90,nTheta=180,tSigma=None,rSigma=None,rhoMaskFrac=0.1,nBands=9,
                            patstart=0,npats=-1,chunksize=528,ncpu=-1,
-                           return_indexer_obj=False,ebsd_indexer_obj=None,keep_log=False):
+                           return_indexer_obj=False,ebsd_indexer_obj=None,keep_log=False, gpu_id=None):
   pats = None
   if patsIn is None:
     pdim = None
@@ -144,7 +144,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
                           vendor=vendor,PC=PC,sampleTilt=sampleTilt,camElev=camElev, \
                           bandDetectPlan=peakDetectPlan, \
                           nRho=nRho,nTheta=nTheta,tSigma=tSigma,rSigma=rSigma,rhoMaskFrac=rhoMaskFrac,nBands=nBands,
-                          patDim=pdim)
+                          patDim=pdim, gpu_id=gpu_id)
   else:
     indexer = ebsd_indexer_obj
 
@@ -183,19 +183,25 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
   if ncpu != -1:
     n_cpu_nodes = ncpu
 
+  ngpu = None
+  if gpu_id is not None:
+    ngpu = np.atleast_1d(gpu_id).shape[0]
+
   try:
     clparam = band_detect.getopenclparam()
     if clparam is None:
       ngpu = 0
       ngpupnode = 0
     else:
-      ngpu = len(clparam.gpu)
+      if ngpu is None:
+        ngpu = len(clparam.gpu)
       ngpupnode = ngpu / n_cpu_nodes
   except:
     ngpu = 0
     ngpupnode = 0
 
   ray.shutdown()
+
   print("num cpu/gpu:", n_cpu_nodes, ngpu)
   #ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
   ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu, _node_ip_address="0.0.0.0")
@@ -236,7 +242,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
     chunkave = 0.0
     for i in range(n_cpu_nodes):
       job_pstart_end = p_indx_start_end.pop(0)
-      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(i, clparamfunction))
+      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(i, clparamfunction, gpu_id=gpu_id))
       jobs.append(workers[i].index_chunk_ray.remote(pats=None,indexer=remote_indexer, \
                                                     patstart=job_pstart_end[0],npats=job_pstart_end[2]))
       nsubmit += 1
@@ -303,7 +309,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
         n_cpu_nodes -= 1
         if len(workers) < 1:  # rare case that we have killed all workers...
           job_pstart_end = p_indx_start_end.pop(0)
-          workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(jid))
+          workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(jid,clparamfunction,gpu_id))
           jobs.append(workers[0].index_chunk_ray.remote(pats=None,indexer=remote_indexer, \
                                                         patstart=job_pstart_end[0],npats=job_pstart_end[2]))
           nsubmit += 1
@@ -320,7 +326,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
     chunkave = 0.0
     for i in range(n_cpu_nodes):
       job_pstart_end = p_indx_start_end.pop(0)
-      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(i,clparamfunction))
+      workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(i,clparamfunction, gpu_id))
       jobs.append(workers[i].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:],
                                                     indexer=remote_indexer, \
                                                     patstart=job_pstart_end[0],npats=job_pstart_end[2]))
@@ -386,7 +392,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
         n_cpu_nodes -= 1
         if len(workers) < 1:  # rare case that we have killed all workers...
           job_pstart_end = p_indx_start_end.pop(0)
-          workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(jid))
+          workers.append(IndexerRay.options(num_cpus=1,num_gpus=ngpupnode).remote(jid, clparamfunction, gpu_id))
           jobs.append(workers[0].index_chunk_ray.remote(pats=pats[job_pstart_end[0]:job_pstart_end[1],:,:],
                                                         indexer=remote_indexer, \
                                                         patstart=job_pstart_end[0],npats=job_pstart_end[2]))
@@ -424,7 +430,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 
 @ray.remote(num_cpus=1,num_gpus=1)
 class IndexerRay():
-  def __init__(self,actorid=0, clparammodule=None):
+  def __init__(self,actorid=0, clparammodule=None, gpu_id=None):
     sys.path.append((path.dirname(path.dirname(__file__))))  # do this to help Ray find the program files
     # import openclparam # do this to help Ray find the program files
     # device, context, queue, program, mf
@@ -439,9 +445,8 @@ class IndexerRay():
       try:
         if sys.platform != 'darwin':  # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a
           self.openCLParams = clparammodule()
-          self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
-          self.openCLParams.get_queue()
-          self.useGPU = True
+
+
         else:  # MacOS handles GPU memory conflicts much better when the context is destroyed between each
           # run, and has very low overhead for making the context.
           #pass
@@ -449,8 +454,13 @@ class IndexerRay():
           #self.openCLParams.gpu_id = 0
           #self.openCLParams.gpu_id = 1
           self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
-          self.openCLParams.get_queue()
-          self.useGPU = True
+        if gpu_id is None:
+          gpu_id = np.arange(self.openCLParams.ngpu)
+        gpu_list = np.atleast_1d(gpu_id)
+        ngpu = gpu_list.shape[0]
+        self.openCLParams.gpu_id = gpu_list[self.actorID % ngpu]
+        self.openCLParams.get_queue()
+        self.useGPU = True
       except:
         self.openCLParams = None
 
@@ -485,7 +495,8 @@ class EBSDIndexer:
         rSigma=1.2,
         rhoMaskFrac=0.15,
         nBands=9,
-        patDim=None
+        patDim=None,
+        **kwargs
     ):
         """Create an EBSD indexer.
 
@@ -562,8 +573,8 @@ class EBSDIndexer:
 
         if bandDetectPlan is None:
             self.bandDetectPlan = band_detect.BandDetect(
-              nRho=nRho, nTheta=nTheta, tSigma=tSigma, rSigma=rSigma, rhoMaskFrac=rhoMaskFrac, nBands=nBands
-            )
+              nRho=nRho, nTheta=nTheta, tSigma=tSigma, rSigma=rSigma, rhoMaskFrac=rhoMaskFrac, nBands=nBands,
+              **kwargs)
         else:
             self.bandDetectPlan = bandDetectPlan
 
