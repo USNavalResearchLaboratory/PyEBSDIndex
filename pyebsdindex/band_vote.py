@@ -43,7 +43,7 @@ class BandVote:
   def __init__(self, tripLib, angTol=3.0, high_fidelity=True):
     self.tripLib = tripLib
     self.phase_name = self.tripLib.phaseName
-    self.phase_sym = self.tripLib.symmetry
+    self.phase_sym = self.tripLib.symmetry_pg
     self.lattice_param = self.tripLib.latticeParameter
     self.angTol = angTol
     self.n_band_early_exit = 8

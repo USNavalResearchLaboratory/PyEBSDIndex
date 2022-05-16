@@ -689,7 +689,7 @@ class EBSDIndexer:
             PC_0 = self.PC
         else:
             PC_0 = PC
-        bandNorm = self.bandDetectPlan.radon2pole(bandData, PC=PC_0, vendor=self.vendor)
+        bandNorm = self.bandDetectPlan.radonPlan.radon2pole(bandData, PC=PC_0, vendor=self.vendor)
         # print('Find Band: ', timer() - tic)
 
         # return bandNorm,patStart,patEnd

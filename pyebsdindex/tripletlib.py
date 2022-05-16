@@ -38,7 +38,8 @@ class triplib():
     self.tripAngles = None
     self.tripID = None
     self.completelib = None
-    self.symmetry = None
+    self.symmetry_pg = None
+    self.symmetry_sg = None
     self.qsymops = None
     self.phaseName = None
     self.latticeParameter = np.array([1.0, 1.0, 1.0, 90.0, 90.0, 90.0])
@@ -51,9 +52,9 @@ class triplib():
     else:
       self.phaseName = phaseName
 
-    if libType.upper() == 'FCC':
+    if str(libType).upper() == 'FCC':
       self.build_fcc()
-      self.symmetry = 43
+      self.symmetry_pg = "Cubic m3m"
       self.qsymops = crystal_sym.cubicsym_q()
       if phaseName is None:
         self.phaseName = 'FCC'
@@ -63,7 +64,7 @@ class triplib():
       else:
         self.latticeParameter = laticeParameter
 
-    if libType.upper() == 'BCC':
+    if str(libType).upper() == 'BCC':
       self.build_bcc()
 
       if phaseName is None:
@@ -76,7 +77,7 @@ class triplib():
   def build_fcc(self):
     if self.phaseName is None:
       self.phaseName = 'FCC'
-    self.symmetry = 43
+    self.symmetry_pg = "Cubic m3m"
     self.qsymops = crystal_sym.cubicsym_q()
     poles = np.array([[0,0,2], [1,1,1], [0,2,2], [1,1,3]])
     self.build_trip_lib(poles,crystal_sym.cubicsym_q())
@@ -84,7 +85,7 @@ class triplib():
   def build_bcc(self):
     if self.phaseName is None:
       self.phaseName = 'BCC'
-    self.symmetry = 43
+    self.symmetry_pg = "Cubic m3m"
     self.qsymops = crystal_sym.cubicsym_q()
     poles = np.array([[0,1,1],[0,0,2],[1,1,2],[0,1,3]])
     self.build_trip_lib(poles,crystal_sym.cubicsym_q())
@@ -108,7 +109,7 @@ class triplib():
 
       uniqHKL2 = self.hkl_unique(family,reduceInversion=True)
       nFamily[i] = np.int32(uniqHKL2.size/3)
-      sign = np.squeeze(self.calc_pole_dot(uniqHKL2,polesFlt[i,:]))
+      sign = np.squeeze(self.calc_pole_dot_int(uniqHKL2, polesFlt[i, :]))
       whmx = (np.abs(sign)).argmax()
       sign = np.round(sign[whmx])
       uniqHKL2 *= sign
@@ -124,7 +125,7 @@ class triplib():
     polePairs = []
     for i in range(npoles):
       for j in range(i, npoles):
-        ang = np.squeeze(self.calc_pole_dot(polesFlt[i,:],sympoles[j]))
+        ang = np.squeeze(self.calc_pole_dot_int(polesFlt[i, :], sympoles[j]))
         ang = np.clip(ang, -1.0, 1.0)
         sign = (ang >= 0).astype(np.float32) - (ang < 0).astype(np.float32)
         ang = np.round(np.arccos(sign * ang)*RADEG*100).astype(np.int32)
@@ -184,7 +185,7 @@ class triplib():
     libANG, libID = self.sortlib_id(libANG,libID,findDups = True)
     #print(libANG)
     #print(libANG.shape)
-    angTable = self.calc_pole_dot(sympolesComplete,sympolesComplete)
+    angTable = self.calc_pole_dot_int(sympolesComplete, sympolesComplete)
     angTable = np.arccos(angTable)*RADEG
     famindx0 = ((np.concatenate( ([0],np.cumsum(nFamComplete)) ))[0:-1]).astype(dtype=np.int64)
     cartPoles = self.xstalplane2cart(sympolesComplete)
@@ -228,14 +229,14 @@ class triplib():
     if reduceInversion == True:
       family = polesout
       nf = family.shape[0]
-      test = self.calc_pole_dot(family,family,rMetricTensor = rMT)
+      test = self.calc_pole_dot_int(family, family, rMetricTensor = rMT)
 
       testSum = np.sum( (test < -0.99999).astype(np.int32)*np.arange(nf).reshape(1,nf), axis = 1)
       whpos = np.nonzero( np.logical_or(testSum < np.arange(nf), (testSum == 0)))[0]
       polesout = polesout[whpos, :]
     return polesout
 
-  def calc_pole_dot(self,poles1,poles2,rMetricTensor = np.identity(3)):
+  def calc_pole_dot_int(self, poles1, poles2, rMetricTensor = np.identity(3)):
 
     p1 = poles1.reshape(np.int64(poles1.size / 3), 3)
     p2 = poles2.reshape(np.int64(poles2.size / 3), 3)

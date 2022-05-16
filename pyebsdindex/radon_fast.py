@@ -26,7 +26,7 @@ from timeit import default_timer as timer
 from numba import jit, prange
 import numpy as np
 
-RADDEG = 180.0/np.pi
+RADEG = 180.0/np.pi
 DEGRAD = np.pi/180.0
 
 
@@ -217,4 +217,86 @@ class Radon:
           radon[ip,jp,q] = sum/(count + 1.0e-12)
     #return counter
 
-  #
+  def radon2pole(self,bandData,PC=None,vendor='EDAX'):
+    # Following Krieger-Lassen1994 eq 3.1.6 //figure 3.1.1
+    if PC is None:
+      PC = np.array([0.471659,0.675044,0.630139])
+    ven = str.upper(vendor)
+
+    nPats = bandData.shape[0]
+    nBands = bandData.shape[1]
+
+    # This translation from the Radon to theta and rho assumes that the first pixel read
+    # in off the detector is in the bottom left corner. -- No longer the assumption --- see below.
+    # theta = self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1], dtype=np.int)]/RADEG
+    # rho = self.radonPlan.rho[np.array(bandData['aveloc'][:, :, 0], dtype=np.int)]
+
+    # This translation from the Radon to theta and rho assumes that the first pixel read
+    # in off the detector is in the top left corner.
+
+    #theta = np.pi - self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1],dtype=np.int64)] / RADEG
+    #rho = -1.0 * self.radonPlan.rho[np.array(bandData['aveloc'][:,:,0],dtype=np.int64)]
+
+    theta =  np.pi - np.interp(bandData['aveloc'][:,:,1], np.arange(self.nTheta), self.theta) / RADEG
+    rho = -1.0 * np.interp(bandData['aveloc'][:,:,0], np.arange(self.nRho), self.rho)
+    bandData['theta'][:] = theta
+    bandData['rho'][:] = rho
+
+    # from this point on, we will assume the image origin and t-vector (aka pattern center) is described
+    # at the bottom left of the pattern
+    stheta = np.sin(theta)
+    ctheta = np.cos(theta)
+
+    pctemp =  np.asfarray(PC).copy()
+    shapet = pctemp.shape
+    if ven != 'EMSOFT':
+      if len(shapet) < 2:
+        pctemp = np.tile(pctemp, nPats).reshape(nPats,3)
+      else:
+        if shapet[0] != nPats:
+          pctemp = np.tile(pctemp[0,:], nPats).reshape(nPats,3)
+      t = pctemp
+    else: # EMSOFT pc to ebsdindex needs four numbers for PC
+      if len(shapet) < 2:
+        pctemp = np.tile(pctemp, nPats).reshape(nPats,4)
+      else:
+        if shapet[0] != nPats:
+          pctemp = np.tile(pctemp[0,:], nPats).reshape(nPats,4)
+      t = pctemp[:,0:3]
+      t[:,2] /= pctemp[:,3] # normalize by pixel size
+
+
+
+    dimf = np.array(self.imDim, dtype=np.float32)
+    if ven in ['EDAX', 'OXFORD']:
+      t *= np.array([dimf[1], dimf[1], -dimf[1]])
+    if ven == 'EMSOFT':
+      t[:, 0] *= -1.0
+      t += np.array([dimf[1] / 2.0, dimf[0] / 2.0, 0.0])
+      t[:, 2] *= -1.0
+    if ven in ['KIKUCHIPY', 'BRUKER']:
+      t *=  np.array([dimf[1], dimf[0], -dimf[0]])
+      t[:, 1] = dimf[0] - t[:, 1]
+    # describes the translation from the bottom left corner of the pattern image to the point on the detector
+    # perpendicular to where the beam contacts the sample.
+
+
+    t = np.tile(t.reshape(nPats,1, 3), (1, nBands,1))
+
+    r = np.zeros((nPats, nBands, 3), dtype=np.float32)
+    r[:,:,0] = -1*stheta
+    r[:,:,1] = ctheta # now defined as r_v
+
+    p = np.zeros((nPats, nBands, 3), dtype=np.float32)
+    p[:,:,0] = rho*ctheta # get a point within the band -- here it is the point perpendicular to the image center.
+    p[:,:,1] = rho*stheta
+    p[:,:,0] += dimf[1] * 0.5 # now convert this with reference to the image origin.
+    p[:,:,1] += dimf[0] * 0.5 # this is now [O_vP]_v in Eq 3.1.6
+
+    #n2 = p - t.reshape(1,1,3)
+    n2 = p - t
+    n = np.cross(r.reshape(nPats*nBands, 3), n2.reshape(nPats*nBands, 3) )
+    norm = np.linalg.norm(n, axis=1)
+    n /= norm.reshape(nPats*nBands, 1)
+    n = n.reshape(nPats, nBands, 3)
+    return n
