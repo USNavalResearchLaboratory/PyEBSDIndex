@@ -31,7 +31,7 @@ RADEG = 180.0 / np.pi
 
 
 def optfunction(PC_i, indexer, banddat):
-    band_norm = indexer.bandDetectPlan.radonPlan.radon2pole(banddat, PC=PC_i, vendor=indexer.vendor)
+    band_norm = indexer.bandDetectPlan.radon2pole(banddat, PC=PC_i, vendor=indexer.vendor)
     n_points = banddat.shape[0]
     n_averages = 0
     average_fit = 0
