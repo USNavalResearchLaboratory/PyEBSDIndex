@@ -14,7 +14,7 @@ Preparation
 
 Release (and tag)
 -----------------
-- Create a tagged, annotated (meaning with a release text) with the name
+- Create a tagged, annotated (meaning with a release text) release draft with the name
   v0.4.2" and title "PyEBSDIndex 0.4.2". The tag target will be the ``main`` branch.
   Draw inspiration from previous release texts. Publish the release.
 - Monitor the publish GitHub Action to ensure the release is successfully

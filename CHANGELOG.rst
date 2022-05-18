@@ -11,3 +11,7 @@ Unreleased
 Added
 -----
 - PC conventions for Bruker, EDAX, EMsoft, kikuchipy, and Oxford.
+
+Fixed
+-----
+- ray package version 1.12.0 is avoided due to an import error on Windows.
