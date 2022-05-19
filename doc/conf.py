@@ -58,10 +58,10 @@ html_theme = "furo"
 # Create links to references within the documentation to these packages
 intersphinx_mapping = {
     "h5py": ("https://docs.h5py.org/en/stable", None),
-    "matplotlib": ("https://matplotlib.org", None),
+    "matplotlib": ("https://matplotlib.org/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "python": ("https://docs.python.org/3", None),
-    "scipy": ("https://docs.scipy.org/doc/scipy/reference", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy", None),
 }
 
 # -- nbsphinx configuration --------------------------------------------

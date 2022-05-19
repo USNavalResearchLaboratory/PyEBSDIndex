@@ -62,35 +62,32 @@ def optimize(pats, indexer, PC0=None, batch=False):
     Parameters
     ----------
     pats : numpy.ndarray
-      EBSD patterns.
+        EBSD patterns.
     indexer : pyebsdindex.ebsd_index.EBSDIndexer
-      EBSD indexer instance storing all relevant parameters for band
-      detection.
+        EBSD indexer instance storing all relevant parameters for band
+        detection.
     PC0 : list, optional
-      Initial guess of PC. If not given, `indexer.PC` is used.
+        Initial guess of PC. If not given, `indexer.PC` is used.
     batch : bool, optional
-      Default is False which indicates the fit for a set of patterns
-      should be optimized using the cumulative fit for all the patterns,
-      and one PC will be returned.
-      If set to True, then a optimization is run for each individual pattern,
-      and an array of PC values will be returned.
+        Default is False which indicates the fit for a set of patterns
+        should be optimized using the cumulative fit for all the
+        patterns, and one PC will be returned.
+        If set to True, then a optimization is run for each individual
+        pattern, and an array of PC values will be returned.
 
     Returns
     -------
     PCoutRet : numpy.ndarray
-      Optimized PC.
+        Optimized PC.
 
     Notes
     -----
     SciPy's Nelder-Mead minimization function is used with a tolerance
     `fatol` of 0.00001 between each iteration.
+
     """
-
-
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
-
-
 
     if PC0 is None:
         PC0 = indexer.PC
@@ -108,7 +105,6 @@ def optimize(pats, indexer, PC0=None, batch=False):
         PCtemp[2] /= delta[3]
         PC0 = PCtemp
 
-
     if not batch:
         PCopt = opt.minimize(optfunction, PC0, args=(indexer, banddat), method='Nelder-Mead', options={'fatol': 0.00001})
         PCoutRet = PCopt['x']
@@ -125,9 +121,9 @@ def optimize(pats, indexer, PC0=None, batch=False):
         if PCoutRet.ndim == 2:
             newout = np.zeros((npoints, 4))
             PCoutRet[:, 0] -= 0.5
-            PCoutRet[:,0:3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[:, 0:3] *= indexer.bandDetectPlan.patDim[1]
             PCoutRet[:, 1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
-            PCoutRet[:,0] *= -1.0
+            PCoutRet[:, 0] *= -1.0
             PCoutRet[:, 2] *= delta[3]
             newout[:, 0:3] = PCoutRet
             newout[:, 3] = delta[3]
@@ -143,7 +139,6 @@ def optimize(pats, indexer, PC0=None, batch=False):
             newout[3] = delta[3]
             PCoutRet = newout
 
-
     return PCoutRet
 
 
@@ -154,25 +149,26 @@ def optimize_pso(pats, indexer, PC0=None, batch=False):
     Parameters
     ----------
     pats : numpy.ndarray
-      EBSD patterns.
+        EBSD patterns.
     indexer : pyebsdindex.ebsd_index.EBSDIndexer
-      EBSD indexer instance storing all relevant parameters for band
-      detection.
+        EBSD indexer instance storing all relevant parameters for band
+        detection.
     PC0 : list, optional
-      Initial guess of PC. If not given, `indexer.PC` is used.
+        Initial guess of PC. If not given, `indexer.PC` is used.
     batch : bool, optional
-      Default is False.
+        Default is False.
 
     Returns
     -------
     PCoutRet : numpy.ndarray
-      Optimized PC.
+        Optimized PC.
 
     Notes
     -----
     `pyswarms` particle swarm algorithm is used with 50 particles,
     bounds of +/- 0.05 on the PC values, and parameters c1 = 2.05, c2 =
     2.05 and w = 0.8.
+
     """
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]

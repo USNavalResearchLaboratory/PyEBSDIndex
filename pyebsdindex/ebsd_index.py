@@ -503,40 +503,45 @@ class EBSDIndexer:
         Parameters
         ----------
         filename : str, optional
-          Name of file with EBSD patterns.
+            Name of file with EBSD patterns.
         phaselist : list of str, optional
-          Options are "FCC" and "BCC". Default is ["FCC"].
+            Options are "FCC" and "BCC". Default is ["FCC"].
         vendor : str, optional
-          "EDAX" is the only current vendor supported.
+            This string determines the pattern center (PC) convention to
+            use. The available options are "EDAX" (default), "BRUKER",
+            "OXFORD", "EMSOFT", "KIKUCHIPY" (equivalent to "BRUKER").
         PC : list, optional
-          Pattern center (PC) x*, y*, z* in EDAX TSL's convention, defined
-          in fractions of pattern width with respect to the lower left
-          corner of the detector. If not passed, this is set to
-          (x*, y*, z*) = (0.471659, 0.675044, 0.630139).
+            Pattern center (PC) x*, y*, z* in EDAX TSL's convention,
+            defined in fractions of pattern width with respect to the
+            lower left corner of the detector. If not passed, this is
+            set to (x*, y*, z*) = (0.471659, 0.675044, 0.630139).
         sampleTilt : float, optional
-          Sample tilt towards the detector in degrees. Default is 70 degrees.
-          Unused if `ebsd_indexer_obj` is passed.
+            Sample tilt towards the detector in degrees. Default is 70
+            degrees. Unused if `ebsd_indexer_obj` is passed.
         camElev : float, optional
-          Camera elevation in degrees. Default is 5.3 degrees. Unused if
-          `ebsd_indexer_obj` is passed.
+            Camera elevation in degrees. Default is 5.3 degrees. Unused
+            if `ebsd_indexer_obj` is passed.
         bandDetectPlan : pyebsdindex.band_detect.BandDetect, optional
-          Collection of parameters using in band detection. Unused if
-          `ebsd_indexer_obj` is passed.
+            Collection of parameters using in band detection. Unused if
+            `ebsd_indexer_obj` is passed.
         nRho : int, optional
-          Default is 90 degrees. Unused if `ebsd_indexer_obj` is passed.
+            Default is 90 degrees. Unused if `ebsd_indexer_obj` is passed.
         nTheta : int, optional
-          Default is 180 degrees. Unused if `ebsd_indexer_obj` is passed.
+            Default is 180 degrees. Unused if `ebsd_indexer_obj` is passed.
         tSigma : float, optional
-          Unused if `ebsd_indexer_obj` is passed.
+            Unused if `ebsd_indexer_obj` is passed.
         rSigma : float, optional
-          Unused if `ebsd_indexer_obj` is passed.
+            Unused if `ebsd_indexer_obj` is passed.
         rhoMaskFrac : float, optional
-          Default is 0.1. Unused if `ebsd_indexer_obj` is passed.
+            Default is 0.1. Unused if `ebsd_indexer_obj` is passed.
         nBands : int, optional
-          Number of detected bands to use in triplet voting. Default is 9.
-          Unused if `ebsd_indexer_obj` is passed.
+            Number of detected bands to use in triplet voting. Default
+            is 9. Unused if `ebsd_indexer_obj` is passed.
         patDim : int, optional
-          Number of dimensions of pattern array.
+            Number of dimensions of pattern array.
+        kwargs
+            Keyword arguments passed on to `BandDetect`.
+
         """
         self.filein = filename
         if self.filein is not None:
@@ -561,7 +566,7 @@ class EBSDIndexer:
             self.vendor = vendor
 
         if PC is None:
-            self.PC = np.array([0.471659,0.675044,0.630139])  # a default value
+            self.PC = np.array([0.471659, 0.675044, 0.630139])  # a default value
         else:
             self.PC = np.asarray(PC)
 
@@ -620,41 +625,49 @@ class EBSDIndexer:
         Parameters
         ----------
         patsin : numpy.ndarray, optional
-          EBSD patterns in an array of shape (n points, n pattern rows,
-          n pattern columns). If not given, these are read from
-          `self.filename`.
+            EBSD patterns in an array of shape (n points, n pattern
+            rows, n pattern columns). If not given, these are read from
+            `self.filename`.
         patstart : int, optional
-          Starting index of the patterns to index. Default is 0.
+            Starting index of the patterns to index. Default is 0.
         npats : int, optional
-          Number of patterns to index. Default is -1, which will index up to
-          the final pattern in `patsin`.
+            Number of patterns to index. Default is -1, which will index
+            up to the final pattern in `patsin`.
         clparams : list, optional
-          OpenCL parameters passed to pyopencl.
+            OpenCL parameters passed to pyopencl.
         PC : list, optional
-          Pattern center (PC) (PCx, PCy, PCz) in `self.vendor`'s convention
-          (default is "EDAX"). If not given, this is read from `self.PC`.
+            Pattern center (PC) (PCx, PCy, PCz) in `self.vendor`'s
+            convention (default is "EDAX"). If not given, this is read
+            from `self.PC`.
         verbose : int, optional
-          0 - no output, 1 - timings, 2 - timings and the Hough transform
-          of the first pattern with detected bands highlighted.
+            0 - no output, 1 - timings, 2 - timings and the Hough
+            transform of the first pattern with detected bands
+            highlighted.
+        chunksize : int, optional
+            Default is 528.
 
         Returns
         -------
         indxData : numpy.ndarray
-          Complex numpy array (or array of structured data), that is
-          [nphases + 1, npoints]. The data is stored for each phase used in
-          indexing and the `indxData[-1]` layer uses the best guess on which
-          is the most likely phase, based on the fit, and number of bands
-          matched for each phase. Each data entry contains the orientation
-          expressed as a quaternion (quat) (using `self.vendor`'s
-          convention), Pattern Quality (pq), Confidence Metric (cm), Phase
-          ID (phase), Fit (fit) and Number of Bands Matched (nmatch). There
-          are some other metrics reported, but these are mostly for
-          debugging purposes.
+            Complex numpy array (or array of structured data), that is
+            [nphases + 1, npoints]. The data is stored for each phase
+            used in indexing and the `indxData[-1]` layer uses the best
+            guess on which is the most likely phase, based on the fit,
+            and number of bands matched for each phase. Each data entry
+            contains the orientation expressed as a quaternion (quat)
+            (using `self.vendor`'s convention), Pattern Quality (pq),
+            Confidence Metric (cm), Phase ID (phase), Fit (fit) and
+            Number of Bands Matched (nmatch). There are some other
+            metrics reported, but these are mostly for debugging
+            purposes.
+        bandData : numpy.ndarray
+            Band identification data from the Radon transform.
         patstart : int
-          Starting index of the indexed patterns.
+            Starting index of the indexed patterns.
         npats : int
-          Number of patterns indexed. This and `patstart` are useful for the
-          distributed indexing procedures.
+            Number of patterns indexed. This and `patstart` are useful
+            for the distributed indexing procedures.
+
         """
         tic = timer()
 
