@@ -14,6 +14,11 @@ Python based tool for Hough/Radon based EBSD orientation indexing.
     :target: https://pyebsdindex.readthedocs.io/en/latest/
     :alt: Documentation status
 
+.. PyPI version
+.. image:: https://img.shields.io/pypi/v/pyebsdindex.svg
+    :target: https://pypi.python.org/pypi/pyebsdindex
+    :alt: PyPI version
+
 The pattern processing is based on a GPU pipeline, and is based on the work of S. I.
 Wright and B. L. Adams. Metallurgical Transactions A-Physical Metallurgy and Materials
 Science, 23(3):759–767, 1992, and N. Krieger Lassen. Automated Determination of Crystal
@@ -25,20 +30,13 @@ Morawiec. Acta Crystallographica Section A Foundations and Advances, 76(6):719�
 2020.
 
 Additionally NLPAR pattern processing is included (original distribution
-`NLPAR <https://github.com/USNavalResearchLaboratory/NLPAR>`_; P. T. Brewick, S. I.
+`NLPAR <https://github.com/USNavalResearchLaboratory/NLPAR>`_); P. T. Brewick, S. I.
 Wright, and D. J. Rowenhorst. Ultramicroscopy, 200:50–61, May 2019.).
 
-Installation
-============
+.. toctree::
+    :hidden:
 
-The package can only be installed from source at the moment. There is an issue with
-installing `pyopencl` from `pip` on Windows, so this has to be installed from `conda`
-before installing `PyEBSDIndex`::
-
-    conda install pyopencl --channel conda-forge  # Only required on Windows
-    git clone https://github.com/USNavalResearchLaboratory/PyEBSDIndex
-    cd PyEBSDIndex
-    pip install --editable .
+    installation.rst
 
 User guide
 ==========
