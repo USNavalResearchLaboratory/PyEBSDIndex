@@ -70,7 +70,7 @@ setup(
     install_requires=[
         "h5py",
         "matplotlib",
-        "numpy <= 1.21", # current requirement of numba
+        "numpy",
         "numba",
         "pyswarms",
         # See https://github.com/ray-project/ray/issues/24169
