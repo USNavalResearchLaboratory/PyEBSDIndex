@@ -161,27 +161,32 @@ class BandDetect(band_detect.BandDetect):
         rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
         mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
         stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
-
-        #im2show -= mean
-        #im2show /= stdv
-        #im2show += 7
+        im2show -= mean
+        im2show /= stdv
+        im2show = im2show.clip(-4, None)
+        im2show += 6
         im2show[0:rhoMaskTrim,:] = 0
         im2show[-rhoMaskTrim:,:] = 0
-
-        plt.imshow(im2show, origin='lower', cmap='gray')
-        #plt.scatter(y = bandData['aveloc'][-1,:,0], x = bandData['aveloc'][-1,:,1]+self.peakPad[1], c ='r', s=5)
+        im2show = np.fliplr(im2show)
+        plt.imshow(im2show, cmap='gray', extent = [0, 180, -self.rhoMax, self.rhoMax],
+                   interpolation='none', zorder = 1, aspect='auto')
         width = bandData['width'][-1, :]
         width /= width.min()
         width *= 2
-        plt.scatter(y=bandData['aveloc'][-1,:,0],x=bandData['aveloc'][-1,:,1],c='r',s=width)
+        xplt = np.squeeze(180.0 - np.interp(bandData['aveloc'][-1,:,1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
+        yplt = np.squeeze( -1.0 * np.interp(bandData['aveloc'][-1,:,0], np.arange(self.radonPlan.nRho), self.radonPlan.rho))
+
+        plt.scatter(y=yplt, x=xplt, c='r', s=width, zorder = 2)
 
         for pt in range(self.nBands):
-          plt.annotate(str(pt+1), (np.squeeze(bandData['aveloc'][-1,pt,1]), np.squeeze(bandData['aveloc'][-1,pt,0])))
-        plt.xlim(0,self.nTheta)
-        plt.ylim(0,self.nRho)
+          plt.annotate(str(pt + 1),np.squeeze([xplt[pt],yplt[pt]]), color='yellow')
+        plt.xlim(0,180)
+        plt.ylim(-self.rhoMax, self.rhoMax)
         plt.show()
 
-    except: # something went wrong - try the CPU
+
+    except Exception as e: # something went wrong - try the CPU
+      print(e)
       bandData = band_detect.BandDetect.find_bands(self, patternsIn, verbose=verbose, chunksize=-1, **kwargs)
 
     return bandData
@@ -271,10 +276,16 @@ class BandDetect(band_detect.BandDetect):
       radon = radon[:,:, 0:nIm]
       radon_gpu = None
       #clparams = None
+      rdnIndx_gpu.release()
+      rdnIndx_gpu = None
+      image_gpu.release()
+      image_gpu = None
       return radon, clparams
     else:
       rdnIndx_gpu.release()
+      rdnIndx_gpu = None
       image_gpu.release()
+      image_gpu = None
 
     return radon_gpu, clparams
 
@@ -494,36 +505,26 @@ class BandDetect(band_detect.BandDetect):
     winszY = np.uint64(self.peakPad[0])
     winszY2 = np.uint64((winszY-1) / 2)
 
-    # wrkGrpsize = np.int(winszX * 4 * clvtypesize)
-    # wrkGrpsize2 = np.int((winszX*2-1) * 4 * clvtypesize)
-    # prg.morphDilateKernelX(queue,(nChunkT,nR,nImChunk),None,rdn_gpu,lmaxX,
-    #                        winszX, winszX2, np.uint64(shp[1]),np.uint64(shp[0]),
-    #                        np.uint64(self.padding[1]),np.uint64(self.padding[0]),
-    #                        cl.LocalMemory(wrkGrpsize),cl.LocalMemory(wrkGrpsize),
-    #                        cl.LocalMemory(wrkGrpsize2) )
+
+    # prg.morphDilateKernelBF(queue,(np.uint32(nT),np.uint32(nR),nImChunk),None,rdn_gpu,lmaxX,
+    #                         np.int64(shp[1]),np.int64(shp[0]),
+    #                         np.int64(self.padding[1]),np.int64(self.padding[0]),
+    #                         np.int64(1),np.int64(self.peakPad[0]))
     #
-    # wrkGrpsize = np.int(winszY * 4 * clvtypesize)
-    # wrkGrpsize2 = np.int((winszY * 2 - 1) * 4 * clvtypesize)
-    # prg.morphDilateKernelY(queue,(nT, nChunkR,nImChunk),None,lmaxX, lmaxXY,
-    #                        winszY,winszY2,np.uint64(shp[1]),np.uint64(shp[0]),
-    #                        np.uint64(self.padding[1]),np.uint64(self.padding[0]),
-    #                        cl.LocalMemory(wrkGrpsize),cl.LocalMemory(wrkGrpsize),
-    #                        cl.LocalMemory(wrkGrpsize2 ))
+    # prg.morphDilateKernelBF(queue,(np.uint32(nT),np.uint32(nR),nImChunk),None,lmaxX,lmaxXY,
+    #                         np.int64(shp[1]),np.int64(shp[0]),
+    #                         np.int64(self.padding[1]),np.int64(self.padding[0]),
+    #                         np.int64(self.peakPad[1]),np.int64(1))
 
-    # prg.morphDilateKernelBF(queue,(np.uint32(nT),np.uint32(nR),nImChunk),None,rdn_gpu,lmaxXY,
-    #                       np.int64(shp[1]),np.int64(shp[0]),
-    #                       np.int64(self.padding[1]),np.int64(self.padding[0]),
-    #                       np.int64(self.peakPad[1]), np.int64(self.peakPad[0]))
+    prg.morphDilateKernelBF(queue, (np.uint32(shp[1]), np.uint32(nR), nImChunk), None, rdn_gpu, lmaxX,
+                            np.int64(shp[1]), np.int64(shp[0]),
+                            np.int64(0), np.int64(self.padding[0]),
+                            np.int64(self.peakPad[1]), np.int64(1))
 
-    prg.morphDilateKernelBF(queue,(np.uint32(nT),np.uint32(nR),nImChunk),None,rdn_gpu,lmaxX,
-                            np.int64(shp[1]),np.int64(shp[0]),
-                            np.int64(self.padding[1]),np.int64(self.padding[0]),
-                            np.int64(1),np.int64(self.peakPad[0]))
-
-    prg.morphDilateKernelBF(queue,(np.uint32(nT),np.uint32(nR),nImChunk),None,lmaxX,lmaxXY,
-                            np.int64(shp[1]),np.int64(shp[0]),
-                            np.int64(self.padding[1]),np.int64(self.padding[0]),
-                            np.int64(self.peakPad[1]),np.int64(1))
+    prg.morphDilateKernelBF(queue, (np.uint32(nT), np.uint32(nR), nImChunk), None, lmaxX, lmaxXY,
+                            np.int64(shp[1]), np.int64(shp[0]),
+                            np.int64(self.padding[1]), np.int64(self.padding[0]),
+                            np.int64(1), np.int64(self.peakPad[0]))
 
     local_max = np.zeros((shp),dtype=np.ubyte)
     local_max_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=local_max.nbytes)
@@ -536,7 +537,11 @@ class BandDetect(band_detect.BandDetect):
 
 
     if returnBuff == False:
+      local_maxX = np.zeros((shp), dtype=np.float32)
+      local_maxXY = np.zeros((shp), dtype=np.float32)
       cl.enqueue_copy(queue,local_max,local_max_gpu,is_blocking=True)
+      cl.enqueue_copy(queue, local_maxX, lmaxX, is_blocking=True)
+      cl.enqueue_copy(queue, local_maxXY, lmaxXY, is_blocking=True)
       queue.flush()
       rdn_gpu.release()
       lmaxX.release()
@@ -548,8 +553,10 @@ class BandDetect(band_detect.BandDetect):
       local_max[-rhoMaskTrim:,:,:] = 0
       local_max[:,0:self.padding[1],:] = 0
       local_max[:,-self.padding[1]:,:] = 0
-      return local_max, clparams
+      return (local_max,local_maxX, local_maxXY) , clparams
     else:
+      lmaxX.release()
+      lmaxXY.release()
       return local_max_gpu, clparams
 
 
@@ -669,7 +676,7 @@ class BandDetect(band_detect.BandDetect):
 
     return (maxval,aveval,maxlocxy,aveloc,valid, width)
 
-def getopenclparam():
-  clparam = openclparam.OpenClParam()
+def getopenclparam(**kwargs):
+  clparam = openclparam.OpenClParam(**kwargs)
 
   return clparam

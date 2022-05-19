@@ -31,11 +31,11 @@ DEGRAD = np.pi/180.0
 
 
 
-class Radon:
-  def __init__(self, image=None, imageDim=None, nTheta=180, nRho=90, rhoMax=None):
+class SphericalRadon:
+  def __init__(self, image=None, imageDim=None, nTheta=180, nPhi=180):
     self.nTheta = nTheta
-    self.nRho = nRho
-    self.rhoMax = rhoMax
+    self.nPhi = nRho
+    
     self.indexPlan = None
     if (image is None) and (imageDim is None):
       self.theta = None

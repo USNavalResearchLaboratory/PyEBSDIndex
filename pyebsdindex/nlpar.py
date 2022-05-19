@@ -35,7 +35,7 @@ from pyebsdindex import ebsd_pattern
 
 
 class NLPAR():
-  def __init__(self, filename=None,  lam=0.7, searchradius=3,dthresh=0.0):
+  def __init__(self, filename=None,  lam=0.7, searchradius=3,dthresh=0.0, nrows = None, ncols = None):
     self.lam = lam
     self.searchradius = searchradius
     self.dthresh = dthresh
@@ -48,6 +48,12 @@ class NLPAR():
     self.setfile(filename)
     self.mask = None
     self.sigma = None
+    self.nrows = None
+    self.ncols = None
+    if nrows is not None:
+      self.nrows = nrows
+    if ncols is not None:
+      self.ncols = ncols
 
 
   def setfile(self,filepath=None):
@@ -124,7 +130,16 @@ class NLPAR():
 
   def getinfileobj(self, inout=True):
     if self.filepath is not None:
-      return ebsd_pattern.get_pattern_file_obj([self.filepath, self.hdfdatapath])
+      fID = ebsd_pattern.get_pattern_file_obj([self.filepath, self.hdfdatapath])
+      if self.nrows is None:
+        self.nrows = fID.nRows
+      else:
+        fID.nRows = self.nrows
+      if self.ncols is None:
+        self.ncols = fID.nCols
+      else:
+        fID.nCols = self.ncols
+      return fID
     else:
       return None
 
@@ -164,8 +179,8 @@ class NLPAR():
 
     patternfile = self.getinfileobj()
     patternfile.read_header()
-    nrows = np.uint64(patternfile.nRows)
-    ncols = np.uint64(patternfile.nCols)
+    nrows = np.uint64(self.nrows) #np.uint64(patternfile.nRows)
+    ncols = np.uint64(self.ncols) #np.uint64(patternfile.nCols)
 
     pwidth = np.uint64(patternfile.patternW)
     pheight = np.uint64(patternfile.patternH)
@@ -263,8 +278,13 @@ class NLPAR():
     patternfileout = self.getoutfileobj()
 
 
-    nrows = np.int64(patternfile.nRows)
-    ncols = np.int64(patternfile.nCols)
+    nrows = np.int64(self.nrows)#np.int64(patternfile.nRows)
+    ncols = np.int64(self.ncols)#np.int64(patternfile.nCols)
+    if patternfileout.nCols is None:
+      patternfileout.nCols = ncols
+    if patternfileout.nRows is None:
+      patternfileout.nRows = nrows
+
 
     pwidth = np.int64(patternfile.patternW)
     pheight = np.int64(patternfile.patternH)
@@ -355,8 +375,8 @@ class NLPAR():
     patternfile = self.getinfileobj()
 
 
-    nrows = np.uint64(patternfile.nRows)
-    ncols = np.uint64(patternfile.nCols)
+    nrows = np.int64(self.nrows)#np.uint64(patternfile.nRows)
+    ncols = np.int64(self.ncols)#np.uint64(patternfile.nCols)
 
     pwidth = np.uint64(patternfile.patternW)
     pheight = np.uint64(patternfile.patternH)
@@ -499,7 +519,7 @@ class NLPAR():
     if saturation_protect == False:
       mxval += np.float32(1.0)
     else:
-      mxval *= np.float32(1.0)
+      mxval *= np.float32(0.999)
     for i in numba.prange(ncols):
       winstart_x = max((i - sr),0) - max((i + sr - (ncols - 1)),0)
       winend_x = min((i + sr),(ncols - 1)) + max((sr - i),0) + 1
@@ -549,6 +569,7 @@ class NLPAR():
         # end of window scanning
         sum = np.float(0.0)
         for i_nn in range(winsz):
+
           weights[i_nn] = np.maximum(weights[i_nn]-dthresh, numba.float32(0.0))
           weights[i_nn] = np.exp(-1.0 * weights[i_nn] * lam2)
           sum += weights[i_nn]
@@ -556,9 +577,10 @@ class NLPAR():
         for i_nn in range(winsz):
           indx_nn = pindx[i_nn]
           weights[i_nn] /= sum
+          #print(weights[i_nn], ' \n')
           for q in range(shpdata[1]):
             dataout[indx_0, q] += data[indx_nn, q]*weights[i_nn]
-
+        #print('_______', '\n')
     return dataout
 
 
