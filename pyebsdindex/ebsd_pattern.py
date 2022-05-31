@@ -65,9 +65,9 @@ def get_pattern_file_obj(path,file_type=str('')):
     ebsdfileobj = HDF5PatFile(path) # if the path variable is a list,
     # the second item is set to be the hdf5 path to the patterns.
     try:
-      f = h5py.File(Path(path).expanduser(),'r+')
+      f = h5py.File(Path(pathtemp[0]).expanduser(),'r+')
     except:
-      print("File Not Found:",str(Path(path)))
+      print("File Not Found:",str(Path(pathtemp[0])))
       return -1
 
     if 'Manufacture' in f.keys():
@@ -131,6 +131,7 @@ def pat_flt2int(patterns,typeout=None,method='clip',scalevalue=0.98,maxScale=Non
     if maxScale is None:
       maxScale = temp.max()
     temp *= scalevalue * maxval / maxScale
+    temp = temp.clip(0, maxval)
     temp = np.around(temp)
     patsout[:,:,:] = temp.astype(typeout)
   elif method=='scale': # here we assume that the min if not < 0 should not be scaled.
@@ -589,11 +590,13 @@ class HDF5PatFile(EBSDPatternFile):
   def __init__(self, path=None):
     filepath = None
     hdf5path = None
+    self.patternh5id = 'Pattern'  # the name used for the pattern dataset array in the h5 file.
     if path is not None:
       ptemp = np.atleast_1d(path)
       filepath = ptemp[0]
       if ptemp.size > 1:
         hdf5path = ptemp[1]
+        self.patternh5id = ''
     EBSDPatternFile.__init__(self, filepath)
     self.filetype = 'HDF5'
     self.vendor = 'PyEBSDIndex'
@@ -606,7 +609,7 @@ class HDF5PatFile(EBSDPatternFile):
     self.filedatatype = np.uint8
     self.set_data_path(hdf5path) # This will be the h5 path to the patterns
 
-    self.patternh5id = 'Pattern' #the name used for the pattern dataset array in the h5 file.
+
 
   def set_filepath(self, path=None):
     if path is not None:
@@ -615,7 +618,7 @@ class HDF5PatFile(EBSDPatternFile):
       if ptemp.size > 1:
         self.set_data_path(ptemp[1])
 
-  def set_data_path(self, datapath=None):
+  def set_data_path(self, datapath=None, **kwargs):
     if datapath is not None:
       self.h5patdatpth = datapath
 
@@ -632,9 +635,10 @@ class HDF5PatFile(EBSDPatternFile):
     for grpset in groupsets:
       if isinstance(f[grpset],h5py.Group):
         if 'EBSD' in f[grpset]:
-          if self.patternh5id in f[grpset + '/EBSD/Data']:
-            if (grpset  not in self.h5datagroups):
-              self.h5datagroups.append(grpset)
+          if 'Data' in f[grpset + '/EBSD/']:
+            if self.patternh5id in f[grpset + '/EBSD/Data']:
+              if (grpset  not in self.h5datagroups):
+                self.h5datagroups.append(grpset)
       else:
         self.h5othergrps.append(grpset)
 
@@ -666,6 +670,7 @@ class HDF5PatFile(EBSDPatternFile):
     return readpats
 
   def copy_file(self, newpath, **kwargs):
+    # oh - this is a mess!
     pathtemp = np.atleast_1d(newpath)
     fpath = Path(pathtemp[0]).expanduser().resolve()
     #print(pathtemp)
@@ -743,13 +748,13 @@ class HDF5PatFile(EBSDPatternFile):
     except:
       print("File Not Found:",str(Path(self.filepath)))
       return -1
-
-    dset = f[self.h5patdatpth]
-    shp = np.array(dset.shape)
-    self.patternW = shp[-1]
-    self.patternH = shp[-2]
-    self.nPatterns = shp[-3]
-    self.filedatatype = dset.dtype.type
+    if self.h5patdatpth is not None:
+      dset = f[self.h5patdatpth]
+      shp = np.array(dset.shape)
+      self.patternW = shp[-1]
+      self.patternH = shp[-2]
+      self.nPatterns = shp[-3]
+      self.filedatatype = dset.dtype.type
 
 class EDAXOH5(HDF5PatFile):
   def __init__(self, path=None):

@@ -90,17 +90,21 @@ class NLPAR():
       if patternfile.filetype != 'HDF5': #check that the input and output are not the same.
         pathok = self.filepathout.exists()
         if pathok:
-          pathok = self.filepathout.samefile(patternfile.filepath)
-        if pathok:
+          pathok = not self.filepathout.samefile(patternfile.filepath)
+        if not pathok:
           raise ValueError('Error: File input and output are exactly the same.')
           return
 
         patternfile.copy_file([self.filepathout,self.hdfdatapathout] )
         return  # fpath and (maybe) hdf5 path were set manually.
       else: # this is a hdf5 file
-        #if self.filepathout.exists():
-        #  print([self.filepathout,self.hdfdatapathout])
-        patternfile.copy_file([self.filepathout, self.hdfdatapathout])
+        if self.hdfdatapathout is None:
+          patternfile.copy_file(self.filepathout)
+          self.hdfdatapathout = patternfile.h5patdatpth
+          return
+        else:
+          patternfile.copy_file([self.filepathout, self.hdfdatapathout])
+          return
 
     if patternfile is not None: # the user has set no path.
       hdf5path = None
@@ -128,14 +132,14 @@ class NLPAR():
       self.hdfdatapathout = hdf5path
       return
 
-  def getinfileobj(self, inout=True):
+  def getinfileobj(self):
     if self.filepath is not None:
       fID = ebsd_pattern.get_pattern_file_obj([self.filepath, self.hdfdatapath])
-      if self.nrows is None:
+      if fID.nRows is not None:
         self.nrows = fID.nRows
       else:
         fID.nRows = self.nrows
-      if self.ncols is None:
+      if fID.nCols is not None:
         self.ncols = fID.nCols
       else:
         fID.nCols = self.ncols
@@ -143,7 +147,7 @@ class NLPAR():
     else:
       return None
 
-  def getoutfileobj(self, inout=True):
+  def getoutfileobj(self):
     if self.filepathout is not None:
       return ebsd_pattern.get_pattern_file_obj([self.filepathout, self.hdfdatapathout])
     else:
@@ -235,7 +239,7 @@ class NLPAR():
       for tw in target_weights:
         lam = 1.0
         lambopt1 = opt.minimize(loptfunc,lam,args=(d2,tw,dthresh),method='Nelder-Mead',
-                                bounds = [[0.0, 10.0]],options={'fatol': 0.0001})
+                                bounds = [[0.001, 10.0]],options={'fatol': 0.0001})
         lamopt_values_chnk.append(lambopt1['x'])
 
 
@@ -249,7 +253,7 @@ class NLPAR():
       self.sigma = sigma
 
   def calcnlpar(self,chunksize=0,searchradius=None,lam = None,dthresh = None,saturation_protect=True,automask=True,
-                filepath=None,filepathout=None,reset_sigma=True,backsub = False):
+                filepath=None,filepathout=None,reset_sigma=True,backsub = False, rescale = False):
 
     if lam is not None:
       self.lam = lam
@@ -322,11 +326,16 @@ class NLPAR():
 
 
     sigma = np.asarray(self.sigma)
+    scalemethod = 'clip'
+    if rescale == True:
+      mxval = np.iinfo(patternfileout.filedatatype).max
+      scalemethod = 'fullscale'
 
     nthreadpos = numba.get_num_threads()
     #numba.set_num_threads(36)
     colstartcount = np.asarray([0,ncols],dtype=np.int64)
     print(lam, sr, dthresh)
+
     for j in range(0,nrows,chunksize):
       rowstartread = np.int64(max(0, j-sr))
       rowend = min(j + chunksize+sr,nrows)
@@ -359,6 +368,12 @@ class NLPAR():
       dataout = dataout[j-rowstartread:, :, : ]
       shpout = dataout.shape
       dataout = dataout.reshape(shpout[0]*shpout[1], pheight, pwidth)
+      if rescale == True:
+        for i in range(dataout.shape[0]):
+          temp = dataout[i,:,:]
+          temp -= temp.min()
+          temp *= float(mxval)/temp.max()
+          dataout[i,:,:] = temp
 
       patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
                                      flt2int='clip',scalevalue=1.0 )
