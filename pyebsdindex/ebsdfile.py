@@ -1,55 +1,61 @@
+from pathlib import Path
+from pyebsdindex import rotlib
+
+
 def writeang(filename, indexer, data,
              gridtype = 'SqrGrid', xstep=1.0, ystep=1.0,
              ncols = None, nrows=None):
-
-  with open(filename,'w',encoding = 'utf-8') as f:
-    f.write('# HEADER: Start')
-    f.write('# TEM_PIXperUM          1.000000')
-    f.write('# x-star          ' + str(indexer.PC[0]))
-    f.write('# y-star          ' + str(indexer.PC[1]))
-    f.write('# z-star          ' + str(indexer.PC[2]))
-    f.write('# SampleTiltAngle       ' + str(indexer.sampleTilt))
-    f.write('# CameraElevationAngle  ' + str(indexer.camElev))
-    f.write('# ')
+  fpath = Path(filename).expanduser()
+  with open(fpath,'w',encoding = 'utf-8') as f:
+    f.write('# HEADER: Start \n')
+    f.write('# TEM_PIXperUM          1.000000\n')
+    f.write('# x-star          ' + str(indexer.PC[0])+'\n')
+    f.write('# y-star          ' + str(indexer.PC[1])+'\n')
+    f.write('# z-star          ' + str(indexer.PC[2])+'\n')
+    f.write('# SampleTiltAngle       ' + str(indexer.sampleTilt)+'\n')
+    f.write('# CameraElevationAngle  ' + str(indexer.camElev)+'\n')
+    f.write('# '+'\n')
     pcount = 1
     for phase in indexer.phaseLib:
-      f.write('# Phase '+str(pcount))
-      f.write('# MaterialName ' + str(phase.phase_name))
-      f.write('# Formula ')
-      f.write('# Info ')
-      f.write('# Symmetry              '+str(phase.laue_code))
-      f.write('# PointGroupID              ' + str(phase.symmetry_pgID))
-      f.write('# LatticeConstants      '+ ' '.join(str(x) for x in phase.lattice_param))
-      f.write('# NumberFamilies             ' + str(phase.trilib.nfamily))
-      for i in range(phase.trilib.nfamily):
-        f.write('# hklFamilies   	 ' + ' '.join(str(x) for x in phase.tripLib.family[i,:]) + ' 1 0.00000 1')
-      f.write('# ')
+      f.write('# Phase '+str(pcount)+'\n')
+      f.write('# MaterialName ' + str(phase.phase_name)+'\n')
+      f.write('# Formula '+'\n')
+      f.write('# Info '+'\n')
+      f.write('# Symmetry              '+str(phase.tripLib.laue_code)+'\n')
+      f.write('# PointGroupID              ' + str(phase.tripLib.symmetry_pgID)+'\n')
+      f.write('# LatticeConstants      '+ ' '.join(str(x) for x in phase.tripLib.latticeParameter)+'\n')
+      f.write('# NumberFamilies             ' + str(phase.tripLib.nfamily)+'\n')
+      for i in range(phase.tripLib.nfamily):
+        f.write('# hklFamilies   	 ' + ' '.join(str(x) for x in phase.tripLib.family[i,:]) + ' 1 0.00000 1'+'\n')
+      f.write('# '+'\n')
 
-    f.write('# ')
-    f.write('# GRID: '+gridtype)
-    if indexer.fID.xstep is not None:
-      xstep = str(indexer.fID.xstep)
-      ystep = str(indexer.fID.ystep)
+    f.write('# '+'\n')
+    f.write('# GRID: '+gridtype+'\n')
+    if indexer.fID.xStep is not None:
+      xstep = str(indexer.fID.xStep)
+      ystep = str(indexer.fID.yStep)
     else:
       xstep = str(xstep)
       ystep = str(ystep)
-    f.write('# XSTEP: ' + xstep)
-    f.write('# YSTEP: ' + ystep)
-    if indexer.fID.nCols is not None:
-      ncols = indexer.fID.nCols
-      nrows = indexer.fID.nRows
-    else:
-      if ncols is None:
+    f.write('# XSTEP: ' + xstep+'\n')
+    f.write('# YSTEP: ' + ystep+'\n')
+    if ncols is None:
+      if indexer.fID.nCols is not None:
+        ncols = indexer.fID.nCols
+        nrows = indexer.fID.nRows
+      else:
         ncols = 1
         nrows = data.shape[-1]
+
+
     ncols = int(ncols)
     nrows = int(nrows)
-    f.write('# NCOLS_ODD: ' + str(ncols))
-    f.write('# NCOLS_EVEN: ' + str(ncols))
-    f.write('# NROWS: ' + str(nrows))
-    f.write('# VERSION 5')
+    f.write('# NCOLS_ODD: ' + str(ncols)+'\n')
+    f.write('# NCOLS_EVEN: ' + str(ncols)+'\n')
+    f.write('# NROWS: ' + str(nrows)+'\n')
+    f.write('# VERSION 5'+'\n')
 
-    f.write('# HEADER: End')
+    f.write('# HEADER: End'+'\n')
 
     nphase = data.shape[0]-1
     if nphase == 1:
@@ -67,4 +73,4 @@ def writeang(filename, indexer, data,
       line += '{:.3f}'.format(data[-1]['cm'][i]) + ' '
       line += '{:}'.format(data[-1]['phase'][i]+phaseIDadd) + ' '
       line += '{:.3f}'.format(data[-1]['fit'][i])
-      f.write(line)
+      f.write(line+'\n')
