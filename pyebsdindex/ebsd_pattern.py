@@ -74,8 +74,12 @@ def get_pattern_file_obj(path,file_type=str('')):
       vendor = str(f['Manufacture'][()][0])
       if vendor.upper() == 'EDAX':
         ebsdfileobj = EDAXOH5(path)
-      if vendor.upper() >= 'Bruker Nano':
+      if vendor.upper() >= 'BRUKER NANO':
         ebsdfileobj = BRUKERH5(path)
+    if 'manufacturer' in f.keys():
+      vendor = str((f['manufacturer'][()][0]).decode('UTF-8'))
+      if vendor >= 'kikuchipy':
+        ebsdfileobj = KIKUCHIPYH5(path)
     if ebsdfileobj.h5patdatpth is None: #automatically chose the first data group
       ebsdfileobj.get_data_paths()
       ebsdfileobj.set_data_path(pathindex=0)
@@ -811,6 +815,62 @@ class EDAXOH5(HDF5PatFile):
       self.yStep = np.float32(headerpath['Step Y'][()][0])
 
     return 0 #note this function uses multiple returns
+
+class KIKUCHIPYH5(HDF5PatFile):
+  def __init__(self, path=None):
+    HDF5PatFile.__init__(self, path)
+    self.vendor = 'kikuchipy'
+    #EDAXOH5 only attributes
+    self.filedatatype = None # np.uint8
+    self.patternh5id = 'patterns'
+    if self.filepath is not None:
+      self.get_data_paths()
+
+  def set_data_path(self, datapath=None, pathindex=0): #overloaded from parent - will default to first group.
+    if datapath is not None:
+      self.h5patdatpth = datapath
+    else:
+      if len(self.h5datagroups) > 0:
+        #self.activegroupid = pathindex
+        self.h5patdatpth = self.h5datagroups[pathindex] + '/EBSD/Data/' + self.patternh5id
+
+
+  def read_header(self, path=None):
+    if path is not None:
+      self.filepath = path
+
+    try:
+      f = h5py.File(Path(self.filepath).expanduser(),'r')
+    except:
+      print("File Not Found:",str(Path(self.filepath)))
+      return -1
+
+    self.version = str((f['version'][()][0]).decode('UTF-8'))
+
+    if self.version  >= '0.3.dev0':
+      ngrp = self.get_data_paths()
+      if ngrp <= 0:
+        f.close()
+        return -2 # no data groups with patterns found.
+      if self.h5patdatpth is None: # default to the first datagroup
+        self.set_data_path(pathindex=0)
+
+      dset = f[self.h5patdatpth]
+      shp = np.array(dset.shape)
+      self.patternW = shp[-1]
+      self.patternH = shp[-2]
+      self.nPatterns = shp[-3]
+      self.filedatatype = dset.dtype.type
+      headerpath = (f[self.h5patdatpth].parent.parent)["Header"]
+      self.nCols = np.int32(headerpath['n_columns'][()][0])
+      self.nRows = np.int32(headerpath['n_rows'][()][0])
+      self.hexFlag = np.int32(headerpath['grid_type'][()][0] == 'hexagonal')
+
+      self.xStep = np.float32(headerpath['step_x'][()][0])
+      self.yStep = np.float32(headerpath['step_y'][()][0])
+
+    return 0 #note this function uses multiple returns
+
 
 class BRUKERH5(HDF5PatFile):
   def __init__(self, path=None):

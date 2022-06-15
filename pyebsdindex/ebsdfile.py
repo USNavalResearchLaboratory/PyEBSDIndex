@@ -75,7 +75,7 @@ def writeang(filename, indexer, data,
       line += ('{:.5f}'.format((i % ncols)*float(xstep))).rjust(12,' ') + ' '
       line += ('{:.5f}'.format((int(i / ncols)) * float(ystep))).rjust(12, ' ') + ' '
       line += ('{:.1f}'.format(data[-1]['pq'][i])).rjust(8, ' ') + ' '
-      if data[-1]['phase'][i] < 0:
+      if data[-1]['phase'][i] < 0: # this is an unindexed point.
         phase = 0
         ci = -1.0
         fit = 0.00
