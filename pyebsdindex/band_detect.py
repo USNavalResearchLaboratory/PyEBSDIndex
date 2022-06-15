@@ -31,6 +31,7 @@ import numba
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage import grey_dilation as scipy_grey_dilation
+import scipy.optimize as opt
 
 from pyebsdindex import radon_fast
 
@@ -225,8 +226,68 @@ class BandDetect:
       #if sigma is None:
        #sigma = 2.0 * float(pshape[-1]) / 80.0
       #back[0,:,:] = gaussian_filter(back[0,:,:], sigma = sigma )
-      back -= np.mean(back)
+      back = self.backsub_fit(back)
+      #back -= np.mean(back)
     self.backgroundsub = back
+
+  def backsub_fit(self, back):
+    # This function will fit a 2D gaussian on top of a plane to the averaged set of patterns (data) that is provided.
+    # It will automatically use whatever mask is defined for valid data.
+    # If the gaussian fit fails to converge, it will fall back to just using the mean set of patterns for the background
+    # with a warning.
+    def gaussian_surf(x, y, a, x0, y0, sigx, sigy, c, d, e):
+    # equation for 2D gaussian on top of a plane.
+      return a * np.exp(- ((x - x0) ** 2) / (2.0 * sigx ** 2) - ((y - y0) ** 2) / (2.0 * sigy ** 2)) + c + d * x + e * y
+
+    def fit_gauss(M, *args):
+    # helper function
+      x, y = M
+      #arr = np.zeros(x.shape)
+      return gaussian_surf(x, y, *args)
+
+    #back = np.mean(data, axis=0) # start with the mean of all the data
+    # now fit a 2D gaussian sitting on a plane.  See fuction def above.
+    nx = back.shape[-1]
+    ny = back.shape[-2]
+    #plt.imshow(back)
+    x = np.arange(nx, dtype=float)
+    x = (np.broadcast_to(x.reshape(1,nx), (ny, nx))).ravel()
+    y = np.arange(ny, dtype=float)
+    y = (np.broadcast_to(y, (nx, ny)).T).ravel()
+    # make a circular mask - even if not EDAX, this should work OK.
+    cx = (np.arange(nx) - nx*0.5)**2
+    cy = (np.arange(ny) - ny*0.5)**2
+    cmask = np.sqrt(np.broadcast_to(cx.reshape(1,nx), (ny, nx)) + np.broadcast_to(cy, (nx, ny)).T) < (ny*0.49)
+
+    # need to grab only the values that are in the mask.
+    wh = np.nonzero(cmask.ravel())[0]
+    xwh = x[wh]
+    ywh = y[wh]
+    xywh = np.vstack((xwh, ywh))
+    zwh = (back.ravel())[wh]
+    whmx = np.unravel_index(back.argmax(), back.shape)
+    minz = zwh.min()
+    # initialize a guess for the parameters.
+    # [gauss amplitude, max loc x, max loc y, sigx, sigy, const offset, slope x, slope y]
+    p0 = [(zwh.max() - zwh.min())*0.1, whmx[1], whmx[0], nx/2.355, ny/2.355, minz, 0, 0]
+    try:
+      popt, pcov = opt.curve_fit(fit_gauss, xywh, zwh, p0)
+      backfit = (gaussian_surf(x, y, *popt)).reshape(ny, nx)
+      #print(p0, popt)
+    except RuntimeError:
+      print('Warning: no convergence on back subtract ... using mean of the patterns.')
+      print('This may not be ideal for scans with few grains across the width of the scan.')
+      backfit = back
+    backfit -= np.mean(backfit)
+    #f, axarr = plt.subplots(1, 3)
+    #f.set_size_inches(10, 4)
+    #axarr[0].imshow(data[0,:,:].squeeze(), cmap='gray')
+    #axarr[1].imshow(data[0,:,:].squeeze() - backfit, cmap='gray')
+    #axarr[2].imshow(backfit, cmap='gray')
+
+
+    return backfit
+
 
   def find_bands(self, patternsIn, verbose=0, chunksize=-1,  **kwargs):
     tic0 = timer()

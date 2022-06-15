@@ -465,9 +465,12 @@ class NLPAR():
     nx = data.shape[-1]
     ny = data.shape[-2]
     x = np.arange(nx, dtype=float)
-    x = (np.broadcast_to(x, (nx, ny))).ravel()
+    x = (np.broadcast_to(x.reshape(1,nx), (ny, nx)))
     y = np.arange(ny, dtype=float)
-    y = (np.broadcast_to(y, (ny, nx)).T).ravel()
+    y = (np.broadcast_to(y, (nx, ny)).T)
+    x = x.ravel()
+    y = y.ravel()
+
     # need to grab only the values that are in the mask.
     wh = np.nonzero(self.mask.ravel())[0]
     xwh = x[wh]
@@ -478,7 +481,7 @@ class NLPAR():
     minz = zwh.min()
     # initialize a guess for the parameters.
     # [gauss amplitude, max loc x, max loc y, sigx, sigy, const offset, slope x, slope y]
-    p0 = [(zwh.max() - zwh.min())*0.1, whmx[0], whmx[1], nx/2.355, ny/2.355, minz, 0, 0]
+    p0 = [(zwh.max() - zwh.min()), whmx[1], whmx[0], nx/2.355, ny/2.355, minz, 0, 0]
     try:
       popt, pcov = opt.curve_fit(fit_gauss, xywh, zwh, p0)
       backfit = (gaussian_surf(x, y, *popt)).reshape(ny, nx)
