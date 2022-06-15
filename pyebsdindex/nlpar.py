@@ -27,6 +27,7 @@ from timeit import default_timer as timer
 import numba
 import numpy as np
 import scipy.optimize as opt
+import matplotlib.pyplot as plt
 
 from pyebsdindex import ebsd_pattern
 
@@ -222,11 +223,13 @@ class NLPAR():
                                         convertToFloat=True,returnArrayOnly=True)
 
       shp = data.shape
-      data = data.reshape(shp[0],phw)
+
       if backsub is True:
-        back = np.mean(data, axis=0)
-        back -= np.mean(back)
-        data -= back
+        data = self.backsub(data)
+        #back = np.mean(data, axis=0)
+        #back -= np.mean(back)
+        #data -= back
+      data = data.reshape(shp[0], phw)
 
       rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
       sigchunk, (d2,n2, dij) = self.sigma_numba(data,nn,rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
@@ -344,12 +347,12 @@ class NLPAR():
                                         convertToFloat=True,returnArrayOnly=True)
 
       shpdata = data.shape
-      data = data.reshape(shpdata[0], phw)
 
       if backsub is True:
-        back = np.mean(data,axis=0)
-        back -= np.mean(back)
-        data -= back
+        data = self.backsub(data)
+
+
+      data = data.reshape(shpdata[0], phw)
 
       rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
       if calcsigma is True:
@@ -439,6 +442,60 @@ class NLPAR():
         sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
 
     return sigma
+
+  def backsub(self, data):
+    # This function will fit a 2D gaussian on top of a plane to the averaged set of patterns (data) that is provided.
+    # It will automatically use whatever mask is defined for valid data.
+    # If the gaussian fit fails to converge, it will fall back to just using the mean set of patterns for the background
+    # with a warning.
+
+
+    def gaussian_surf(x, y, a, x0, y0, sigx, sigy, c, d, e):
+    # equation for 2D gaussian on top of a plane.
+      return a * np.exp(- ((x - x0) ** 2) / (2.0 * sigx ** 2) - ((y - y0) ** 2) / (2.0 * sigy ** 2)) + c + d * x + e * y
+
+    def fit_gauss(M, *args):
+    # helper function
+      x, y = M
+      #arr = np.zeros(x.shape)
+      return gaussian_surf(x, y, *args)
+
+    back = np.mean(data, axis=0) # start with the mean of all the data
+    # now fit a 2D gaussian sitting on a plane.  See fuction def above.
+    nx = data.shape[-1]
+    ny = data.shape[-2]
+    x = np.arange(nx, dtype=float)
+    x = (np.broadcast_to(x, (nx, ny))).ravel()
+    y = np.arange(ny, dtype=float)
+    y = (np.broadcast_to(y, (ny, nx)).T).ravel()
+    # need to grab only the values that are in the mask.
+    wh = np.nonzero(self.mask.ravel())[0]
+    xwh = x[wh]
+    ywh = y[wh]
+    xywh = np.vstack((xwh, ywh))
+    zwh = (back.ravel())[wh]
+    whmx = np.unravel_index(back.argmax(), back.shape)
+    minz = zwh.min()
+    # initialize a guess for the parameters.
+    # [gauss amplitude, max loc x, max loc y, sigx, sigy, const offset, slope x, slope y]
+    p0 = [(zwh.max() - zwh.min())*0.1, whmx[0], whmx[1], nx/2.355, ny/2.355, minz, 0, 0]
+    try:
+      popt, pcov = opt.curve_fit(fit_gauss, xywh, zwh, p0)
+      backfit = (gaussian_surf(x, y, *popt)).reshape(ny, nx)
+      #print(p0, popt)
+    except RuntimeError:
+      print('Warning: no convergence on back subtract ... using mean')
+      print('This may not be ideal for scans with few grains across their width')
+      backfit = back
+    backfit -= np.mean(backfit)
+    #f, axarr = plt.subplots(1, 3)
+    #f.set_size_inches(10, 4)
+    #axarr[0].imshow(data[0,:,:].squeeze(), cmap='gray')
+    #axarr[1].imshow(data[0,:,:].squeeze() - backfit, cmap='gray')
+    #axarr[2].imshow(backfit, cmap='gray')
+
+    data -= backfit
+    return data
 
   @staticmethod
   def automask( h,w ):
