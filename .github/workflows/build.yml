@@ -30,7 +30,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: [3.8, 3.9]
+        python-version: [3.9, '3.10']
+        include:
+          - os: ubuntu-latest
+            python-version: 3.8
+            OLDEST_SUPPORTED_VERSION: true
+            DEPENDENCIES: matplotlib==3.3 numba==0.52 numpy==1.19 ray[default]==1.13
+            LABEL: -oldest
     steps:
       - uses: actions/checkout@v2
 
@@ -43,6 +49,11 @@ jobs:
         shell: bash
         run: |
           pip install --upgrade --editable .'[tests]'
+
+      - name: Install oldest supported version
+        if: ${{ matrix.OLDEST_SUPPORTED_VERSION }}
+        run: |
+          pip install ${{ matrix.DEPENDENCIES }}
 
       - name: Install GPU support
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
