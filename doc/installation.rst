@@ -7,7 +7,7 @@ recommended to use a virtual environment, such as venv or conda environments.
 
 The package can be installed from the `Python Package Index
 <https://pypi.org/project/pyebsdindex>`_ (``pip``) or from source on all operating
-systems::
+systems with Python >= 3.8::
 
     pip install pyebsdindex
 
@@ -62,8 +62,8 @@ The ``ray`` package used for distributed multi-processing only experimentally su
 Apple's ARM64 architecture. More info is available `here
 <https://docs.ray.io/en/latest/ray-overview/installation.html>`_. In brief, to run on
 Apple ARM64, PyEBSDIndex should be installed in a conda environment. Assuming that
-``ray`` has already been installed (perhaps as a dependency) one has activated the conda
-environment in the terminal, run the commands below (the first two commands are to
+``ray`` has already been installed (perhaps as a dependency) and one has activated the
+conda environment in the terminal, run the commands below (the first two commands are to
 guarantee that ``grpcio`` is fully removed, they may send a message that the packages
 are not installed)::
 

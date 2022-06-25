@@ -10,6 +10,7 @@ on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
 Added
 -----
+- Support for Python 3.10.
 - ``ebsd_index`` functions return both the orientation data and band identification data
   from the Radon transform.
 - QUEST algorithm to get a best fit for the orientation.
@@ -18,4 +19,6 @@ Added
 
 Fixed
 -----
-- Maximum version of ray package set to < 1.12.0 to avoid an import error on Windows.
+- Minimum version of ``ray`` package set to >= 1.13.
+- Maximum version of ``ray`` package set to < 1.12.0 to avoid an import error on
+  Windows.
