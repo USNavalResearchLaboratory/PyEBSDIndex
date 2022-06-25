@@ -1,0 +1,14 @@
+include .readthedocs.yaml
+include CHANGELOG.rst
+include CONTRIBUTING.rst
+include IPFCubic.pdf
+include IPFCubic.png
+include License
+include MANIFEST.in
+include README.md
+include RELEASE.rst
+include setup.cfg
+include setup.py
+
+recursive-include pyebsdindex *.png *.cl *.py
+recursive-include doc Makefile make.bat *.rst *.py *.ipynb

@@ -12,15 +12,20 @@ from pyebsdindex import (
 extra_feature_requirements = {
     "doc": [
         "furo",
-        "nbsphinx >= 0.7",
-        "sphinx >= 3.0.2",
-        "sphinx-copybutton >= 0.2.5",
-        "sphinx-gallery >= 0.6",
+        "nbsphinx           >= 0.7",
+        "sphinx             >= 3.0.2",
+        "sphinx-copybutton  >= 0.2.5",
+        "sphinx-gallery     >= 0.6",
     ],
-    "tests": ["coverage >= 5.0", "pytest >= 5.4", "pytest-cov >= 2.8.1"],
+    "tests": [
+        "coverage   >= 5.0",
+        "pytest     >= 5.4",
+        "pytest-cov >= 2.8.1"
+    ],
     "gpu": ["pyopencl"],
 }
-# Create a development project, including both the docs and tests projects
+# Create a development project, including both the docs and tests
+# projects
 extra_feature_requirements["dev"] = list(
     chain(*list(extra_feature_requirements.values()))
 )
@@ -39,6 +44,7 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
         "License :: Other/Proprietary License",
@@ -73,19 +79,10 @@ setup(
         "numpy",
         "numba",
         "pyswarms",
-        # See https://github.com/ray-project/ray/issues/24169
-        "ray[default] < 1.12.0",
+        "ray[default] >= 1.13",
         "scipy",
     ],
     # Files to include when distributing package
     packages=find_packages(),
     package_dir={"pyebsdindex": "pyebsdindex"},
-    include_package_data=True,
-    package_data={
-        "pyebsdindex": [
-            "*.py",
-            "*.cl",
-            "tests/data/al_sim_20kv/al_sim_20kv.png",
-        ],
-    },
 )

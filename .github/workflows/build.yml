@@ -3,6 +3,23 @@ name: Build
 on: [push, pull_request]
 
 jobs:
+  # Make sure all necessary files are included in a release
+  check-manifest:
+    name: check manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-python@v2
+
+      - name: Install dependencies
+        run: |
+          pip install manifix
+
+      - name: Check MANIFEST.in file
+        run: |
+          python setup.py manifix
+
   build-with-pip:
     name: ${{ matrix.os }}-py${{ matrix.python-version }}${{ matrix.LABEL }}
     runs-on: ${{ matrix.os }}
@@ -13,29 +30,46 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: [3.8, 3.9]
+        python-version: [3.9, '3.10']
+        include:
+          - os: ubuntu-latest
+            python-version: 3.8
+            OLDEST_SUPPORTED_VERSION: true
+            DEPENDENCIES: matplotlib==3.3 numba==0.52 numpy==1.19 ray[default]==1.13
+            LABEL: -oldest
     steps:
       - uses: actions/checkout@v2
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies and package
         shell: bash
         run: |
           pip install --upgrade --editable .'[tests]'
+
+      - name: Install oldest supported version
+        if: ${{ matrix.OLDEST_SUPPORTED_VERSION }}
+        run: |
+          pip install ${{ matrix.DEPENDENCIES }}
+
       - name: Install GPU support
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
         run: |
           pip install --upgrade --editable .'[gpu]'
+
       - name: Display versions of Python, pip and packages
         run: |
           python -V
           pip -V
           pip list
+
       - name: Run tests
         run: |
           pytest --cov=pyebsdindex --pyargs pyebsdindex
+
       - name: Generate line coverage
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
