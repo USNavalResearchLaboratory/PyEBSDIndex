@@ -784,19 +784,15 @@ class EBSDIndexer:
         pass
 
 
-def __main__(file=None,ncpu=-1):
-  print('Hello')
-  if file is None:
-    file = '~/Desktop/SLMtest/scan2v3nlparl09sw7.up1'
 
-  dat1,indxer = index_pats(filename=file,
-                           patstart=0,npats=1,return_indexer_obj=True,
-                           nTheta=180,nRho=90,
-                           tSigma=1.0,rSigma=1.2,rhoMaskFrac=0.1,nBands=9, \
-                           phaselist=['FCC'])
 
-  dat = index_pats_distributed(filename=file,patstart=0,npats=-1,
-                               chunksize=1008,ncpu=ncpu,ebsd_indexer_obj=indxer)
-  imshape = (indxer.fID.nRows,indxer.fID.nCols)
-  ipfim = IPFcolor.ipf_color_cubic(dat['quat']).reshape(imshape[0],imshape[1],3);
-  plt.imshow(ipfim)
+
+
+
+
+
+
+
+
+
+

@@ -27,6 +27,7 @@ from timeit import default_timer as timer
 import numba
 import numpy as np
 import scipy.optimize as opt
+import matplotlib.pyplot as plt
 
 from pyebsdindex import ebsd_pattern
 
@@ -90,17 +91,21 @@ class NLPAR():
       if patternfile.filetype != 'HDF5': #check that the input and output are not the same.
         pathok = self.filepathout.exists()
         if pathok:
-          pathok = self.filepathout.samefile(patternfile.filepath)
-        if pathok:
+          pathok = not self.filepathout.samefile(patternfile.filepath)
+        if not pathok:
           raise ValueError('Error: File input and output are exactly the same.')
           return
 
         patternfile.copy_file([self.filepathout,self.hdfdatapathout] )
         return  # fpath and (maybe) hdf5 path were set manually.
       else: # this is a hdf5 file
-        #if self.filepathout.exists():
-        #  print([self.filepathout,self.hdfdatapathout])
-        patternfile.copy_file([self.filepathout, self.hdfdatapathout])
+        if self.hdfdatapathout is None:
+          patternfile.copy_file(self.filepathout)
+          self.hdfdatapathout = patternfile.h5patdatpth
+          return
+        else:
+          patternfile.copy_file([self.filepathout, self.hdfdatapathout])
+          return
 
     if patternfile is not None: # the user has set no path.
       hdf5path = None
@@ -128,14 +133,14 @@ class NLPAR():
       self.hdfdatapathout = hdf5path
       return
 
-  def getinfileobj(self, inout=True):
+  def getinfileobj(self):
     if self.filepath is not None:
       fID = ebsd_pattern.get_pattern_file_obj([self.filepath, self.hdfdatapath])
-      if self.nrows is None:
+      if fID.nRows is not None:
         self.nrows = fID.nRows
       else:
         fID.nRows = self.nrows
-      if self.ncols is None:
+      if fID.nCols is not None:
         self.ncols = fID.nCols
       else:
         fID.nCols = self.ncols
@@ -143,7 +148,7 @@ class NLPAR():
     else:
       return None
 
-  def getoutfileobj(self, inout=True):
+  def getoutfileobj(self):
     if self.filepathout is not None:
       return ebsd_pattern.get_pattern_file_obj([self.filepathout, self.hdfdatapathout])
     else:
@@ -218,11 +223,13 @@ class NLPAR():
                                         convertToFloat=True,returnArrayOnly=True)
 
       shp = data.shape
-      data = data.reshape(shp[0],phw)
+
       if backsub is True:
-        back = np.mean(data, axis=0)
-        back -= np.mean(back)
-        data -= back
+        data = self.backsub(data)
+        #back = np.mean(data, axis=0)
+        #back -= np.mean(back)
+        #data -= back
+      data = data.reshape(shp[0], phw)
 
       rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
       sigchunk, (d2,n2, dij) = self.sigma_numba(data,nn,rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
@@ -235,7 +242,7 @@ class NLPAR():
       for tw in target_weights:
         lam = 1.0
         lambopt1 = opt.minimize(loptfunc,lam,args=(d2,tw,dthresh),method='Nelder-Mead',
-                                bounds = [[0.0, 10.0]],options={'fatol': 0.0001})
+                                bounds = [[0.001, 10.0]],options={'fatol': 0.0001})
         lamopt_values_chnk.append(lambopt1['x'])
 
 
@@ -249,7 +256,7 @@ class NLPAR():
       self.sigma = sigma
 
   def calcnlpar(self,chunksize=0,searchradius=None,lam = None,dthresh = None,saturation_protect=True,automask=True,
-                filepath=None,filepathout=None,reset_sigma=True,backsub = False):
+                filepath=None,filepathout=None,reset_sigma=True,backsub = False, rescale = False):
 
     if lam is not None:
       self.lam = lam
@@ -322,11 +329,16 @@ class NLPAR():
 
 
     sigma = np.asarray(self.sigma)
+    scalemethod = 'clip'
+    if rescale == True:
+      mxval = np.iinfo(patternfileout.filedatatype).max
+      scalemethod = 'fullscale'
 
     nthreadpos = numba.get_num_threads()
     #numba.set_num_threads(36)
     colstartcount = np.asarray([0,ncols],dtype=np.int64)
     print(lam, sr, dthresh)
+
     for j in range(0,nrows,chunksize):
       rowstartread = np.int64(max(0, j-sr))
       rowend = min(j + chunksize+sr,nrows)
@@ -335,12 +347,12 @@ class NLPAR():
                                         convertToFloat=True,returnArrayOnly=True)
 
       shpdata = data.shape
-      data = data.reshape(shpdata[0], phw)
 
       if backsub is True:
-        back = np.mean(data,axis=0)
-        back -= np.mean(back)
-        data -= back
+        data = self.backsub(data)
+
+
+      data = data.reshape(shpdata[0], phw)
 
       rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
       if calcsigma is True:
@@ -359,6 +371,12 @@ class NLPAR():
       dataout = dataout[j-rowstartread:, :, : ]
       shpout = dataout.shape
       dataout = dataout.reshape(shpout[0]*shpout[1], pheight, pwidth)
+      if rescale == True:
+        for i in range(dataout.shape[0]):
+          temp = dataout[i,:,:]
+          temp -= temp.min()
+          temp *= float(mxval)/temp.max()
+          dataout[i,:,:] = temp
 
       patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
                                      flt2int='clip',scalevalue=1.0 )
@@ -424,6 +442,63 @@ class NLPAR():
         sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
 
     return sigma
+
+  def backsub(self, data):
+    # This function will fit a 2D gaussian on top of a plane to the averaged set of patterns (data) that is provided.
+    # It will automatically use whatever mask is defined for valid data.
+    # If the gaussian fit fails to converge, it will fall back to just using the mean set of patterns for the background
+    # with a warning.
+
+
+    def gaussian_surf(x, y, a, x0, y0, sigx, sigy, c, d, e):
+    # equation for 2D gaussian on top of a plane.
+      return a * np.exp(- ((x - x0) ** 2) / (2.0 * sigx ** 2) - ((y - y0) ** 2) / (2.0 * sigy ** 2)) + c + d * x + e * y
+
+    def fit_gauss(M, *args):
+    # helper function
+      x, y = M
+      #arr = np.zeros(x.shape)
+      return gaussian_surf(x, y, *args)
+
+    back = np.mean(data, axis=0) # start with the mean of all the data
+    # now fit a 2D gaussian sitting on a plane.  See fuction def above.
+    nx = data.shape[-1]
+    ny = data.shape[-2]
+    x = np.arange(nx, dtype=float)
+    x = (np.broadcast_to(x.reshape(1,nx), (ny, nx)))
+    y = np.arange(ny, dtype=float)
+    y = (np.broadcast_to(y, (nx, ny)).T)
+    x = x.ravel()
+    y = y.ravel()
+
+    # need to grab only the values that are in the mask.
+    wh = np.nonzero(self.mask.ravel())[0]
+    xwh = x[wh]
+    ywh = y[wh]
+    xywh = np.vstack((xwh, ywh))
+    zwh = (back.ravel())[wh]
+    whmx = np.unravel_index(back.argmax(), back.shape)
+    minz = zwh.min()
+    # initialize a guess for the parameters.
+    # [gauss amplitude, max loc x, max loc y, sigx, sigy, const offset, slope x, slope y]
+    p0 = [(zwh.max() - zwh.min()), whmx[1], whmx[0], nx/2.355, ny/2.355, minz, 0, 0]
+    try:
+      popt, pcov = opt.curve_fit(fit_gauss, xywh, zwh, p0)
+      backfit = (gaussian_surf(x, y, *popt)).reshape(ny, nx)
+      #print(p0, popt)
+    except RuntimeError:
+      print('Warning: no convergence on back subtract ... using mean of the patterns.')
+      print('This may not be ideal for scans with few grains across the width of the scan.')
+      backfit = back
+    backfit -= np.mean(backfit)
+    #f, axarr = plt.subplots(1, 3)
+    #f.set_size_inches(10, 4)
+    #axarr[0].imshow(data[0,:,:].squeeze(), cmap='gray')
+    #axarr[1].imshow(data[0,:,:].squeeze() - backfit, cmap='gray')
+    #axarr[2].imshow(backfit, cmap='gray')
+
+    data -= backfit
+    return data
 
   @staticmethod
   def automask( h,w ):

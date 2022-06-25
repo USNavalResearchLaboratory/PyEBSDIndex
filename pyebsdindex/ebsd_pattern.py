@@ -65,17 +65,21 @@ def get_pattern_file_obj(path,file_type=str('')):
     ebsdfileobj = HDF5PatFile(path) # if the path variable is a list,
     # the second item is set to be the hdf5 path to the patterns.
     try:
-      f = h5py.File(Path(path).expanduser(),'r+')
+      f = h5py.File(Path(pathtemp[0]).expanduser(),'r+')
     except:
-      print("File Not Found:",str(Path(path)))
+      print("File Not Found:",str(Path(pathtemp[0])))
       return -1
 
     if 'Manufacture' in f.keys():
       vendor = str(f['Manufacture'][()][0])
       if vendor.upper() == 'EDAX':
         ebsdfileobj = EDAXOH5(path)
-      if vendor.upper() >= 'Bruker Nano':
+      if vendor.upper() >= 'BRUKER NANO':
         ebsdfileobj = BRUKERH5(path)
+    if 'manufacturer' in f.keys():
+      vendor = str((f['manufacturer'][()][0]).decode('UTF-8'))
+      if vendor >= 'kikuchipy':
+        ebsdfileobj = KIKUCHIPYH5(path)
     if ebsdfileobj.h5patdatpth is None: #automatically chose the first data group
       ebsdfileobj.get_data_paths()
       ebsdfileobj.set_data_path(pathindex=0)
@@ -131,6 +135,7 @@ def pat_flt2int(patterns,typeout=None,method='clip',scalevalue=0.98,maxScale=Non
     if maxScale is None:
       maxScale = temp.max()
     temp *= scalevalue * maxval / maxScale
+    temp = temp.clip(0, maxval)
     temp = np.around(temp)
     patsout[:,:,:] = temp.astype(typeout)
   elif method=='scale': # here we assume that the min if not < 0 should not be scaled.
@@ -431,6 +436,7 @@ class UPFile(EBSDPatternFile):
       self.filePos = dat[2]
       self.nPatterns = np.int((Path(self.filepath).expanduser().stat().st_size - 16) /
                               (self.patternW * self.patternH * (self.filedatatype(0).nbytes)))
+
     elif self.version >= 3:
       dat = np.fromfile(f, dtype=np.uint32, count=3)
       self.patternW = dat[0]
@@ -589,11 +595,13 @@ class HDF5PatFile(EBSDPatternFile):
   def __init__(self, path=None):
     filepath = None
     hdf5path = None
+    self.patternh5id = 'Pattern'  # the name used for the pattern dataset array in the h5 file.
     if path is not None:
       ptemp = np.atleast_1d(path)
       filepath = ptemp[0]
       if ptemp.size > 1:
         hdf5path = ptemp[1]
+        self.patternh5id = ''
     EBSDPatternFile.__init__(self, filepath)
     self.filetype = 'HDF5'
     self.vendor = 'PyEBSDIndex'
@@ -606,7 +614,7 @@ class HDF5PatFile(EBSDPatternFile):
     self.filedatatype = np.uint8
     self.set_data_path(hdf5path) # This will be the h5 path to the patterns
 
-    self.patternh5id = 'Pattern' #the name used for the pattern dataset array in the h5 file.
+
 
   def set_filepath(self, path=None):
     if path is not None:
@@ -615,7 +623,7 @@ class HDF5PatFile(EBSDPatternFile):
       if ptemp.size > 1:
         self.set_data_path(ptemp[1])
 
-  def set_data_path(self, datapath=None):
+  def set_data_path(self, datapath=None, **kwargs):
     if datapath is not None:
       self.h5patdatpth = datapath
 
@@ -632,9 +640,10 @@ class HDF5PatFile(EBSDPatternFile):
     for grpset in groupsets:
       if isinstance(f[grpset],h5py.Group):
         if 'EBSD' in f[grpset]:
-          if self.patternh5id in f[grpset + '/EBSD/Data']:
-            if (grpset  not in self.h5datagroups):
-              self.h5datagroups.append(grpset)
+          if 'Data' in f[grpset + '/EBSD/']:
+            if self.patternh5id in f[grpset + '/EBSD/Data']:
+              if (grpset  not in self.h5datagroups):
+                self.h5datagroups.append(grpset)
       else:
         self.h5othergrps.append(grpset)
 
@@ -666,6 +675,7 @@ class HDF5PatFile(EBSDPatternFile):
     return readpats
 
   def copy_file(self, newpath, **kwargs):
+    # oh - this is a mess!
     pathtemp = np.atleast_1d(newpath)
     fpath = Path(pathtemp[0]).expanduser().resolve()
     #print(pathtemp)
@@ -743,13 +753,13 @@ class HDF5PatFile(EBSDPatternFile):
     except:
       print("File Not Found:",str(Path(self.filepath)))
       return -1
-
-    dset = f[self.h5patdatpth]
-    shp = np.array(dset.shape)
-    self.patternW = shp[-1]
-    self.patternH = shp[-2]
-    self.nPatterns = shp[-3]
-    self.filedatatype = dset.dtype.type
+    if self.h5patdatpth is not None:
+      dset = f[self.h5patdatpth]
+      shp = np.array(dset.shape)
+      self.patternW = shp[-1]
+      self.patternH = shp[-2]
+      self.nPatterns = shp[-3]
+      self.filedatatype = dset.dtype.type
 
 class EDAXOH5(HDF5PatFile):
   def __init__(self, path=None):
@@ -805,6 +815,62 @@ class EDAXOH5(HDF5PatFile):
       self.yStep = np.float32(headerpath['Step Y'][()][0])
 
     return 0 #note this function uses multiple returns
+
+class KIKUCHIPYH5(HDF5PatFile):
+  def __init__(self, path=None):
+    HDF5PatFile.__init__(self, path)
+    self.vendor = 'kikuchipy'
+    #EDAXOH5 only attributes
+    self.filedatatype = None # np.uint8
+    self.patternh5id = 'patterns'
+    if self.filepath is not None:
+      self.get_data_paths()
+
+  def set_data_path(self, datapath=None, pathindex=0): #overloaded from parent - will default to first group.
+    if datapath is not None:
+      self.h5patdatpth = datapath
+    else:
+      if len(self.h5datagroups) > 0:
+        #self.activegroupid = pathindex
+        self.h5patdatpth = self.h5datagroups[pathindex] + '/EBSD/Data/' + self.patternh5id
+
+
+  def read_header(self, path=None):
+    if path is not None:
+      self.filepath = path
+
+    try:
+      f = h5py.File(Path(self.filepath).expanduser(),'r')
+    except:
+      print("File Not Found:",str(Path(self.filepath)))
+      return -1
+
+    self.version = str((f['version'][()][0]).decode('UTF-8'))
+
+    if self.version  >= '0.3.dev0':
+      ngrp = self.get_data_paths()
+      if ngrp <= 0:
+        f.close()
+        return -2 # no data groups with patterns found.
+      if self.h5patdatpth is None: # default to the first datagroup
+        self.set_data_path(pathindex=0)
+
+      dset = f[self.h5patdatpth]
+      shp = np.array(dset.shape)
+      self.patternW = shp[-1]
+      self.patternH = shp[-2]
+      self.nPatterns = shp[-3]
+      self.filedatatype = dset.dtype.type
+      headerpath = (f[self.h5patdatpth].parent.parent)["Header"]
+      self.nCols = np.int32(headerpath['n_columns'][()][0])
+      self.nRows = np.int32(headerpath['n_rows'][()][0])
+      self.hexFlag = np.int32(headerpath['grid_type'][()][0] == 'hexagonal')
+
+      self.xStep = np.float32(headerpath['step_x'][()][0])
+      self.yStep = np.float32(headerpath['step_y'][()][0])
+
+    return 0 #note this function uses multiple returns
+
 
 class BRUKERH5(HDF5PatFile):
   def __init__(self, path=None):
