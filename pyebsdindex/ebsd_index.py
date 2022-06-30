@@ -24,7 +24,7 @@
 
 from os import path
 import multiprocessing
-
+import logging
 import sys
 import time
 from timeit import default_timer as timer
@@ -204,10 +204,15 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 
   print("num cpu/gpu:", n_cpu_nodes, ngpu)
   #ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
-  ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu, _node_ip_address="0.0.0.0")
+  # need to append path for installs from source ... otherwise the ray workers do not know where to find the pyebsd module.
+  ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu, _node_ip_address="0.0.0.0",
+           runtime_env={"env_vars": {"PYTHONPATH": path.dirname(path.dirname(__file__))}},
+           logging_level=logging.WARNING) # supress INFO messages from ray.
 
   # place indexer obj in shared memory store so all workers can use it.
   remote_indexer = ray.put(indexer)
+  # get the function that will collect opencl parameters - if opencl is not installed, this is None, and the program
+  # will automatically fall back to CPU only calculation.
   clparamfunction = band_detect.getopenclparam
   # set up the jobs
   njobs = (np.ceil(npats / chunksize)).astype(np.long)
@@ -431,7 +436,7 @@ def index_pats_distributed(patsIn=None,filename=None,filenameout=None,phaselist=
 @ray.remote(num_cpus=1,num_gpus=1)
 class IndexerRay():
   def __init__(self,actorid=0, clparammodule=None, gpu_id=None):
-    sys.path.append((path.dirname(path.dirname(__file__))))  # do this to help Ray find the program files
+    #sys.path.append(path.dirname(path.dirname(__file__)))  # do this to help Ray find the program files
     # import openclparam # do this to help Ray find the program files
     # device, context, queue, program, mf
     # self.dataout = None
@@ -445,8 +450,6 @@ class IndexerRay():
       try:
         if sys.platform != 'darwin':  # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a
           self.openCLParams = clparammodule()
-
-
         else:  # MacOS handles GPU memory conflicts much better when the context is destroyed between each
           # run, and has very low overhead for making the context.
           #pass
