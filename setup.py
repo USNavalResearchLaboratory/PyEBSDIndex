@@ -18,17 +18,28 @@ extra_feature_requirements = {
         "sphinx-gallery     >= 0.6",
     ],
     "tests": [
-        "coverage   >= 5.0",
-        "pytest     >= 5.4",
-        "pytest-cov >= 2.8.1"
+        "coverage           >= 5.0",
+        "pytest             >= 5.4",
+        "pytest-cov         >= 2.8.1"
     ],
-    "gpu": ["pyopencl"],
+    "gpu": [
+        "pyopencl",
+    ],
+    "multipro": [
+        "ray[default]       >= 1.13",
+    ]
 }
-# Create a development project, including both the docs and tests
+# Create a development installation "dev" including "doc" and "tests"
 # projects
 extra_feature_requirements["dev"] = list(
     chain(*list(extra_feature_requirements.values()))
 )
+# Create a user installation "all" including "gpu" and "multipro"
+runtime_extras_require = {}
+for x, packages in extra_feature_requirements.items():
+    if x not in ["doc", "tests"]:
+        runtime_extras_require[x] = packages
+extra_feature_requirements["all"] = list(chain(*list(runtime_extras_require.values())))
 
 
 setup(
@@ -76,13 +87,12 @@ setup(
     install_requires=[
         "h5py",
         "matplotlib",
-        "numpy <= 1.21", # current requirement of numba
+        "numpy",
         "numba",
         "pyswarms",
-        "ray[default] >= 1.13",
         "scipy",
     ],
-    # Files to include when distributing package
+    # Files to include when distributing package (see also MANIFEST.in)
     packages=find_packages(),
     package_dir={"pyebsdindex": "pyebsdindex"},
 )
