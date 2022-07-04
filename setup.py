@@ -25,7 +25,7 @@ extra_feature_requirements = {
     "gpu": [
         "pyopencl",
     ],
-    "multipro": [
+    "parallel": [
         "ray[default]       >= 1.13",
     ]
 }
@@ -34,7 +34,7 @@ extra_feature_requirements = {
 extra_feature_requirements["dev"] = list(
     chain(*list(extra_feature_requirements.values()))
 )
-# Create a user installation "all" including "gpu" and "multipro"
+# Create a user installation "all" including "gpu" and "parallel"
 runtime_extras_require = {}
 for x, packages in extra_feature_requirements.items():
     if x not in ["doc", "tests"]:

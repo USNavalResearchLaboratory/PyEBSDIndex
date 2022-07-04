@@ -20,8 +20,8 @@
 # Author: David Rowenhorst;
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
-"""Setup and handling of Hough indexing runs of EBSD patterns on
-multiple threads.
+"""Setup and handling of Hough indexing runs of EBSD patterns in
+parallel.
 """
 
 from os import path

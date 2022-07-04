@@ -60,7 +60,7 @@ jobs:
         # The second line is redundant but added for testing of pip
         # selectors
         run: |
-          pip install -U -e .'[gpu,multipro]'
+          pip install -U -e .'[gpu,parallel]'
           pip install -U -e .'[all]'
 
       - name: Display versions of Python, pip and packages
