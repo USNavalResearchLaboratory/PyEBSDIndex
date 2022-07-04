@@ -28,26 +28,12 @@ from pyebsdindex import ebsd_index, pcopt
 class TestPCOptimization:
     def test_pc_optimize(self, pattern_al_sim_20kv):
         pc0 = (0.4, 0.6, 0.5)
-        indexer = ebsd_index.EBSDIndexer(
-            phaselist=["FCC"],
-            vendor="EDAX",
-            PC=None,
-            sampleTilt=70,
-            camElev=5.3,
-            patDim=pattern_al_sim_20kv.shape,
-        )
+        indexer = ebsd_index.EBSDIndexer(patDim=pattern_al_sim_20kv.shape)
         new_pc = pcopt.optimize(pattern_al_sim_20kv, indexer, PC0=pc0)
         assert np.allclose(new_pc, pc0, atol=0.05)
 
     def test_pc_optimize_pso(self, pattern_al_sim_20kv):
         pc0 = (0.4, 0.6, 0.5)
-        indexer = ebsd_index.EBSDIndexer(
-            phaselist=["FCC"],
-            vendor="EDAX",
-            PC=None,
-            sampleTilt=70,
-            camElev=5.3,
-            patDim=pattern_al_sim_20kv.shape,
-        )
+        indexer = ebsd_index.EBSDIndexer(patDim=pattern_al_sim_20kv.shape)
         new_pc = pcopt.optimize_pso(pattern_al_sim_20kv, indexer, PC0=pc0)
         assert np.allclose(new_pc, pc0, atol=0.05)
