@@ -10,6 +10,10 @@ on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
 Added
 -----
+- Made ``ray`` an optional dependency, installable via the ``pip`` selector
+  ``pyebsdindex[parallel]`` to enable parallel indexing.
+- Add ``pip`` selector ``pyebsdindex[all]`` for installing both ``ray`` and ``pyopencl``
+  to get parallel and GPU supported indexing.
 - Support for Python 3.10.
 - ``ebsd_index`` functions return both the orientation data and band identification data
   from the Radon transform.
