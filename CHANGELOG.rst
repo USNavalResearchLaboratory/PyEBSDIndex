@@ -10,6 +10,7 @@ on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
 Added
 -----
+- Installation from Anaconda on Linux and Windows for Python 3.8 and 3.9.
 - Support for Python 3.10.
 - ``ebsd_index`` functions return both the orientation data and band identification data
   from the Radon transform.
