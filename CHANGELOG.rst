@@ -10,7 +10,12 @@ on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
 Added
 -----
+
 - Installation from Anaconda on Linux and Windows for Python 3.8 and 3.9.
+- Make ``ray`` for parallel indexing an optional dependency, installable via the ``pip``
+  selector ``pyebsdindex[parallel]``.
+- Add ``pip`` selector ``pyebsdindex[all]`` for installing both ``ray`` and ``pyopencl``
+  to get parallel and GPU supported indexing.
 - Support for Python 3.10.
 - ``ebsd_index`` functions return both the orientation data and band identification data
   from the Radon transform.

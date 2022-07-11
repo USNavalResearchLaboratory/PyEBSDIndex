@@ -20,10 +20,40 @@
 # Author: David Rowenhorst;
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
-"""Setup and handling of Hough indexing runs of EBSD patterns."""
+"""Tests for internal package technicalities and package
+distribution.
+"""
 
-from pyebsdindex import _ray_installed
-from pyebsdindex._ebsd_index_single import EBSDIndexer, index_pats
+import pytest
 
-if _ray_installed:
-    from pyebsdindex._ebsd_index_parallel import index_pats_distributed, IndexerRay
+from pyebsdindex import _pyopencl_installed, _ray_installed
+
+
+@pytest.mark.skipif(not _pyopencl_installed, reason="pyopencl is not installed")
+def test_available_functionality_without_pyopencl():
+    from pyebsdindex.band_detect import BandDetect
+    from pyebsdindex.opencl.band_detect_cl import BandDetect as BandDetectCL
+    assert issubclass(BandDetectCL, BandDetect)
+
+
+@pytest.mark.skipif(_pyopencl_installed, reason="pyopencl is installed")
+def test_unavailable_functionality_without_pyopencl():
+    with pytest.raises(ImportError):
+        from pyebsdindex.opencl.band_detect_cl import BandDetect
+
+
+@pytest.mark.skipif(not _ray_installed, reason="ray is not installed")
+def test_available_functionality_with_ray():
+    from pyebsdindex.ebsd_index import index_pats_distributed
+    from pyebsdindex.ebsd_index import IndexerRay
+
+    assert callable(index_pats_distributed)
+    _ = IndexerRay.remote()
+
+
+@pytest.mark.skipif(_ray_installed, reason="ray is installed")
+def test_unavailable_functionality_without_ray():
+    with pytest.raises(ImportError):
+        from pyebsdindex.ebsd_index import index_pats_distributed
+    with pytest.raises(ImportError):
+        from pyebsdindex.ebsd_index import IndexerRay

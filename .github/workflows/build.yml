@@ -20,7 +20,7 @@ jobs:
         run: |
           python setup.py manifix
 
-  build-with-pip:
+  tests:
     name: ${{ matrix.os }}-py${{ matrix.python-version }}${{ matrix.LABEL }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -33,7 +33,7 @@ jobs:
         python-version: [3.9, '3.10']
         include:
           - os: ubuntu-latest
-            python-version: 3.8
+            python-version: 3.7
             OLDEST_SUPPORTED_VERSION: true
             DEPENDENCIES: matplotlib==3.3 numba==0.52 numpy==1.19 ray[default]==1.13
             LABEL: -oldest
@@ -48,17 +48,20 @@ jobs:
       - name: Install dependencies and package
         shell: bash
         run: |
-          pip install --upgrade --editable .'[tests]'
+          pip install -U -e .'[tests]'
 
       - name: Install oldest supported version
         if: ${{ matrix.OLDEST_SUPPORTED_VERSION }}
         run: |
           pip install ${{ matrix.DEPENDENCIES }}
 
-      - name: Install GPU support
+      - name: Install support for multiprocessing and GPU support
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
+        # The second line is redundant but added for testing of pip
+        # selectors
         run: |
-          pip install --upgrade --editable .'[gpu]'
+          pip install -U -e .'[gpu,parallel]'
+          pip install -U -e .'[all]'
 
       - name: Display versions of Python, pip and packages
         run: |
