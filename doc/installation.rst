@@ -2,9 +2,9 @@
 Installation
 ============
 
-The package can be installed from the Python Package Index (``pip``) or from source on
-all operating systems with Python >= 3.8, and from Anaconda on Linux or Windows with
-Python 3.8 and 3.9.
+The package can be installed with `pip <https://pypi.org/project/pyebsdindex>`__ or from
+source on all operating systems with Python >= 3.7, and from Anaconda on Linux or
+Windows with Python 3.8 and 3.9.
 
 In order to avoid potential conflicts with other system Python packages, it is strongly
 recommended to use a virtual environment, such as ``venv`` or ``conda`` environments.
@@ -12,16 +12,26 @@ recommended to use a virtual environment, such as ``venv`` or ``conda`` environm
 With pip
 ========
 
-Installing with ``pip``::
+Installing all of PyEBSDIndex' functionalities with ``pip``::
+
+    pip install pyebsdindex[all]
+
+To install only the strictly required rependencies and limited functionalities, use::
 
     pip install pyebsdindex
 
-Installing with optional GPU support from ``pyopencl``::
+See the following list of selectors to select the installation of optional dependencies
+required for specific functionality:
 
-    pip install pyebsdindex[gpu]
-
-Please refer to the `pyopencl <https://documen.tician.de/pyopencl/misc.html>`_
-installation documentation in case installation fails.
+- ``gpu`` - GPU support from `pyopencl
+  <https://documen.tician.de/pyopencl/misc.html>`__. Please refer to the pyopencl
+  installation documentation in case installation fails.
+- ``parallel`` - Parallel indexing from `ray[default]
+  <https://docs.ray.io/en/latest/>`__.
+- ``all`` - Install the dependencies in the above selectors.
+- ``doc`` - Dependencies to build the documentation.
+- ``tests`` - Dependencies to run tests.
+- ``dev`` - Install dependencies in the above selectors.
 
 From Anaconda
 =============
