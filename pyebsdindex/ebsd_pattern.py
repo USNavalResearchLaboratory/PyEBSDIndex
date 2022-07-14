@@ -109,6 +109,7 @@ def pat_flt2int(patterns,typeout=None,method='clip',scalevalue=0.98,maxScale=Non
   max = pats.max()
   min = pats.min()
   type = pats.dtype
+
   # make a guess if the bitdepth is not set
   if typeout is None:
     typeout = np.uint8

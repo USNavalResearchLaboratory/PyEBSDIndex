@@ -331,8 +331,11 @@ class NLPAR():
     sigma = np.asarray(self.sigma)
     scalemethod = 'clip'
     if rescale == True:
-      mxval = np.iinfo(patternfileout.filedatatype).max
-      scalemethod = 'fullscale'
+      if np.issubdtype(patternfileout.filedatatype, np.integer):
+        mxval = np.iinfo(patternfileout.filedatatype).max
+        scalemethod = 'fullscale'
+      else: # not int, so no rescale.
+        rescale = False
 
     nthreadpos = numba.get_num_threads()
     #numba.set_num_threads(36)
