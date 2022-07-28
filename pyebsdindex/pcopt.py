@@ -88,6 +88,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
     """
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
+    nbands = banddat.shape[1]
 
     if PC0 is None:
         PC0 = indexer.PC
@@ -111,7 +112,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
     else:
         PCoutRet = np.zeros((npoints, 3))
         for i in range(npoints):
-            PCopt = opt.minimize(optfunction, PC0, args=(indexer, banddat[i, :, :]), method='Nelder-Mead')
+            PCopt = opt.minimize(optfunction, PC0, args=(indexer, banddat[i, :].reshape(1,nbands)), method='Nelder-Mead')
             PCoutRet[i, :] = PCopt['x']
 
     if emsoftflag == True: # return original state for indexer
