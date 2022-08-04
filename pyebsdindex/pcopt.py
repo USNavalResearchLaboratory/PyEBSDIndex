@@ -62,18 +62,22 @@ def optimize(pats, indexer, PC0=None, batch=False):
     Parameters
     ----------
     pats : numpy.ndarray
-        EBSD patterns.
+        EBSD pattern(s), of shape
+        ``(n detector rows, n detector columns)``,
+        or ``(n patterns, n detector rows, n detector columns)``.
     indexer : pyebsdindex.ebsd_index.EBSDIndexer
         EBSD indexer instance storing all relevant parameters for band
         detection.
     PC0 : list, optional
-        Initial guess of PC. If not given, `indexer.PC` is used.
+        Initial guess of PC. If not given, ``indexer.PC`` is used. If
+        ``indexer.vendor`` is ``"EMSOFT"``, the PC must be four numbers,
+        the final number being the pixel size.
     batch : bool, optional
-        Default is False which indicates the fit for a set of patterns
-        should be optimized using the cumulative fit for all the
-        patterns, and one PC will be returned.
-        If set to True, then a optimization is run for each individual
-        pattern, and an array of PC values will be returned.
+        Default is ``False`` which indicates the fit for a set of
+        patterns should be optimized using the cumulative fit for all
+        the patterns, and one PC will be returned. If ``True``, then an
+        optimization is run for each individual pattern, and an array of
+        PC values is returned.
 
     Returns
     -------
@@ -84,7 +88,6 @@ def optimize(pats, indexer, PC0=None, batch=False):
     -----
     SciPy's Nelder-Mead minimization function is used with a tolerance
     `fatol` of 0.00001 between each iteration.
-
     """
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
@@ -150,14 +153,22 @@ def optimize_pso(pats, indexer, PC0=None, batch=False):
     Parameters
     ----------
     pats : numpy.ndarray
-        EBSD patterns.
+        EBSD pattern(s), of shape
+        ``(n detector rows, n detector columns)``,
+        or ``(n patterns, n detector rows, n detector columns)``.
     indexer : pyebsdindex.ebsd_index.EBSDIndexer
         EBSD indexer instance storing all relevant parameters for band
         detection.
     PC0 : list, optional
-        Initial guess of PC. If not given, `indexer.PC` is used.
+        Initial guess of PC. If not given, ``indexer.PC`` is used. If
+        ``indexer.vendor`` is ``"EMSOFT"``, the PC must be four numbers,
+        the final number being the pixel size.
     batch : bool, optional
-        Default is False.
+        Default is ``False`` which indicates the fit for a set of
+        patterns should be optimized using the cumulative fit for all
+        the patterns, and one PC will be returned. If ``True``, then an
+        optimization is run for each individual pattern, and an array of
+        PC values is returned.
 
     Returns
     -------

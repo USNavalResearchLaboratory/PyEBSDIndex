@@ -175,43 +175,47 @@ class EBSDIndexer:
         filename : str, optional
             Name of file with EBSD patterns.
         phaselist : list of str, optional
-            Options are "FCC" and "BCC". Default is ["FCC"].
+            Options are ``"FCC"`` and ``"BCC"``. Default is ``["FCC"]``.
         vendor : str, optional
             This string determines the pattern center (PC) convention to
-            use. The available options are "EDAX" (default), "BRUKER",
-            "OXFORD", "EMSOFT", "KIKUCHIPY" (equivalent to "BRUKER").
+            use. The available options are ``"EDAX"`` (default),
+            ``"BRUKER"``, ``"OXFORD"``, ``"EMSOFT"``, ``"KIKUCHIPY"``
+            (equivalent to ``"BRUKER"``).
         PC : list, optional
-            Pattern center (PC) x*, y*, z* in EDAX TSL's convention,
-            defined in fractions of pattern width with respect to the
-            lower left corner of the detector. If not passed, this is
-            set to (x*, y*, z*) = (0.471659, 0.675044, 0.630139).
+            (PCx, PCy, PCz) in the vendor convention. For EDAX TSL, this
+            is x*, y*, z*, defined in fractions of pattern width with
+            respect to the lower left corner of the detector. If not
+            passed, this is set to (x*, y*, z*) = (0.471659, 0.675044,
+            0.630139). If ``vendor="EMSOFT"``, the PC must be four
+            numbers, the final number being the pixel size.
         sampleTilt : float, optional
             Sample tilt towards the detector in degrees. Default is 70
-            degrees. Unused if `ebsd_indexer_obj` is passed.
+            degrees. Unused if ``ebsd_indexer_obj`` is passed.
         camElev : float, optional
             Camera elevation in degrees. Default is 5.3 degrees. Unused
-            if `ebsd_indexer_obj` is passed.
+            if ``ebsd_indexer_obj`` is passed.
         bandDetectPlan : pyebsdindex.band_detect.BandDetect, optional
             Collection of parameters using in band detection. Unused if
-            `ebsd_indexer_obj` is passed.
+            ``ebsd_indexer_obj`` is passed.
         nRho : int, optional
-            Default is 90 degrees. Unused if `ebsd_indexer_obj` is passed.
+            Default is 90 degrees. Unused if ``ebsd_indexer_obj`` is
+            passed.
         nTheta : int, optional
-            Default is 180 degrees. Unused if `ebsd_indexer_obj` is passed.
+            Default is 180 degrees. Unused if ``ebsd_indexer_obj`` is
+            passed.
         tSigma : float, optional
-            Unused if `ebsd_indexer_obj` is passed.
+            Unused if ``ebsd_indexer_obj`` is passed.
         rSigma : float, optional
-            Unused if `ebsd_indexer_obj` is passed.
+            Unused if ``ebsd_indexer_obj`` is passed.
         rhoMaskFrac : float, optional
-            Default is 0.1. Unused if `ebsd_indexer_obj` is passed.
+            Default is 0.1. Unused if ``ebsd_indexer_obj`` is passed.
         nBands : int, optional
             Number of detected bands to use in triplet voting. Default
-            is 9. Unused if `ebsd_indexer_obj` is passed.
+            is 9. Unused if ``ebsd_indexer_obj`` is passed.
         patDim : int, optional
             Number of dimensions of pattern array.
-        kwargs
-            Keyword arguments passed on to `BandDetect`.
-
+        **kwargs
+            Keyword arguments passed on to ``BandDetect``.
         """
         self.filein = filename
         if self.filein is not None:
@@ -318,9 +322,12 @@ class EBSDIndexer:
         clparams : list, optional
             OpenCL parameters passed to pyopencl.
         PC : list, optional
-            Pattern center (PC) (PCx, PCy, PCz) in `self.vendor`'s
-            convention (default is "EDAX"). If not given, this is read
-            from `self.PC`.
+            (PCx, PCy, PCz) in the vendor convention. For EDAX TSL, this
+            is (x*, y*, z*), defined in fractions of pattern width with
+            respect to the lower left corner of the detector. If not
+            given, this is read from ``self.PC``. If
+            ``vendor="EMSOFT"``, the PC must be four numbers, the final
+            number being the pixel size.
         verbose : int, optional
             0 - no output, 1 - timings, 2 - timings and the Hough
             transform of the first pattern with detected bands
