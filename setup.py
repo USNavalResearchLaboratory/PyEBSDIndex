@@ -96,4 +96,5 @@ setup(
     # Files to include when distributing package (see also MANIFEST.in)
     packages=find_packages(),
     package_dir={"pyebsdindex": "pyebsdindex"},
+    include_package_data=True,
 )
