@@ -5,6 +5,19 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
+Unreleased
+==========
+
+Added
+-----
+- Explanation that the pixel size must be passed as the forth PC value whenever
+  ``vendor=EMSOFT`` is used.
+
+Fixed
+-----
+- OpenCL kernels and test data are also included in the built distribution (wheel), not
+  only the source distribution.
+
 0.1.0 (2022-07-12)
 ==================
 
