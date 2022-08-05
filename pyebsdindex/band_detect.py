@@ -555,15 +555,17 @@ class BandDetect:
         dx  = 0.5*(nn[1,2] - nn[1,0])
         dy  = 0.5*(nn[2,1] - nn[0,1])
         dxx = nn[1,2] + nn[1,0] - 2 * nn[1,1]
-        dyy = nn[2, 1] + nn[0, 2] - 2 * nn[1, 1]
+        dyy = nn[2,1] + nn[0,1] - 2 * nn[1,1]
         dxy = 0.25*(nn[2,2] - nn [0,2] - nn[2,0] + nn[0,0])
         #det = 1.0 / (dxx * dyy - dxy * dxy)
         det = (dxx * dyy - dxy * dxy)
         det = det if np.fabs(det) > 1e-12 else 1.0e-12
-        rnn = r - (dxx * dy - dxy * dx) * det
+        det = 1.0/det
         cnn = c - (dyy * dx - dxy * dy) * det
+        rnn = r - (dxx * dy - dxy * dx) * det
         bandData_aveloc[q,i,:] = np.array([rnn,cnn])
         bandData_valid[q,i] = 1
+
     return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc, bandData_valid, bandData_width
 
 def getopenclparam(**kwargs): # dummy function to maintain compatability with openCL version
