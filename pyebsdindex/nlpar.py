@@ -92,9 +92,9 @@ class NLPAR():
         pathok = self.filepathout.exists()
         if pathok:
           pathok = not self.filepathout.samefile(patternfile.filepath)
-        if not pathok:
-          raise ValueError('Error: File input and output are exactly the same.')
-          return
+          if not pathok:
+            raise ValueError('Error: File input and output are exactly the same.')
+            return
 
         patternfile.copy_file([self.filepathout,self.hdfdatapathout] )
         return  # fpath and (maybe) hdf5 path were set manually.
@@ -255,8 +255,8 @@ class NLPAR():
     if self.sigma is None:
       self.sigma = sigma
 
-  def calcnlpar(self,chunksize=0,searchradius=None,lam = None,dthresh = None,saturation_protect=True,automask=True,
-                filepath=None,filepathout=None,reset_sigma=True,backsub = False, rescale = False):
+  def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
+                filename=None, fileout=None, reset_sigma=True, backsub = False, rescale = False):
 
     if lam is not None:
       self.lam = lam
@@ -271,8 +271,8 @@ class NLPAR():
     dthresh = np.float32(self.dthresh)
     sr = np.int64(self.searchradius)
 
-    if filepath is not None:
-      self.setfile(filepath=filepath)
+    if filename is not None:
+      self.setfile(filepath=filename)
 
     if reset_sigma:
       self.sigma = None
@@ -280,7 +280,7 @@ class NLPAR():
     patternfile = self.getinfileobj()
 
     #if filepathout is not None:
-    self.setoutfile(patternfile, filepath=filepathout)
+    self.setoutfile(patternfile, filepath=fileout)
 
     patternfileout = self.getoutfileobj()
 
