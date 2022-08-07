@@ -11,7 +11,6 @@ report.log
 
 dist/
 
-
 # Jupyter
 **.ipynb_checkpoints
 
@@ -25,3 +24,4 @@ dist/
 
 # Sphinx
 doc/_build
+doc/reference/generated/

@@ -11,4 +11,4 @@ include setup.cfg
 include setup.py
 
 recursive-include pyebsdindex *.png *.cl *.py
-recursive-include doc Makefile make.bat *.rst *.py *.ipynb
+recursive-include doc Makefile make.bat *.rst *.py *.ipynb *.png *.css

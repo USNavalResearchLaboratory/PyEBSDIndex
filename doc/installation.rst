@@ -39,11 +39,11 @@ With conda
 Installing from Anaconda on Linux or Windows (with ``jupyterlab`` and GPU support
 included)::
 
-    conda install -c conda-forge pyebsdindex
+    conda install pyebsdindex -c conda-forge
 
 Installing on macOS (without ``ray[default]``, which has to be installed separately)::
 
-    conda install -c conda-forge pyebsdindex-base
+    conda install pyebsdindex-base -c conda-forge
 
 From source
 ===========

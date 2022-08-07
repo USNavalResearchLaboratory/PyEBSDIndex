@@ -4,21 +4,6 @@ PyEBSDIndex
 
 Python based tool for Hough/Radon based EBSD orientation indexing.
 
-.. GitHub Actions
-.. image:: https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml/badge.svg
-    :target: https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions
-    :alt: Build status
-
-.. Read the Docs
-.. image:: https://readthedocs.org/projects/pyebsdindex/badge/?version=latest
-    :target: https://pyebsdindex.readthedocs.io/en/latest/
-    :alt: Documentation status
-
-.. PyPI version
-.. image:: https://img.shields.io/pypi/v/pyebsdindex.svg
-    :target: https://pypi.python.org/pypi/pyebsdindex
-    :alt: PyPI version
-
 The pattern processing is based on a GPU pipeline, and is based on the work of S. I.
 Wright and B. L. Adams. Metallurgical Transactions A-Physical Metallurgy and Materials
 Science, 23(3):759–767, 1992, and N. Krieger Lassen. Automated Determination of Crystal
@@ -34,23 +19,70 @@ Additionally NLPAR pattern processing is included (original distribution
 Wright, and D. J. Rowenhorst. Ultramicroscopy, 200:50–61, May 2019.).
 
 .. toctree::
+    :caption: Learning resources
+    :hidden:
+
+    tutorials/index.rst
+    Reference <reference/index.rst>
+
+.. toctree::
+    :caption: Help & development
     :hidden:
 
     installation.rst
-
-User guide
-==========
-
-.. nbgallery::
-    :caption: User guide
-
-    ebsd_index_demo.ipynb
-    NLPAR_demo.ipynb
-
-.. toctree::
-    :hidden:
-    :caption: Help & reference
-
-    reference.rst
     changelog.rst
     contributing.rst
+    License <https://github.com/USNavalResearchLaboratory/PyEBSDIndex/blob/main/License>
+
+Installation
+============
+
+PyEBSDIndex can be installed with `pip <https://pypi.org/project/pyebsdindex>`__ or
+`conda <https://anaconda.org/conda-forge/pyebsdindex>`__:
+
+.. tab-set::
+
+    .. tab-item:: pip
+
+        .. code-block:: bash
+
+            pip install pyebsdindex[all]
+
+    .. tab-item:: conda
+
+        .. code-block:: bash
+
+            conda install pyebsdindex -c conda-forge
+
+Further details are available in the :doc:`installation guide <installation>`.
+
+Learning resources
+==================
+
+.. See: https://sphinx-design.readthedocs.io/en/furo-theme/grids.html
+.. grid:: 2
+    :gutter: 2
+
+    .. grid-item-card:: Tutorials
+        :img-top: _static/colormap_banners/banner0.png
+        :link: tutorials/index
+        :link-type: doc
+
+        In-depth guides for using PyEBSDIndex.
+
+    .. grid-item-card:: Reference
+        :img-top: _static/colormap_banners/banner1.png
+        :link: reference/index
+        :link-type: doc
+
+        Descriptions of functions, modules, and objects in PyEBSDIndex.
+
+Contributing
+============
+
+PyEBSDIndex is a community project maintained for and by its users. There are many ways
+you can help!
+
+- Report a bug or request a feature `on GitHub
+  <https://github.com/USNavalResearchLaboratory/PyEBSDIndex>`__
+- or improve the :doc:`documentation or code <contributing>`
