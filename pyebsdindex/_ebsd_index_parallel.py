@@ -45,14 +45,14 @@ else:
 
 
 def index_pats_distributed(
-    patsIn=None,
+    patsin=None,
     filename=None,
     phaselist=["FCC"],
     vendor=None,
     PC=None,
     sampleTilt=70.0,
     camElev=5.3,
-    peakDetectPlan=None,
+    bandDetectPlan=None,
     nRho=90,
     nTheta=180,
     tSigma=None,
@@ -68,20 +68,114 @@ def index_pats_distributed(
     keep_log=False,
     gpu_id=None,
 ):
+    """Index EBSD patterns in parallel.
+
+    Parameters
+    ----------
+    patsin : numpy.ndarray, optional
+        EBSD patterns in an array of shape (n points, n pattern
+        rows, n pattern columns). If not given, these are read from
+        ``filename``.
+    filename : str, optional
+        Name of file with EBSD patterns. If not given, ``patsin`` must
+        be passed.
+    phaselist : list of str, optional
+        Options are ``"FCC"`` and ``"BCC"``. Default is ``["FCC"]``.
+    vendor : str, optional
+        Which vendor convention to use for the pattern center (PC) and
+        the returned orientations. The available options are ``"EDAX"``
+        (default), ``"BRUKER"``, ``"OXFORD"``, ``"EMSOFT"``,
+        ``"KIKUCHIPY"``.
+    PC : list, optional
+        Pattern center (PCx, PCy, PCz) in the :attr:`indexer.vendor` or
+        ``vendor`` convention. For EDAX TSL, this is (x*, y*, z*),
+        defined in fractions of pattern width with respect to the lower
+        left corner of the detector. If not passed, this is set to (x*,
+        y*, z*) = (0.471659, 0.675044, 0.630139). If
+        ``vendor="EMSOFT"``, the PC must be four numbers, the final
+        number being the pixel size.
+    sampleTilt : float, optional
+        Sample tilt towards the detector in degrees. Default is 70
+        degrees. Unused if ``ebsd_indexer_obj`` is passed.
+    camElev : float, optional
+        Camera elevation in degrees. Default is 5.3 degrees. Unused
+        if ``ebsd_indexer_obj`` is passed.
+    bandDetectPlan : pyebsdindex.band_detect.BandDetect, optional
+        Collection of parameters using in band detection. Unused if
+        ``ebsd_indexer_obj`` is passed.
+    nRho : int, optional
+        Default is 90 degrees. Unused if ``ebsd_indexer_obj`` is
+        passed.
+    nTheta : int, optional
+        Default is 180 degrees. Unused if ``ebsd_indexer_obj`` is
+        passed.
+    tSigma : float, optional
+        Unused if ``ebsd_indexer_obj`` is passed.
+    rSigma : float, optional
+        Unused if ``ebsd_indexer_obj`` is passed.
+    rhoMaskFrac : float, optional
+        Default is 0.1. Unused if ``ebsd_indexer_obj`` is passed.
+    nBands : int, optional
+        Number of detected bands to use in triplet voting. Default
+        is 9. Unused if ``ebsd_indexer_obj`` is passed.
+    patstart : int, optional
+        Starting index of the patterns to index. Default is ``0``.
+    npats : int, optional
+        Number of patterns to index. Default is ``-1``, which will
+        index up to the final pattern in ``patsin``.
+    chunksize : int, optional
+        Default is 528.
+    ncpu : int, optional
+        Number of CPUs to use. Default value is ``-1``, meaning all
+        available CPUs will be used.
+    return_indexer_obj : bool, optional
+        Whether to return the EBSD indexer. Default is ``False``.
+    ebsd_indexer_obj : EBSDIndexer, optional
+        EBSD indexer. If not given, many of the above parameters must be
+        passed. Otherwise, these parameters are retrieved from this
+        indexer.
+    keep_log : bool, optional
+        Whether to keep the log. Default is ``False``.
+    gpu_id : int, optional
+        ID of GPU to use if :mod:`pyopencl` is installed.
+
+    Returns
+    -------
+    indxData : numpy.ndarray
+        Complex numpy array (or array of structured data), that is
+        [nphases + 1, npoints]. The data is stored for each phase used
+        in indexing and the ``indxData[-1]`` layer uses the best guess
+        on which is the most likely phase, based on the fit, and number
+        of bands matched for each phase. Each data entry contains the
+        orientation expressed as a quaternion (quat) (using the
+        convention of ``vendor`` or :attr:`indexer.vendor`), Pattern
+        Quality (pq), Confidence Metric (cm), Phase ID (phase), Fit
+        (fit) and Number of Bands Matched (nmatch). There are some other
+        metrics reported, but these are mostly for debugging purposes.
+    bandData : numpy.ndarray
+        Band identification data from the Radon transform.
+    indexer : EBSDIndexer
+        EBSD indexer, returned if ``return_indexer_obj=True``.
+
+    Notes
+    -----
+    Requires :mod:`ray[default]`. See the :doc:`installation guide
+    </installation>` for details.
+    """
     pats = None
-    if patsIn is None:
+    if patsin is None:
         pdim = None
     else:
-        if isinstance(patsIn, ebsd_pattern.EBSDPatterns):
-            pats = patsIn.patterns
-        if type(patsIn) is np.ndarray:
-            pats = patsIn
-        if isinstance(patsIn, h5py.Dataset):
-            shp = patsIn.shape
+        if isinstance(patsin, ebsd_pattern.EBSDPatterns):
+            pats = patsin.patterns
+        if type(patsin) is np.ndarray:
+            pats = patsin
+        if isinstance(patsin, h5py.Dataset):
+            shp = patsin.shape
             if len(shp) == 3:
-                pats = patsIn
+                pats = patsin
             if len(shp) == 2:  # just read off disk now.
-                pats = patsIn[()]
+                pats = patsin[()]
                 pats = pats.reshape(1, shp[0], shp[1])
 
         if pats is None:
@@ -98,7 +192,7 @@ def index_pats_distributed(
             PC=PC,
             sampleTilt=sampleTilt,
             camElev=camElev,
-            bandDetectPlan=peakDetectPlan,
+            bandDetectPlan=bandDetectPlan,
             nRho=nRho,
             nTheta=nTheta,
             tSigma=tSigma,
@@ -116,14 +210,14 @@ def index_pats_distributed(
     else:
         indexer.update_file(patDim=pats.shape[-2:])
 
-    # differentiate between getting a file to index or an array
-    # Need to index one pattern to make sure the indexer object is fully initiated before
-    #   placing in shared memory store.
+    # Differentiate between getting a file to index or an array.
+    # Need to index one pattern to make sure the indexer object is fully
+    # initiated before placing in shared memory store.
     mode = "memorymode"
     if pats is None:
         mode = "filemode"
         temp, temp2, indexer = index_pats(
-            patstart=0, npats=1, return_indexer_obj=True, ebsd_indexer_obj=indexer
+            npats=1, return_indexer_obj=True, ebsd_indexer_obj=indexer
         )
 
     if mode == "filemode":
@@ -137,7 +231,6 @@ def index_pats_distributed(
             npatsTotal = pshape[0]
         temp, temp2, indexer = index_pats(
             pats[0, :, :],
-            patstart=0,
             npats=1,
             return_indexer_obj=True,
             ebsd_indexer_obj=indexer,
@@ -148,11 +241,9 @@ def index_pats_distributed(
     if npats <= 0:
         npats = npatsTotal - patstart
 
-    # now set up the cluster with the indexer
-
-    n_cpu_nodes = int(
-        multiprocessing.cpu_count()
-    )  # int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
+    # Now set up the cluster with the indexer
+    n_cpu_nodes = int(multiprocessing.cpu_count())
+    # int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
     if ncpu != -1:
         n_cpu_nodes = ncpu
 
@@ -169,7 +260,7 @@ def index_pats_distributed(
             if ngpu is None:
                 ngpu = len(clparam.gpu)
             ngpupnode = ngpu / n_cpu_nodes
-    except:
+    except ():
         ngpu = 0
         ngpupnode = 0
 
@@ -177,21 +268,23 @@ def index_pats_distributed(
 
     print("num cpu/gpu:", n_cpu_nodes, ngpu)
     # ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
-    # need to append path for installs from source ... otherwise the ray workers do not know where to find the pyebsd module.
+    # Need to append path for installs from source ... otherwise the ray
+    # workers do not know where to find the PyEBSDIndex module.
     ray.init(
         num_cpus=n_cpu_nodes,
         num_gpus=ngpu,
         _node_ip_address="0.0.0.0",
         runtime_env={"env_vars": {"PYTHONPATH": path.dirname(path.dirname(__file__))}},
         logging_level=logging.WARNING,
-    )  # supress INFO messages from ray.
+    )  # Supress INFO messages from ray.
 
-    # place indexer obj in shared memory store so all workers can use it.
+    # Place indexer obj in shared memory store so all workers can use it
     remote_indexer = ray.put(indexer)
-    # get the function that will collect opencl parameters - if opencl is not installed, this is None, and the program
-    # will automatically fall back to CPU only calculation.
+    # Get the function that will collect opencl parameters - if opencl
+    # is not installed, this is None, and the program will automatically
+    # fall back to CPU only calculation.
     clparamfunction = band_detect.getopenclparam
-    # set up the jobs
+    # Set up the jobs
     njobs = (np.ceil(npats / chunksize)).astype(np.compat.long)
     # p_indx_start = [i*chunksize+patStart for i in range(njobs)]
     # p_indx_end = [(i+1)*chunksize+patStart for i in range(njobs)]
@@ -221,7 +314,7 @@ def index_pats_distributed(
     else:
         newline = "\r"
     if mode == "filemode":
-        # send out the first batch
+        # Send out the first batch
         workers = []
         jobs = []
         timers = []
@@ -255,12 +348,12 @@ def index_pats_distributed(
             jid = jobs.index(wrker[0])
             try:
                 wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
-            except:
+            except ():
                 # print('a death has occured')
                 indxstr = jobs_indx[jid][0]
                 indxend = jobs_indx[jid][1]
                 rate = [-1, -1]
-            if rate[0] >= 0:  # job finished as expected
+            if rate[0] >= 0:  # Job finished as expected
 
                 ticp = timers[jid]
                 dataout[:, indxstr - patstart : indxend - patstart] = wrkdataout
@@ -312,15 +405,16 @@ def index_pats_distributed(
                     del workers[jid]
                     del timers[jid]
                     del jobs_indx[jid]
-
-            else:  # something bad happened. Put the job back on the queue and kill this worker
+            else:
+                # Something bad happened. Put the job back on the queue
+                # and kill this worker.
                 p_indx_start_end.append([indxstr, indxend, indxend - indxstr])
                 del jobs[jid]
                 del workers[jid]
                 del timers[jid]
                 del jobs_indx[jid]
                 n_cpu_nodes -= 1
-                if len(workers) < 1:  # rare case that we have killed all workers...
+                if len(workers) < 1:  # Rare case that we have killed all workers...
                     job_pstart_end = p_indx_start_end.pop(0)
                     workers.append(
                         IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote(
@@ -371,13 +465,13 @@ def index_pats_distributed(
         # nsubmit += n_cpu_nodes
 
         while ndone < njobs:
-            toc = timer()
+            # toc = timer()
             wrker, busy = ray.wait(jobs, num_returns=1, timeout=None)
             jid = jobs.index(wrker[0])
             # print("waittime: ",timer() - toc)
             try:
                 wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
-            except:
+            except ():
                 indxstr = jobs_indx[jid][0]
                 indxend = jobs_indx[jid][1]
                 rate = [-1, -1]
@@ -430,14 +524,16 @@ def index_pats_distributed(
                     del workers[jid]
                     del timers[jid]
                     del jobs_indx[jid]
-            else:  # something bad happened.  Put the job back on the queue and kill this worker
+            else:
+                # Something bad happened.  Put the job back on the queue
+                # and kill this worker.
                 p_indx_start_end.append([indxstr, indxend, indxend - indxstr])
                 del jobs[jid]
                 del workers[jid]
                 del timers[jid]
                 del jobs_indx[jid]
                 n_cpu_nodes -= 1
-                if len(workers) < 1:  # rare case that we have killed all workers...
+                if len(workers) < 1:  # Rare case that we have killed all workers...
                     job_pstart_end = p_indx_start_end.pop(0)
                     workers.append(
                         IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote(
@@ -518,7 +614,7 @@ class IndexerRay:
                 self.openCLParams.gpu_id = gpu_list[self.actorID % ngpu]
                 self.openCLParams.get_queue()
                 self.useGPU = True
-            except:
+            except ():
                 self.openCLParams = None
 
     def index_chunk_ray(self, pats=None, indexer=None, patstart=0, npats=-1):
@@ -534,7 +630,7 @@ class IndexerRay:
             )
             rate = np.array([timer() - tic, npatsout])
             return dataout, banddata, indxstart, indxstart + npatsout, rate
-        except:
+        except ():
             indxstart = patstart
             indxend = patstart + npats
             return None, None, indxstart, indxend, [-1, -1]
