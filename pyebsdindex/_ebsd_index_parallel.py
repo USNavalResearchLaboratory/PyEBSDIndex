@@ -260,7 +260,7 @@ def index_pats_distributed(
             if ngpu is None:
                 ngpu = len(clparam.gpu)
             ngpupnode = ngpu / n_cpu_nodes
-    except ():
+    except:
         ngpu = 0
         ngpupnode = 0
 
@@ -348,7 +348,7 @@ def index_pats_distributed(
             jid = jobs.index(wrker[0])
             try:
                 wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
-            except ():
+            except:
                 # print('a death has occured')
                 indxstr = jobs_indx[jid][0]
                 indxend = jobs_indx[jid][1]
@@ -471,7 +471,7 @@ def index_pats_distributed(
             # print("waittime: ",timer() - toc)
             try:
                 wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
-            except ():
+            except:
                 indxstr = jobs_indx[jid][0]
                 indxend = jobs_indx[jid][1]
                 rate = [-1, -1]
@@ -614,7 +614,7 @@ class IndexerRay:
                 self.openCLParams.gpu_id = gpu_list[self.actorID % ngpu]
                 self.openCLParams.get_queue()
                 self.useGPU = True
-            except ():
+            except:
                 self.openCLParams = None
 
     def index_chunk_ray(self, pats=None, indexer=None, patstart=0, npats=-1):
@@ -630,7 +630,7 @@ class IndexerRay:
             )
             rate = np.array([timer() - tic, npatsout])
             return dataout, banddata, indxstart, indxstart + npatsout, rate
-        except ():
+        except:
             indxstart = patstart
             indxend = patstart + npats
             return None, None, indxstart, indxend, [-1, -1]
