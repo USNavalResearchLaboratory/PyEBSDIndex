@@ -80,8 +80,8 @@ nbsphinx_execute_arguments = [
 
 def linkcode_resolve(domain, info):
     """Determine the URL corresponding to Python object.
-    This is taken from SciPy's conf.py:
-    https://github.com/scipy/scipy/blob/develop/doc/source/conf.py.
+    This is taken from SciPy's ``conf.py``:
+    https://github.com/scipy/scipy/blob/main/doc/source/conf.py.
     """
     if domain != "py":
         return None
@@ -126,12 +126,14 @@ def linkcode_resolve(domain, info):
     fn = relpath(fn, start=startdir).replace(os.path.sep, "/")
 
     if fn.startswith("pyebsdindex/"):
-        m = re.match(r"^.*dev0\+([a-f0-9]+)$", version)
+        m = re.match(r"^.*dev0\+([a-f\d]+)$", orix.__version__)
         pre_link = "https://github.com/USNavalResearchLaboratory/PyEBSDIndex/blob/"
         if m:
             return pre_link + "%s/%s%s" % (m.group(1), fn, linespec)
+        elif "dev" in orix.__version__:
+            return pre_link + "main/%s%s" % (fn, linespec)
         else:
-            return pre_link + "v%s/%s%s" % (version, fn, linespec)
+            return pre_link + "v%s/%s%s" % (__version__, fn, linespec)
     else:
         return None
 
