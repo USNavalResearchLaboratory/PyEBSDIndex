@@ -27,11 +27,18 @@ import pyswarms as pso
 import scipy.optimize as opt
 
 
+__all__ = [
+    "optimize",
+    "optimize_pso",
+]
+
 RADEG = 180.0 / np.pi
 
 
-def optfunction(PC_i, indexer, banddat):
-    band_norm = indexer.bandDetectPlan.radonPlan.radon2pole(banddat, PC=PC_i, vendor=indexer.vendor)
+def _optfunction(PC_i, indexer, banddat):
+    band_norm = indexer.bandDetectPlan.radonPlan.radon2pole(
+        banddat, PC=PC_i, vendor=indexer.vendor
+    )
     n_points = banddat.shape[0]
     n_averages = 0
     average_fit = 0
@@ -57,7 +64,7 @@ def optfunction(PC_i, indexer, banddat):
 
 def optimize(pats, indexer, PC0=None, batch=False):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
-    of the `indexer.vendor` (default is EDAX) with Nelder-Mead.
+    of the :attr:`indexer.vendor` with Nelder-Mead.
 
     Parameters
     ----------
@@ -69,9 +76,9 @@ def optimize(pats, indexer, PC0=None, batch=False):
         EBSD indexer instance storing all relevant parameters for band
         detection.
     PC0 : list, optional
-        Initial guess of PC. If not given, ``indexer.PC`` is used. If
-        ``indexer.vendor`` is ``"EMSOFT"``, the PC must be four numbers,
-        the final number being the pixel size.
+        Initial guess of PC. If not given, :attr:`indexer.PC` is used.
+        If :attr:`indexer.vendor` is ``"EMSOFT"``, the PC must be four
+        numbers, the final number being the pixel size.
     batch : bool, optional
         Default is ``False`` which indicates the fit for a set of
         patterns should be optimized using the cumulative fit for all
@@ -81,26 +88,25 @@ def optimize(pats, indexer, PC0=None, batch=False):
 
     Returns
     -------
-    PCoutRet : numpy.ndarray
+    numpy.ndarray
         Optimized PC.
 
     Notes
     -----
     SciPy's Nelder-Mead minimization function is used with a tolerance
-    `fatol` of 0.00001 between each iteration.
+    ``fatol=0.00001`` between each iteration, ending the optimization
+    when the improvement is below this value.
     """
     banddat = indexer.bandDetectPlan.find_bands(pats)
-    npoints = banddat.shape[0]
-    nbands = banddat.shape[1]
+    npoints, nbands = banddat.shape[:2]
 
     if PC0 is None:
         PC0 = indexer.PC
     emsoftflag = False
-    if indexer.vendor == 'EMSOFT': # convert to EDAX for optimization
+    if indexer.vendor == "EMSOFT":  # Convert to EDAX for optimization
         emsoftflag = True
-        indexer.vendor = 'EDAX'
+        indexer.vendor = "EDAX"
         delta = indexer.PC
-        PC0in = PC0
         PCtemp = PC0[0:3]
         PCtemp[0] *= -1.0
         PCtemp[0] += 0.5 * indexer.bandDetectPlan.patDim[1]
@@ -110,36 +116,46 @@ def optimize(pats, indexer, PC0=None, batch=False):
         PC0 = PCtemp
 
     if not batch:
-        PCopt = opt.minimize(optfunction, PC0, args=(indexer, banddat), method='Nelder-Mead', options={'fatol': 0.00001})
+        PCopt = opt.minimize(
+            _optfunction,
+            PC0,
+            args=(indexer, banddat),
+            method="Nelder-Mead",
+            options={"fatol": 0.00001}
+        )
         PCoutRet = PCopt['x']
     else:
         PCoutRet = np.zeros((npoints, 3))
         for i in range(npoints):
-            PCopt = opt.minimize(optfunction, PC0, args=(indexer, banddat[i, :].reshape(1,nbands)), method='Nelder-Mead')
+            PCopt = opt.minimize(
+                _optfunction,
+                PC0,
+                args=(indexer, banddat[i, :].reshape(1, nbands)),
+                method="Nelder-Mead"
+            )
             PCoutRet[i, :] = PCopt['x']
 
-    if emsoftflag == True: # return original state for indexer
-        indexer.vendor = 'EMSOFT'
+    if emsoftflag:  # Return original state for indexer
+        indexer.vendor = "EMSOFT"
         indexer.PC = delta
-        PC0 = PC0in
         if PCoutRet.ndim == 2:
             newout = np.zeros((npoints, 4))
             PCoutRet[:, 0] -= 0.5
-            PCoutRet[:, 0:3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[:, :3] *= indexer.bandDetectPlan.patDim[1]
             PCoutRet[:, 1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
             PCoutRet[:, 0] *= -1.0
             PCoutRet[:, 2] *= delta[3]
-            newout[:, 0:3] = PCoutRet
+            newout[:, :3] = PCoutRet
             newout[:, 3] = delta[3]
             PCoutRet = newout
         else:
-            newout = np.zeros((4))
+            newout = np.zeros(4)
             PCoutRet[0] -= 0.5
-            PCoutRet[0:3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[:3] *= indexer.bandDetectPlan.patDim[1]
             PCoutRet[1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
             PCoutRet[0] *= -1.0
             PCoutRet[2] *= delta[3]
-            newout[0:3] = PCoutRet
+            newout[:3] = PCoutRet
             newout[3] = delta[3]
             PCoutRet = newout
 
@@ -148,7 +164,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
 
 def optimize_pso(pats, indexer, PC0=None, batch=False):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
-    of the `indexer.vendor` (default is EDAX) with particle swarms.
+    of the :attr:`indexer.vendor` with particle swarms.
 
     Parameters
     ----------
@@ -160,9 +176,9 @@ def optimize_pso(pats, indexer, PC0=None, batch=False):
         EBSD indexer instance storing all relevant parameters for band
         detection.
     PC0 : list, optional
-        Initial guess of PC. If not given, ``indexer.PC`` is used. If
-        ``indexer.vendor`` is ``"EMSOFT"``, the PC must be four numbers,
-        the final number being the pixel size.
+        Initial guess of PC. If not given, :attr:`indexer.PC` is used.
+        If :attr:`indexer.vendor` is ``"EMSOFT"``, the PC must be four
+        numbers, the final number being the pixel size.
     batch : bool, optional
         Default is ``False`` which indicates the fit for a set of
         patterns should be optimized using the cumulative fit for all
@@ -172,15 +188,14 @@ def optimize_pso(pats, indexer, PC0=None, batch=False):
 
     Returns
     -------
-    PCoutRet : numpy.ndarray
+    numpy.ndarray
         Optimized PC.
 
     Notes
     -----
-    `pyswarms` particle swarm algorithm is used with 50 particles,
+    :mod:`pyswarms` particle swarm algorithm is used with 50 particles,
     bounds of +/- 0.05 on the PC values, and parameters c1 = 2.05, c2 =
     2.05 and w = 0.8.
-
     """
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
@@ -190,26 +205,30 @@ def optimize_pso(pats, indexer, PC0=None, batch=False):
     else:
         PC0 = np.asarray(PC0)
 
-    pso_options = {'c1': 2.05, 'c2': 2.05, 'w': 0.8}
-    bounds = (PC0 - 0.05, PC0 + 0.05)
-    optimizer = pso.single.GlobalBestPSO(n_particles=50, dimensions=3, options=pso_options, bounds=bounds)
+    optimizer = pso.single.GlobalBestPSO(
+        n_particles=50,
+        dimensions=3,
+        options={"c1": 2.05, "c2": 2.05, "w": 0.8},
+        bounds=(PC0 - 0.05, PC0 + 0.05),
+    )
 
     if not batch:
-        cost, PCopt = optimizer.optimize(optfunction, 1000, indexer=indexer, banddat=banddat)
-        PCoutRet = PCopt
+        cost, PCoutRet = optimizer.optimize(
+            _optfunction, 1000, indexer=indexer, banddat=banddat
+        )
         print(cost)
     else:
         PCoutRet = np.zeros((npoints, 3))
         for i in range(npoints):
-            cost, PCopt = optimizer.optimize(optfunction, 100, indexer=indexer, banddat=banddat[i, :, :])
-            PCoutRet[i, :] = PCopt
+            cost, PCoutRet[i, :] = optimizer.optimize(
+                _optfunction, 100, indexer=indexer, banddat=banddat[i, :, :]
+            )
     return PCoutRet
 
 
-def file_opt(fobj, indexer, stride=200, groupsz = 3):
+def _file_opt(fobj, indexer, stride=200, groupsz = 3):
     nCols = fobj.nCols
     nRows = fobj.nRows
-    #stride = 20
     pcopt = np.zeros((int(nRows / stride), int(nCols / stride), 3), dtype=np.float32)
 
     for i in range(int(nRows / stride)):
@@ -219,11 +238,12 @@ def file_opt(fobj, indexer, stride=200, groupsz = 3):
             jj = j * stride
 
             pats = fobj.read_data(
-                returnArrayOnly=True, convertToFloat=True, patStartCount=[ii*nCols + jj, groupsz]
+                returnArrayOnly=True,
+                convertToFloat=True,
+                patStartCount=[ii*nCols + jj, groupsz]
             )
 
             pc = optimize(pats, indexer)
-            #print(pc, pc.shape)
             pcopt[i, j, :] = pc
 
     return pcopt
