@@ -43,19 +43,12 @@ else:
     from pyebsdindex import band_detect as band_detect
 
 
-# if sys.platform == 'darwin':
-#   if ray.__version__ < '1.1.0':  # this fixes an issue when running locally on a VPN
-#     ray.services.get_node_ip_address = lambda: '127.0.0.1'
-#   else:
-#     ray._private.services.get_node_ip_address = lambda: '127.0.0.1'
-
 RADEG = 180.0 / np.pi
 
 
 def index_pats(
-    patsIn=None,
+    patsin=None,
     filename=None,
-    filenameout=None,
     phaselist=["FCC"],
     vendor=None,
     PC=None,
@@ -78,29 +71,120 @@ def index_pats(
     chunksize=528,
     gpu_id=None,
 ):
+    """Index EBSD patterns on a single thread.
 
+    Parameters
+    ----------
+    patsin : numpy.ndarray, optional
+        EBSD patterns in an array of shape (n points, n pattern
+        rows, n pattern columns). If not given, these are read from
+        ``filename``.
+    filename : str, optional
+        Name of file with EBSD patterns. If not given, ``patsin`` must
+        be passed.
+    phaselist : list of str, optional
+        Options are ``"FCC"`` and ``"BCC"``. Default is ``["FCC"]``.
+    vendor : str, optional
+        Which vendor convention to use for the pattern center (PC) and
+        the returned orientations. The available options are ``"EDAX"``
+        (default), ``"BRUKER"``, ``"OXFORD"``, ``"EMSOFT"``,
+        ``"KIKUCHIPY"``.
+    PC : list, optional
+        Pattern center (PCx, PCy, PCz) in the :attr:`indexer.vendor` or
+        ``vendor`` convention. For EDAX TSL, this is (x*, y*, z*),
+        defined in fractions of pattern width with respect to the lower
+        left corner of the detector. If not passed, this is set to (x*,
+        y*, z*) = (0.471659, 0.675044, 0.630139). If
+        ``vendor="EMSOFT"``, the PC must be four numbers, the final
+        number being the pixel size.
+    sampleTilt : float, optional
+        Sample tilt towards the detector in degrees. Default is 70
+        degrees. Unused if ``ebsd_indexer_obj`` is passed.
+    camElev : float, optional
+        Camera elevation in degrees. Default is 5.3 degrees. Unused
+        if ``ebsd_indexer_obj`` is passed.
+    bandDetectPlan : pyebsdindex.band_detect.BandDetect, optional
+        Collection of parameters using in band detection. Unused if
+        ``ebsd_indexer_obj`` is passed.
+    nRho : int, optional
+        Default is 90 degrees. Unused if ``ebsd_indexer_obj`` is
+        passed.
+    nTheta : int, optional
+        Default is 180 degrees. Unused if ``ebsd_indexer_obj`` is
+        passed.
+    tSigma : float, optional
+        Unused if ``ebsd_indexer_obj`` is passed.
+    rSigma : float, optional
+        Unused if ``ebsd_indexer_obj`` is passed.
+    rhoMaskFrac : float, optional
+        Default is 0.1. Unused if ``ebsd_indexer_obj`` is passed.
+    nBands : int, optional
+        Number of detected bands to use in triplet voting. Default
+        is 9. Unused if ``ebsd_indexer_obj`` is passed.
+    backgroundSub : bool, optional
+        Whether to subtract a static background prior to indexing.
+        Default is ``False``.
+    patstart : int, optional
+        Starting index of the patterns to index. Default is ``0``.
+    npats : int, optional
+        Number of patterns to index. Default is ``-1``, which will
+        index up to the final pattern in ``patsin``.
+    return_indexer_obj : bool, optional
+        Whether to return the EBSD indexer. Default is ``False``.
+    ebsd_indexer_obj : EBSDIndexer, optional
+        EBSD indexer. If not given, many of the above parameters must be
+        passed. Otherwise, these parameters are retrieved from this
+        indexer.
+    clparams : list, optional
+        OpenCL parameters passed to :mod:`pyopencl` if the package is
+        installed.
+    verbose : int, optional
+        0 - no output (default), 1 - timings, 2 - timings and the Hough
+        transform of the first pattern with detected bands highlighted.
+    chunksize : int, optional
+        Default is 528.
+    gpu_id : int, optional
+        ID of GPU to use if :mod:`pyopencl` is installed.
+
+    Returns
+    -------
+    indxData : numpy.ndarray
+        Complex numpy array (or array of structured data), that is
+        [nphases + 1, npoints]. The data is stored for each phase used
+        in indexing and the ``indxData[-1]`` layer uses the best guess
+        on which is the most likely phase, based on the fit, and number
+        of bands matched for each phase. Each data entry contains the
+        orientation expressed as a quaternion (quat) (using the
+        convention of ``vendor`` or :attr:`indexer.vendor`), Pattern
+        Quality (pq), Confidence Metric (cm), Phase ID (phase), Fit
+        (fit) and Number of Bands Matched (nmatch). There are some other
+        metrics reported, but these are mostly for debugging purposes.
+    bandData : numpy.ndarray
+        Band identification data from the Radon transform.
+    indexer : EBSDIndexer
+        EBSD indexer, returned if ``return_indexer_obj=True``.
+    """
     pats = None
-    if patsIn is None:
+    if patsin is None:
         pdim = None
     else:
-        if isinstance(patsIn, ebsd_pattern.EBSDPatterns):
-            pats = patsIn.patterns
-        if type(patsIn) is np.ndarray:
-            pats = patsIn
-        if isinstance(patsIn, h5py.Dataset):
-            shp = patsIn.shape
+        if isinstance(patsin, ebsd_pattern.EBSDPatterns):
+            pats = patsin.patterns
+        elif isinstance(patsin, np.ndarray):
+            pats = patsin
+        elif isinstance(patsin, h5py.Dataset):
+            shp = patsin.shape
             if len(shp) == 3:
-                pats = patsIn
-            if len(shp) == 2:  # just read off disk now.
-                pats = patsIn[()]
+                pats = patsin
+            elif len(shp) == 2:  # Just read off disk now
+                pats = patsin[()]
                 pats = pats.reshape(1, shp[0], shp[1])
+        else:
+            raise ValueError("Unrecognized input data type")
 
-        if pats is None:
-            print("Unrecognized input data type")
-            return
         pdim = pats.shape[-2:]
 
-    if ebsd_indexer_obj == None:
+    if ebsd_indexer_obj is None:
         indexer = EBSDIndexer(
             filename=filename,
             phaselist=phaselist,
@@ -123,11 +207,10 @@ def index_pats(
 
     if filename is not None:
         indexer.update_file(filename)
-    if pats is not None:
-        if not np.all(indexer.bandDetectPlan.patDim == np.array(pdim)):
-            indexer.update_file(patDim=pats.shape[-2:])
+    if pats is not None and not np.all(indexer.bandDetectPlan.patDim == np.array(pdim)):
+        indexer.update_file(patDim=pats.shape[-2:])
 
-    if backgroundSub == True:
+    if backgroundSub:
         indexer.bandDetectPlan.collect_background(
             fileobj=indexer.fID, patsIn=pats, nsample=1000
         )
@@ -141,14 +224,63 @@ def index_pats(
         chunksize=chunksize,
     )
 
-    if return_indexer_obj == False:
+    if not return_indexer_obj:
         return dataout, banddata
     else:
         return dataout, banddata, indexer
 
 
 class EBSDIndexer:
-    """Setup of Hough indexing of EBSD patterns."""
+    """Setup of Hough indexing of EBSD patterns.
+
+    Parameters
+    ----------
+    filename : str, optional
+        Name of file with EBSD patterns.
+    phaselist : list of str, optional
+        Options are ``"FCC"`` and ``"BCC"``. Default is ``["FCC"]``.
+    vendor : str, optional
+        Which vendor convention to use for the pattern center (PC) and
+        the returned orientations. The available options are ``"EDAX"``
+        (default), ``"BRUKER"``, ``"OXFORD"``, ``"EMSOFT"``,
+        ``"KIKUCHIPY"``.
+    PC : list, optional
+        Pattern center (PCx, PCy, PCz) in the ``vendor`` convention. For
+        EDAX TSL, this is (x*, y*, z*), defined in fractions of pattern
+        width with respect to the lower left corner of the detector. If
+        not passed, this is set to (x*, y*, z*) = (0.471659, 0.675044,
+        0.630139). If ``vendor="EMSOFT"``, the PC must be four numbers,
+        the final number being the pixel size.
+    sampleTilt : float, optional
+        Sample tilt towards the detector in degrees. Default is 70
+        degrees. Unused if ``ebsd_indexer_obj`` is passed.
+    camElev : float, optional
+        Camera elevation in degrees. Default is 5.3 degrees. Unused
+        if ``ebsd_indexer_obj`` is passed.
+    bandDetectPlan : pyebsdindex.band_detect.BandDetect, optional
+        Collection of parameters using in band detection. Unused if
+        ``ebsd_indexer_obj`` is passed.
+    nRho : int, optional
+        Default is 90 degrees. Unused if ``ebsd_indexer_obj`` is
+        passed.
+    nTheta : int, optional
+        Default is 180 degrees. Unused if ``ebsd_indexer_obj`` is
+        passed.
+    tSigma : float, optional
+        Unused if ``ebsd_indexer_obj`` is passed.
+    rSigma : float, optional
+        Unused if ``ebsd_indexer_obj`` is passed.
+    rhoMaskFrac : float, optional
+        Default is 0.1. Unused if ``ebsd_indexer_obj`` is passed.
+    nBands : int, optional
+        Number of detected bands to use in triplet voting. Default
+        is 9. Unused if ``ebsd_indexer_obj`` is passed.
+    patDim : int, optional
+        Number of dimensions of pattern array.
+    **kwargs
+        Keyword arguments passed on to
+        :class:`~pyebsdindex.band_detect.BandDetect`.
+    """
 
     def __init__(
         self,
@@ -168,64 +300,12 @@ class EBSDIndexer:
         patDim=None,
         **kwargs
     ):
-        """Create an EBSD indexer.
-
-        Parameters
-        ----------
-        filename : str, optional
-            Name of file with EBSD patterns.
-        phaselist : list of str, optional
-            Options are ``"FCC"`` and ``"BCC"``. Default is ``["FCC"]``.
-        vendor : str, optional
-            This string determines the pattern center (PC) convention to
-            use. The available options are ``"EDAX"`` (default),
-            ``"BRUKER"``, ``"OXFORD"``, ``"EMSOFT"``, ``"KIKUCHIPY"``
-            (equivalent to ``"BRUKER"``).
-        PC : list, optional
-            (PCx, PCy, PCz) in the vendor convention. For EDAX TSL, this
-            is x*, y*, z*, defined in fractions of pattern width with
-            respect to the lower left corner of the detector. If not
-            passed, this is set to (x*, y*, z*) = (0.471659, 0.675044,
-            0.630139). If ``vendor="EMSOFT"``, the PC must be four
-            numbers, the final number being the pixel size.
-        sampleTilt : float, optional
-            Sample tilt towards the detector in degrees. Default is 70
-            degrees. Unused if ``ebsd_indexer_obj`` is passed.
-        camElev : float, optional
-            Camera elevation in degrees. Default is 5.3 degrees. Unused
-            if ``ebsd_indexer_obj`` is passed.
-        bandDetectPlan : pyebsdindex.band_detect.BandDetect, optional
-            Collection of parameters using in band detection. Unused if
-            ``ebsd_indexer_obj`` is passed.
-        nRho : int, optional
-            Default is 90 degrees. Unused if ``ebsd_indexer_obj`` is
-            passed.
-        nTheta : int, optional
-            Default is 180 degrees. Unused if ``ebsd_indexer_obj`` is
-            passed.
-        tSigma : float, optional
-            Unused if ``ebsd_indexer_obj`` is passed.
-        rSigma : float, optional
-            Unused if ``ebsd_indexer_obj`` is passed.
-        rhoMaskFrac : float, optional
-            Default is 0.1. Unused if ``ebsd_indexer_obj`` is passed.
-        nBands : int, optional
-            Number of detected bands to use in triplet voting. Default
-            is 9. Unused if ``ebsd_indexer_obj`` is passed.
-        patDim : int, optional
-            Number of dimensions of pattern array.
-        **kwargs
-            Keyword arguments passed on to ``BandDetect``.
-        """
+        """Create an EBSD indexer."""
         self.filein = filename
         if self.filein is not None:
             self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
         else:
             self.fID = None
-
-        # self.fileout = filenameout
-        # if self.fileout is None:
-        #     self.fileout = str.lower(Path(self.filein).stem)+'.ang'
 
         self.phaselist = phaselist
         self.phaseLib = []
@@ -240,7 +320,7 @@ class EBSDIndexer:
             self.vendor = vendor
 
         if PC is None:
-            self.PC = np.array([0.471659, 0.675044, 0.630139])  # a default value
+            self.PC = np.array([0.471659, 0.675044, 0.630139])  # A default value
         else:
             self.PC = np.asarray(PC)
 
@@ -267,9 +347,8 @@ class EBSDIndexer:
             self.bandDetectPlan.band_detect_setup(
                 patDim=[self.fID.patternW, self.fID.patternH]
             )
-        else:
-            if patDim is not None:
-                self.bandDetectPlan.band_detect_setup(patDim=patDim)
+        elif patDim is not None:
+            self.bandDetectPlan.band_detect_setup(patDim=patDim)
 
         self.dataTemplate = np.dtype(
             [
@@ -286,6 +365,15 @@ class EBSDIndexer:
         )
 
     def update_file(self, filename=None, patDim=np.array([120, 120], dtype=np.int32)):
+        """Update file with patterns to index.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Name of file with EBSD patterns.
+        patDim : numpy.ndarray
+            1D array with two values, the pattern height and width.
+        """
         if filename is None:
             self.filein = None
             self.bandDetectPlan.band_detect_setup(patDim=patDim)
@@ -293,7 +381,7 @@ class EBSDIndexer:
             self.filein = filename
             self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
             self.bandDetectPlan.band_detect_setup(
-                patDim=[self.fID.patternW, self.fID.patternH]
+                patDim=[self.fID.patternH, self.fID.patternW]
             )
 
     def index_pats(
@@ -302,35 +390,35 @@ class EBSDIndexer:
         patstart=0,
         npats=-1,
         clparams=None,
-        PC=[None, None, None],
+        PC=None,
         verbose=0,
         chunksize=528,
     ):
-        """Hough indexing of EBSD patterns.
+        """Index EBSD patterns.
 
         Parameters
         ----------
         patsin : numpy.ndarray, optional
             EBSD patterns in an array of shape (n points, n pattern
             rows, n pattern columns). If not given, these are read from
-            `self.filename`.
+            :attr:`self.filename`.
         patstart : int, optional
-            Starting index of the patterns to index. Default is 0.
+            Starting index of the patterns to index. Default is ``0``.
         npats : int, optional
-            Number of patterns to index. Default is -1, which will index
-            up to the final pattern in `patsin`.
+            Number of patterns to index. Default is ``-1``, which will
+            index up to the final pattern in ``patsin``.
         clparams : list, optional
-            OpenCL parameters passed to pyopencl.
+            OpenCL parameters passed to :mod:`pyopencl`.
         PC : list, optional
-            (PCx, PCy, PCz) in the vendor convention. For EDAX TSL, this
-            is (x*, y*, z*), defined in fractions of pattern width with
-            respect to the lower left corner of the detector. If not
-            given, this is read from ``self.PC``. If
-            ``vendor="EMSOFT"``, the PC must be four numbers, the final
-            number being the pixel size.
+            Pattern center (PC) parameters (PCx, PCy, PCz) in the vendor
+            convention. For EDAX TSL, this is (x*, y*, z*), defined in
+            fractions of pattern width with respect to the lower left
+            corner of the detector. If not given, this is read from
+            :attr:`self.PC`. If :attr:`vendor` is ``"EMSOFT"``, the PC
+            must be four numbers, the final number being the pixel size.
         verbose : int, optional
-            0 - no output, 1 - timings, 2 - timings and the Hough
-            transform of the first pattern with detected bands
+            0 - no output (default), 1 - timings, 2 - timings and the
+            Hough transform of the first pattern with detected bands
             highlighted.
         chunksize : int, optional
             Default is 528.
@@ -356,10 +444,7 @@ class EBSDIndexer:
         npats : int
             Number of patterns indexed. This and `patstart` are useful
             for the distributed indexing procedures.
-
         """
-        tic = timer()
-
         if patsin is None:
             pats = self.fID.read_data(
                 returnArrayOnly=True,
@@ -387,26 +472,20 @@ class EBSDIndexer:
         if npats == -1:
             npats = npoints
 
-        # print(timer() - tic)
-        tic = timer()
         bandData = self.bandDetectPlan.find_bands(
             pats, clparams=clparams, verbose=verbose, chunksize=chunksize
         )
         shpBandDat = bandData.shape
-        if PC[0] is None:
+        if PC is None:
             PC_0 = self.PC
         else:
             PC_0 = PC
         bandNorm = self.bandDetectPlan.radonPlan.radon2pole(
             bandData, PC=PC_0, vendor=self.vendor
         )
-        # print('Find Band: ', timer() - tic)
 
-        # return bandNorm,patStart,patEnd
+        # Return bandNorm, patStart, patEnd
         tic = timer()
-        # bv = []
-        # for tl in self.phaseLib:
-        #  bv.append(band_vote.BandVote(tl))
         nPhases = len(self.phaseLib)
         q = np.zeros((nPhases, npoints, 4))
         indxData = np.zeros((nPhases + 1, npoints), dtype=self.dataTemplate)
@@ -434,10 +513,7 @@ class EBSDIndexer:
                         matchAttempts,
                         totvotes,
                     ) = self.phaseLib[j].tripvote(
-                        bandNorm1,
-                        band_intensity=bDat1["avemax"],
-                        goNumba=True,
-                        verbose=verbose,
+                        bandNorm1, band_intensity=bDat1["avemax"], verbose=verbose,
                     )
                     # avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].pairVoteOrientation(bandNorm1,goNumba=True)
                     if nMatch >= 3:
@@ -451,7 +527,7 @@ class EBSDIndexer:
                     if nMatch >= earlyexit:
                         break
 
-        qref2detect = self.refframe2detector()
+        qref2detect = self._refframe2detector()
         q = q.reshape(nPhases * npoints, 4)
         q = rotlib.quat_multiply(q, qref2detect)
         q = rotlib.quatnorm(q)
@@ -470,26 +546,28 @@ class EBSDIndexer:
 
         if verbose > 0:
             print("Band Vote Time: ", timer() - tic)
+
         return indxData, bandData, patstart, npats
 
-    def refframe2detector(self):
+    def _refframe2detector(self):
         ven = str.upper(self.vendor)
         if ven in ["EDAX", "EMSOFT", "KIKUCHIPY"]:
             q0 = np.array([np.sqrt(2.0) * 0.5, 0.0, 0.0, -1.0 * np.sqrt(2.0) * 0.5])
             tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
             q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
             quatref2detect = rotlib.quat_multiply(q1, q0)
-
-        if ven in ["OXFORD", "BRUKER"]:
+        elif ven in ["OXFORD", "BRUKER"]:
             tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
             q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
             quatref2detect = q1
+        else:
+            raise ValueError("`self.vendor` unknown")
 
         return quatref2detect
 
-    def pcCorrect(
-        self, xy=[[0.0, 0.0]]
-    ):  # at somepoint we will put some methods here for correcting the PC
-        # depending on the location within the scan.  Need to correct band_detect.radon2pole to accept a
-        # PC for each point
-        pass
+#    def pcCorrect(self, xy=[[0.0, 0.0]]):
+#        # TODO: At somepoint we will put some methods here for
+#        #  correcting the PC depending on the location within the scan.
+#        #  Need to correct band_detect.radon2pole to accept a PC for
+#        #  each point.
+#        pass

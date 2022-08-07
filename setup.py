@@ -13,9 +13,12 @@ extra_feature_requirements = {
     "doc": [
         "furo",
         "nbsphinx           >= 0.7",
+        "numpydoc",
         "sphinx             >= 3.0.2",
+        "sphinx-codeautolink[ipython]",
         "sphinx-copybutton  >= 0.2.5",
-        "sphinx-gallery     >= 0.6",
+        "sphinx-design",
+        "sphinx-gallery     < 0.11",
     ],
     "tests": [
         "coverage           >= 5.0",

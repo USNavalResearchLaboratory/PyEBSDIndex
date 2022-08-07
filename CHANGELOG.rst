@@ -13,6 +13,20 @@ Added
 - Explanation that the pixel size must be passed as the forth PC value whenever
   ``vendor=EMSOFT`` is used.
 
+Changed
+-------
+- Changed the parameter name ``patsIn`` to ``patsin`` in functions ``index_pats()`` and
+  ``index_pats_distributed()``, to be in line with ``EBSDIndex.index_pats()``, and
+  ``peakDetectPlan`` to ``bandDetectPlan`` in ``index_pats_distributed()``, to be in
+  line with the other two functions.
+- Reversed the order of the pattern height and width in the ``patDim`` parameter passed
+  to ``EBSDIndex.update_file()``: the new order is (height, width).
+
+Removed
+-------
+- Parameter ``filenameout`` in functions ``index_pats()`` and
+  ``index_pats_distributed()``, as it is unused.
+
 Fixed
 -----
 - OpenCL kernels and test data are also included in the built distribution (wheel), not

@@ -2,9 +2,9 @@
 Installation
 ============
 
-The package can be installed with `pip <https://pypi.org/project/pyebsdindex>`__ or from
-source on all operating systems with Python >= 3.7, and from Anaconda on Linux or
-Windows with Python 3.8 and 3.9.
+The package can be installed with `pip <https://pypi.org/project/pyebsdindex>`__,
+`conda <https://anaconda.org/conda-forge/pyebsdindex>`__, or from source, and supports
+Python >= 3.7. All alternatives are available on Windows, macOS and Linux.
 
 In order to avoid potential conflicts with other system Python packages, it is strongly
 recommended to use a virtual environment, such as ``venv`` or ``conda`` environments.
@@ -33,13 +33,17 @@ required for specific functionality:
 - ``tests`` - Dependencies to run tests.
 - ``dev`` - Install dependencies in the above selectors.
 
-From Anaconda
-=============
+With conda
+==========
 
 Installing from Anaconda on Linux or Windows (with ``jupyterlab`` and GPU support
 included)::
 
-    conda install -c conda-forge/label/pyebsdindex_rc pyebsdindex
+    conda install pyebsdindex -c conda-forge
+
+Installing on macOS (without ``ray[default]``, which has to be installed separately)::
+
+    conda install pyebsdindex-base -c conda-forge
 
 From source
 ===========
