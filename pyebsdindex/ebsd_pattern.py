@@ -51,6 +51,8 @@ def get_pattern_file_obj(path,file_type=str('')):
       ftype = 'OH5'
     elif (extension == '.h5'):
       ftype = 'H5'
+    elif (extension == '.h5oina'):
+      ftype = 'H5OINA'
     else:
       raise ValueError('Error: extension not recognized')
 
@@ -58,6 +60,11 @@ def get_pattern_file_obj(path,file_type=str('')):
     ebsdfileobj = UPFile(path)
   if (ftype.upper() == 'OH5'):
     ebsdfileobj = EDAXOH5(path)
+    if hdf5path is None: #automatically chose the first data group
+      ebsdfileobj.get_data_paths()
+      ebsdfileobj.set_data_path(pathindex=0)
+  if (ftype.upper() == 'H5OINA'):
+    ebsdfileobj = OXFORDOINA(path)
     if hdf5path is None: #automatically chose the first data group
       ebsdfileobj.get_data_paths()
       ebsdfileobj.set_data_path(pathindex=0)
@@ -647,7 +654,7 @@ class HDF5PatFile(EBSDPatternFile):
                 self.h5datagroups.append(grpset)
       else:
         self.h5othergrps.append(grpset)
-
+    f.close()
     if len(self.h5datagroups) < 1:
       print("No viable EBSD patterns found:",str(Path(self.filepath)))
       return -2
@@ -924,5 +931,93 @@ class BRUKERH5(HDF5PatFile):
 
       self.xStep = np.float32(headerpath['XSTEP'][()][0])
       self.yStep = np.float32(headerpath['YSTEP'][()][0])
+
+    return 0 #note this function uses multiple returns
+
+class OXFORDOINA(HDF5PatFile):
+  def __init__(self, path=None):
+    HDF5PatFile.__init__(self, path)
+    self.vendor = 'OXFORD'
+    #OXFORDOINA only attributes
+    self.filedatatype = None # np.uint8
+    self.patternh5id = 'Processed Patterns' # Could also be 'Raw Patterns'
+
+    if self.filepath is not None:
+      self.get_data_paths()
+
+  def set_data_path(self, datapath=None, pathindex=0): #overloaded from parent - will default to first group.
+    if datapath is not None:
+      self.h5patdatpth = datapath
+    else:
+      if len(self.h5datagroups) > 0:
+        #self.activegroupid = pathindex
+        self.h5patdatpth = self.h5datagroups[pathindex] + '/EBSD/Data/' + self.patternh5id
+  def get_data_paths(self, verbose=0, getraw = False):
+    '''Based on the OINA spec this will search for viable Pattern Datasets '''
+    try:
+      f = h5py.File(self.filepath,'r')
+    except:
+      print("File Not Found:",str(Path(self.filepath)))
+      return -1
+    self.h5datagroups = []
+    self.h5othergrps = []
+    if getraw is True:
+      self.patternh5id = 'Raw Patterns'
+    groupsets = list(f.keys())
+    for grpset in groupsets:
+      if isinstance(f[grpset],h5py.Group):
+        if 'EBSD' in f[grpset]:
+          if 'Data' in f[grpset + '/EBSD/']:
+            if self.patternh5id in f[grpset + '/EBSD/Data']:
+              if (grpset  not in self.h5datagroups):
+                self.h5datagroups.append(grpset)
+      else:
+        self.h5othergrps.append(grpset)
+    f.close()
+
+    if (len(self.h5datagroups) < 1) and (getraw is False):
+      self.get_data_paths(self, verbose=False, getraw=True)
+
+    if len(self.h5datagroups) < 1:
+      print("No viable EBSD patterns found:",str(Path(self.filepath)))
+      return -2
+    else:
+      if verbose > 0:
+        print(self.h5datagroups)
+    return len(self.h5datagroups)
+  def read_header(self, path=None):
+    
+    if path is not None:
+      self.filepath = path
+
+    try:
+      f = h5py.File(Path(self.filepath).expanduser(),'r')
+    except:
+      print("File Not Found:",str(Path(self.filepath)))
+      return -1
+
+    self.version = str(f['Format Version'][()][0])
+
+    if self.version >= '5.0':
+      ngrp = self.get_data_paths()
+      if ngrp <= 0:
+        f.close()
+        return -2 # no data groups with patterns found.
+      if self.h5patdatpth is None: # default to the first datagroup
+        self.set_data_path(pathindex=0)
+
+      dset = f[self.h5patdatpth]
+      shp = np.array(dset.shape)
+      self.patternW = shp[-1]
+      self.patternH = shp[-2]
+      self.nPatterns = shp[-3]
+      self.filedatatype = dset.dtype.type
+      headerpath = (f[self.h5patdatpth].parent.parent)["Header"]
+      self.nCols = np.int32(headerpath['X Cells'][()][0])
+      self.nRows = np.int32(headerpath['Y Cells'][()][0])
+      #self.hexFlag = np.int32(headerpath['Grid Type'][()][0] == 'HexGrid')
+
+      self.xStep = np.float32(headerpath['X Step'][()][0])
+      self.yStep = np.float32(headerpath['Y Step'][()][0])
 
     return 0 #note this function uses multiple returns
