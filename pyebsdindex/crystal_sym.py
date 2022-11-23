@@ -103,15 +103,123 @@ def cubicsym_q(quatin=None, low = False):
     return qsym
 
 
+def hexsym_q(quatin=None, low = False):
 
 
+  symops = np.zeros((12,4), dtype=np.float32)
+  #identity
+  symops [0,:] = np.array([1.0,0.0,0.0,0.0])
+  #60 deg about [0001]; remember that quat rotation is cos(ang/2)
+  symops[1, :] = np.array([np.cos(PI/6.0), 0.0,0.0,np.sin(PI/6.0)]) # rotation of 60
+  symops[2, :] = np.array([np.cos(PI/3.0), 0.0,0.0,np.sin(PI/3.0)]) # rotation of 120
+  symops[3, :] = np.array([0.0, 0.0,0.0,1.0]) # rotation of 180
+  symops[4, :] = np.array([np.cos(2.0*PI/3.0), 0.0, 0.0, np.sin(2.0*PI/3.0)])  # rotation of 240
+  symops[5, :] = np.array([np.cos(5.0*PI/6.0 ), 0.0, 0.0, np.sin(5.0*PI/6.0 )])  # rotation of 300
 
+  # 180 deg around the a axes
+  symops[6, :] =  np.array([0.0000000000, 1.000000000, 0.000000000, 0.000000000])
+  symops[7, :] =  np.array([0.0000000000, 0.866025400, 0.500000000, 0.000000000])
+  symops[8, :] =  np.array([0.000000000, 0.500000000, 0.866025400, 0.000000000])
+  symops[9, :] =  np.array([0.000000000, 0.000000000, 1.000000000, 0.000000000])
+  symops[10, :] = np.array([0.000000000, -0.50000000, 0.866025400, 0.000000000])
+  symops[11, :] = np.array([0.000000000, -0.86602540, 0.500000000, 0.000000000])
 
+  if low:
+    symops = symops[0:6,:]
 
-def triclinic_q(quatin=None):
+  if quatin is None:
+    return symops
+  else:
+    qsym = rotlib.quat_multiply(symops,quatin)
+    return qsym
+
+def trigonal_q(quatin=None, low = False):
+  symops = np.zeros((6, 4), dtype=np.float32)
+  # identity
+  symops[0, :] = np.array([1.0, 0.0, 0.0, 0.0])
+  # [001]; remember that quat rotation is cos(ang/2)
+  symops[1, :] = np.array([np.cos(PI / 3.0), 0.0, 0.0, np.sin(PI / 3.0)])  # rotation of 120
+  symops[2, :] = np.array([np.cos(2.0 * PI / 3.0), 0.0, 0.0, np.sin(2.0 * PI / 3.0)])  # rotation of 240
+
+  # 180 deg around the a axes
+  symops[3, :] = np.array([0.0000000000, 1.000000000, 0.000000000, 0.000000000])
+  symops[4, :] = np.array([0.000000000, -0.50000000, 0.866025400, 0.000000000])
+  symops[5, :] = np.array([0.000000000, -0.50000000, -0.866025400, 0.000000000])
+
+  if low:
+    symops = symops[0:3, :]
+
+  if quatin is None:
+    return symops
+  else:
+    qsym = rotlib.quat_multiply(symops, quatin)
+    return qsym
+
+def tetragonal_q(quatin=None, low = False):
+  symops = np.zeros((8, 4), dtype=np.float32)
+  # identity
+  symops[0, :] = np.array([1.0, 0.0, 0.0, 0.0])
+  # [001]; remember that quat rotation is cos(ang/2)
+  symops[1, :] = np.array([np.cos(PI /4.0), 0.0, 0.0, np.sin(PI / 4.0)])  # rotation of 90
+  symops[2, :] = np.array([0.0, 0.0, 0.0, 1.0])  # rotation of 180
+  symops[3, :] = np.array([np.cos(0.75*PI ), 0.0, 0.0, np.sin(0.75 * PI )])  # rotation of 270
+
+  # 180 deg around the [110] axes
+  symops[4, :] = np.array([0.0000000000, 0.5*np.sqrt(2.0), 0.5*np.sqrt(2.0), 0.000000000])
+  symops[5, :] = np.array([0.0000000000, -0.5 * np.sqrt(2.0), 0.5 * np.sqrt(2.0), 0.000000000])
+  #180 deg around [100], [010]
+  symops[6, :] = np.array([0.0000000000, 1.0, 0.0, 0.0])
+  symops[7, :] = np.array([0.0000000000, 0.0, 1.0, 0.0])
+
+  if low:
+    symops = symops[0:4, :]
+
+  if quatin is None:
+    return symops
+  else:
+    qsym = rotlib.quat_multiply(symops, quatin)
+    return qsym
+
+def orthorhombic_q(quatin=None, low = False):
+  symops = np.zeros((4, 4), dtype=np.float32)
+  # identity
+  symops[0, :] = np.array([1.0, 0.0, 0.0, 0.0])
+
+  symops[1, :] = np.array([0.0, 1.0, 0.0, 0.0])  # rotation of 180 x
+  symops[2, :] = np.array([0.0, 0.0, 1.0, 0.0])  # rotation of 180 y
+  symops[3, :] = np.array([0.0, 0.0, 0.0, 1.0])  # rotation of 180 z
+
+  if low:
+    pass
+
+  if quatin is None:
+    return symops
+  else:
+    qsym = rotlib.quat_multiply(symops, quatin)
+    return qsym
+
+def monoclinic_q(quatin=None, low = False):
+  symops = np.zeros((2, 4), dtype=np.float32)
+  # identity
+  symops[0, :] = np.array([1.0, 0.0, 0.0, 0.0])
+  # rotation of 180 x
+  symops[1, :] = np.array([0.0, 1.0, 0.0, 0.0])
+
+  if low:
+    pass
+
+  if quatin is None:
+    return symops
+  else:
+    qsym = rotlib.quat_multiply(symops, quatin)
+    return qsym
+
+def triclinic_q(quatin=None, low=False):
   symops = np.zeros((1,4),dtype=np.float32)
   # identity
   symops[0,:] = np.array([1.0,0.0,0.0,0.0])
+  if low:
+    pass
 
   if quatin is None:
     return symops
