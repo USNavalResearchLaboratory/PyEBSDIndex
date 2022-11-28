@@ -43,7 +43,7 @@ def cubicsym_q(quatin=None, low = False):
           If not provided [default] then
           the quaternions operators are returned.
       low : Default is ``False`` and the full m-3m symmetry operations are provided.
-      Set to ``True`` to return the m-3 (non-inversion) symmetry operators
+      Set to ``True`` to return the m-3 symmetry operators
 
       Returns
       -------
@@ -137,7 +137,7 @@ def hexsym_q(quatin=None, low = False):
             If not provided [default] then
             the quaternions operators are returned.
         low : Default is ``False`` and the full 6/mmm symmetry operations are provided.
-        Set to ``True`` to return the 6/m (non-inversion) symmetry operators
+        Set to ``True`` to return the 6/m symmetry operators
 
         Returns
         -------
@@ -187,7 +187,7 @@ def trigonal_q(quatin=None, low = False):
               If not provided [default] then
               the quaternions operators are returned.
           low : Default is ``False`` and the full -3m symmetry operations are returned.
-          Set to ``True`` to return the -3 (non-inversion) symmetry operators are returned
+          Set to ``True`` to return the -3 symmetry operators are returned
 
           Returns
           -------
@@ -230,7 +230,7 @@ def tetragonal_q(quatin=None, low = False):
                 If not provided [default] then
                 the quaternions operators are returned.
             low : Default is ``False`` and the full 4/mmm symmetry operations are returned.
-            Set to ``True`` to return the 4/m (non-inversion) symmetry operators are returned
+            Set to ``True`` to return the 4/m symmetry operators are returned
 
             Returns
             -------
@@ -465,3 +465,19 @@ def spacegroupnum2symops(spacegroupid):
           """
 
   return laueid2symops(spacegroup2lauenumber(spacegroupid))
+
+def hex4poles2hex3poles(poles):
+  npoles = poles.size/4
+  poles4 = np.reshape(poles, (npoles, 4))
+  poles3 = poles4[:, [0,1,3]]
+  return poles3
+
+def hex3poles2hex4poles(poles):
+  npoles = poles.size/3
+  poles3 = np.reshape(poles, (npoles, 4))
+  poles4 = np.zeros((npoles, 4))
+  poles4[:,0] = poles3[:,0]
+  poles4[:, 1] = poles3[:, 1]
+  poles4[:, 3] = poles3[:, 2]
+  poles4[:, 2] = - (poles3[:,0] + poles3[:,1])
+  return poles4
