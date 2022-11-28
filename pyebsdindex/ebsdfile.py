@@ -24,7 +24,7 @@ def writeang(filename, indexer, data,
       f.write('# Formula '+'\t \r\n')
       f.write('# Info '+'\t\t \r\n')
       f.write('# Symmetry              '+str(phase.tripLib.laue_code)+'\r\n')
-      f.write('# PointGroupID              ' + str(phase.tripLib.symmetry_pgID)+'\r\n')
+      f.write('# PointGroupID              ' + str(phase.tripLib.symmetry_pgid)+'\r\n')
       f.write('# LatticeConstants      '+ ' '.join(str(' {:.3f}'.format(x)) for x in phase.tripLib.latticeParameter)+'\r\n')
       f.write('# NumberFamilies             ' + str(phase.tripLib.nfamily)+'\r\n')
       for i in range(phase.tripLib.nfamily):

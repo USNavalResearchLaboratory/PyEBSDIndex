@@ -467,14 +467,14 @@ def spacegroupnum2symops(spacegroupid):
   return laueid2symops(spacegroup2lauenumber(spacegroupid))
 
 def hex4poles2hex3poles(poles):
-  npoles = poles.size/4
-  poles4 = np.reshape(poles, (npoles, 4))
+  npoles = int(np.array(poles).size/4)
+  poles4 = np.reshape(np.array(poles), (npoles, 4))
   poles3 = poles4[:, [0,1,3]]
   return poles3
 
 def hex3poles2hex4poles(poles):
-  npoles = poles.size/3
-  poles3 = np.reshape(poles, (npoles, 4))
+  npoles = int(poles.size/3)
+  poles3 = np.reshape(poles, (npoles, 3))
   poles4 = np.zeros((npoles, 4))
   poles4[:,0] = poles3[:,0]
   poles4[:, 1] = poles3[:, 1]

@@ -39,6 +39,7 @@ class triplib():
     self.tripID = None # family IDs of the reflectors ([hkl]) in self.tripAngles
     self.completelib = None # dictionary of all angle parirs and their specific pole hkl
     self.symmetry_pg = None # point group nomenclature
+    self.symmetry_pgid = None
     self.symmetry_sgid = None  # space group id 1-230
     self.laue_code = None # Laue code for the space group (following DREAM.3D notation.
     self.qsymops = None # array of quaternions that represent proper symmetry operations for the laue group
@@ -96,7 +97,7 @@ class triplib():
     #     self.latticeParameter = np.array([1.0, 1.0, 1.63, 90.0, 90.0, 120.0])
     #   else:
     #     self.latticeParameter = laticeParameter
-    #   self.build_bcc()
+    #   self.build_hcp()
     #   return
 
 
@@ -104,6 +105,7 @@ class triplib():
     if self.phaseName is None:
       self.phaseName = 'FCC'
     self.symmetry_pg = "Cubic m3m"
+    self.symmetry_pgid = 131
     self.symmetry_sgid = 225
     self.laue_code = crystal_sym.spacegroup2lauenumber(self.symmetry_sgid)
     self.qsymops = crystal_sym.laueid2symops(self.laue_code)
@@ -114,6 +116,7 @@ class triplib():
     if self.phaseName is None:
       self.phaseName = 'Diamond Cubic'
     self.symmetry_pg = "Cubic m3m"
+    self.symmetry_pgid = 131
     self.symmetry_sgid = 227
     self.laue_code = crystal_sym.spacegroup2lauenumber(self.symmetry_sgid)
     self.qsymops = crystal_sym.laueid2symops(self.laue_code)
@@ -124,6 +127,7 @@ class triplib():
     if self.phaseName is None:
       self.phaseName = 'BCC'
     self.symmetry_pg = "Cubic m3m"
+    self.symmetry_pgid = 131
     self.symmetry_sgid = 229
     self.laue_code = crystal_sym.spacegroup2lauenumber(self.symmetry_sgid)
     self.qsymops = crystal_sym.laueid2symops(self.laue_code)
@@ -140,38 +144,49 @@ class triplib():
     self.laue_code = crystal_sym.spacegroup2lauenumber(self.symmetry_sgid)
     self.qsymops = crystal_sym.laueid2symops(self.laue_code)
     poles4 = np.array([[1,0, -1, 0], [1, 0, -1, 1], [0,0, 0, 2], [1, 0, -1, 3], [1,1,-2,0], [1,0,-1,2]])
-    poles = crystal_sym.hex4poles2hex3poles(poles4)
-    self.build_trip_lib(poles)
+    self.build_hex_trip_lib(poles4)
+
+  def build_hex_trip_lib(self, poles4):
+    poles3 = crystal_sym.hex4poles2hex3poles(poles4)
+    self.build_trip_lib(poles3)
+    p3temp = self.family
+    p4temp = crystal_sym.hex3poles2hex4poles(p3temp)
+    self.family = p4temp
+
+
 
   def build_trip_lib(self,poles):
-    symmetry = self.qsymops
-    crystal = crystallometry.Crystal(self.phaseName,
+    #symmetry = self.qsymops
+    crystalmats = crystallometry.Crystal(self.phaseName,
                                      self.latticeParameter[0],
                                      self.latticeParameter[1],
                                      self.latticeParameter[2],
                                      self.latticeParameter[3],
                                      self.latticeParameter[4],
                                      self.latticeParameter[5])
-    nsym = symmetry.shape[0]
+    #nsym = self.qsymops.shape[0]
     npoles = poles.shape[0]
     sympoles = [] # list of all HKL variants which does not count the invariant pole as unique.
-    sympolesN = [] # normalized, floating point version of the poles in sample coordinates
+    #sympolesN = [] # normalized, floating point version of the poles in sample coordinates
     sympolesComplete = [] # list of all HKL variants with no duplicates
     nFamComplete = np.zeros(npoles, dtype = np.int32) # number of
     nFamily = np.zeros(npoles, dtype = np.int32)
     polesFlt = np.array(poles, dtype=np.float32) # convert the input poles to floating point (but still HKL int values)
 
     for i in range(npoles):
-      family = rotlib.quat_vector(symmetry,polesFlt[i,:])
+      family = self._symrot(polesFlt[i,:], crystalmats) #rotlib.quat_vector(symmetry,polesFlt[i,:])
+      #print(family)
       uniqHKL = self._hkl_unique(family, reduceInversion=False)
       uniqHKL = np.flip(uniqHKL, axis=0)
       sympolesComplete.append(uniqHKL)
       nFamComplete[i] = np.int32((sympolesComplete[-1]).size/3)
 
-      uniqHKL2 = self._hkl_unique(family, reduceInversion=True, rMT = crystal.reciprocalMetricTensor)
+      uniqHKL2 = self._hkl_unique(family, reduceInversion=True, rMT = crystalmats.reciprocalMetricTensor)
       nFamily[i] = np.int32(uniqHKL2.size/3)
-      sign = np.squeeze(self._calc_pole_dot_int(uniqHKL2, polesFlt[i, :], rMetricTensor=crystal.reciprocalMetricTensor))
+      sign = np.squeeze(self._calc_pole_dot_int(uniqHKL2, polesFlt[i, :], rMetricTensor=crystalmats.reciprocalMetricTensor))
+      sign = np.atleast_1d(sign)
       whmx = (np.abs(sign)).argmax()
+
       sign = np.round(sign[whmx])
       uniqHKL2 *= sign
 
@@ -190,7 +205,9 @@ class triplib():
         # all the angles between it, and the poles in family "j"
         ang = np.clip(ang, -1.0, 1.0)
         sign = (ang >= 0).astype(np.float32) - (ang < 0).astype(np.float32)
+        sign = np.atleast_1d(sign)
         ang = np.round(np.arccos(sign * ang)*RADEG*100).astype(np.int32) # get the unique angles between the input
+        ang = np.atleast_1d(ang)
         # pole, and the family poles. Angles within 0.01 deg are taken as the same.
         unqang, argunq = np.unique(ang, return_index=True)
         unqang = unqang/100.0 # revert back to the actual angle in degrees.
@@ -251,10 +268,10 @@ class triplib():
     #print(libANG)
     #print(libANG.shape)
     # now make a table of the angle between all the poles (allowing inversino)
-    angTable = self._calc_pole_dot_int(sympolesComplete, sympolesComplete, rMetricTensor=crystal.reciprocalMetricTensor)
+    angTable = self._calc_pole_dot_int(sympolesComplete, sympolesComplete, rMetricTensor=crystalmats.reciprocalMetricTensor)
     angTable = np.arccos(angTable)*RADEG
     famindx0 = ((np.concatenate( ([0],np.cumsum(nFamComplete)) ))[0:-1]).astype(dtype=np.int64)
-    cartPoles = self._xstalplane2cart(sympolesComplete, rStructMatrix=crystal.reciprocalStructureMatrix)
+    cartPoles = self._xstalplane2cart(sympolesComplete, rStructMatrix=crystalmats.reciprocalStructureMatrix)
     cartPoles /= np.linalg.norm(cartPoles, axis = 1).reshape(np.int64(cartPoles.size/3),1)
     completePoleFamId = np.zeros(sympolesComplete.shape[0], dtype=np.int32)
     for i in range(npoles):
@@ -278,6 +295,8 @@ class triplib():
     self.tripID = libID
 
 
+  def _symrot(self, poles, crystalmats):
+         return rotlib.quat_vector(self.qsymops, poles)
 
   def _hkl_unique(self, poles, reduceInversion=True, rMT = np.identity(3)):
     """
