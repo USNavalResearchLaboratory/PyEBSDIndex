@@ -198,7 +198,8 @@ class triplib():
     polePairs = []
     for i in range(npoles):
       for j in range(i, npoles):
-        ang = np.squeeze(self._calc_pole_dot_int(polesFlt[i, :], sympoles[j])) # for each input pole, calculate
+        ang = np.squeeze(self._calc_pole_dot_int(polesFlt[i, :], sympoles[j],
+                                                 rMetricTensor=crystalmats.reciprocalMetricTensor)) # for each input pole, calculate
         # all the angles between it, and the poles in family "j"
         ang = np.clip(ang, -1.0, 1.0)
         sign = (ang >= 0).astype(np.float32) - (ang < 0).astype(np.float32)
