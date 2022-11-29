@@ -46,8 +46,6 @@ class triplib():
     self.phaseName = None # User provided name of the phase.
     self.latticeParameter = None # 6 element array for the lattice parmeter.
 
-
-
     if phaseName is None:
       self.phaseName = libType
     else:
@@ -174,7 +172,7 @@ class triplib():
     polesFlt = np.array(poles, dtype=np.float32) # convert the input poles to floating point (but still HKL int values)
 
     for i in range(npoles):
-      family = self._symrot(polesFlt[i,:], crystalmats) #rotlib.quat_vector(symmetry,polesFlt[i,:])
+      family = self._symrotpoles(polesFlt[i, :], crystalmats) #rotlib.quat_vector(symmetry,polesFlt[i,:])
       uniqHKL = self._hkl_unique(family, reduceInversion=False)
       uniqHKL = np.flip(uniqHKL, axis=0)
       sympolesComplete.append(uniqHKL)
@@ -294,11 +292,17 @@ class triplib():
     self.tripID = libID
 
 
-  def _symrot(self, pole, crystalmats):
+  def _symrotpoles(self, pole, crystalmats):
 
     polecart = np.matmul(crystalmats.reciprocalStructureMatrix, np.array(pole).T)
     sympolescart = rotlib.quat_vector(self.qsymops, polecart)
     return np.transpose(np.matmul(crystalmats.invReciprocalStructureMatrix, sympolescart.T))
+
+  def _symrotdir(self, pole, crystalmats):
+
+    polecart = np.matmul(crystalmats.directStructureMatrix, np.array(pole).T)
+    sympolescart = rotlib.quat_vector(self.qsymops, polecart)
+    return np.transpose(np.matmul(crystalmats.invDirectStructureMatrix, sympolescart.T))
 
   def _hkl_unique(self, poles, reduceInversion=True, rMT = np.identity(3)):
     """
