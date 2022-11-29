@@ -82,6 +82,8 @@ class Crystal:
         sb = np.sin( beta*np.pi/180)
         sg = np.sin(gamma*np.pi/180)
         tg = np.tan(gamma*np.pi/180)
+        fabg = ca*cb-cg
+
 
         #compute the real space metric tensor
         self.metricTensor = np.zeros([3,3])
@@ -127,6 +129,20 @@ class Crystal:
         self.directStructureMatrix[2,2] = self.volume/(a*b*sg)
         self.directStructureMatrix = self.directStructureMatrix.transpose()
         self.directStructureMatrix[np.abs(self.directStructureMatrix) < smallThreshold] = 0
+
+        # Compute inverse direct stucture matrix
+        self.invDirectStructureMatrix = np.zeros([3, 3])
+        self.invDirectStructureMatrix[0, 0] = 1.0/a
+        self.invDirectStructureMatrix[1, 0] = -1.0/(a * tg)
+        self.invDirectStructureMatrix[2, 0] = b*c * (cg*ca-cb)/(self.volume * sg)
+        self.invDirectStructureMatrix[0, 1] = 0.0
+        self.invDirectStructureMatrix[1, 1] = 1.0/(b * sg)
+        self.invDirectStructureMatrix[2, 1] = a*c*(cb*cg-ca)/(self.volume*sg)
+        self.invDirectStructureMatrix[0, 2] = 0.0
+        self.invDirectStructureMatrix[1, 2] = 0.0
+        self.invDirectStructureMatrix[2, 2] = a*b*sg/(self.volume)
+        self.invDirectStructureMatrix = self.invDirectStructureMatrix.transpose()
+        self.invDirectStructureMatrix[np.abs(self.invDirectStructureMatrix) < smallThreshold] = 0
         
         #compute reciprocal structure matrix
         self.reciprocalStructureMatrix = np.zeros([3,3])
@@ -141,6 +157,10 @@ class Crystal:
         self.reciprocalStructureMatrix[2,2] = (a*b*sg)/self.volume
         self.reciprocalStructureMatrix = self.reciprocalStructureMatrix.transpose()
         self.reciprocalStructureMatrix[np.abs(self.reciprocalStructureMatrix) < smallThreshold] = 0
+
+        # Compute inverse reciprocal stucture matrix
+        self.invReciprocalStructureMatrix = np.zeros([3, 3])
+        self.invReciprocalStructureMatrix = np.transpose(self.directStructureMatrix)
 
     # def get_lattice_centering(self):
     #     self.latticeCentering = self.spaceGroup[0]

@@ -90,15 +90,15 @@ class triplib():
       self.build_dc()
       return
 
-    # if str(libType).upper() == 'HCP':
-    #   if phaseName is None:
-    #     self.phaseName = 'HCP'
-    #   if laticeParameter is None:
-    #     self.latticeParameter = np.array([1.0, 1.0, 1.63, 90.0, 90.0, 120.0])
-    #   else:
-    #     self.latticeParameter = laticeParameter
-    #   self.build_hcp()
-    #   return
+    if str(libType).upper() == 'HCP':
+      if phaseName is None:
+        self.phaseName = 'HCP'
+      if laticeParameter is None:
+        self.latticeParameter = np.array([1.0, 1.0, 1.63, 90.0, 90.0, 120.0])
+      else:
+        self.latticeParameter = laticeParameter
+      self.build_hcp()
+      return
 
 
   def build_fcc(self):
@@ -175,7 +175,6 @@ class triplib():
 
     for i in range(npoles):
       family = self._symrot(polesFlt[i,:], crystalmats) #rotlib.quat_vector(symmetry,polesFlt[i,:])
-      #print(family)
       uniqHKL = self._hkl_unique(family, reduceInversion=False)
       uniqHKL = np.flip(uniqHKL, axis=0)
       sympolesComplete.append(uniqHKL)
@@ -295,8 +294,11 @@ class triplib():
     self.tripID = libID
 
 
-  def _symrot(self, poles, crystalmats):
-         return rotlib.quat_vector(self.qsymops, poles)
+  def _symrot(self, pole, crystalmats):
+
+    polecart = np.matmul(crystalmats.reciprocalStructureMatrix, np.array(pole).T)
+    sympolescart = rotlib.quat_vector(self.qsymops, polecart)
+    return np.transpose(np.matmul(crystalmats.invReciprocalStructureMatrix, sympolescart.T))
 
   def _hkl_unique(self, poles, reduceInversion=True, rMT = np.identity(3)):
     """
