@@ -50,7 +50,7 @@ def _optfunction(PC_i, indexer, banddat):
         whgood = np.nonzero(band_data1['max'] > -1e6)[0]
         if whgood.size >= 3:
             band_norm1 = band_norm1[whgood, :]
-            fit = phase.tripvote(band_norm1, goNumba=True)[1]
+            fit = phase.bandindex(band_norm1)[1]
             if fit < 90:
                 average_fit += fit
                 n_averages += 1

@@ -29,11 +29,10 @@ from timeit import default_timer as timer
 import numpy as np
 import h5py
 
+from pyebsdindex import tripletvote as bandindexer # use triplet voting as the default indexer.
 from pyebsdindex import (
-    band_vote,
     ebsd_pattern,
     rotlib,
-    tripletlib,
     _pyopencl_installed,
 )
 
@@ -310,7 +309,10 @@ class EBSDIndexer:
         self.phaselist = phaselist
         self.phaseLib = []
         for ph in self.phaselist:
-            self.phaseLib.append(band_vote.BandVote(tripletlib.triplib(libType=ph)))
+            if (ph.__class__.__name__).lower() == 'str':
+                self.phaseLib.append(bandindexer.addphase(libtype=ph))
+            if (ph.__class__.__name__) == 'BandIndexer':
+                self.phaseLib.append(ph)
 
         self.vendor = "EDAX"
         if vendor is None:
@@ -512,7 +514,7 @@ class EBSDIndexer:
                         nMatch,
                         matchAttempts,
                         totvotes,
-                    ) = self.phaseLib[j].tripvote(
+                    ) = self.phaseLib[j].bandindex(
                         bandNorm1, band_intensity=bDat1["avemax"], verbose=verbose,
                     )
                     # avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].pairVoteOrientation(bandNorm1,goNumba=True)

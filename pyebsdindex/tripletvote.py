@@ -1,4 +1,4 @@
-"""This software was developed by employees of the US Naval Research Laboratory (NRL), an
+'''This software was developed by employees of the US Naval Research Laboratory (NRL), an
 agency of the Federal Government. Pursuant to title 17 section 105 of the United States
 Code, works of NRL employees are not subject to copyright protection, and this software
 is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
@@ -18,7 +18,7 @@ works bear some notice that they are derived from it, and any modified versions 
 some notice that they have been modified.
 
 Author: David Rowenhorst;
-The US Naval Research Laboratory Date: 21 Aug 2020"""
+The US Naval Research Laboratory Date: 21 Aug 2020'''
 
 from os import environ
 from pathlib import PurePath
@@ -26,10 +26,10 @@ import platform
 import tempfile
 from timeit import default_timer as timer
 
-import numba
 import numpy as np
+import numba
 
-from pyebsdindex import rotlib
+from pyebsdindex import crystal_sym, rotlib, crystallometry
 
 
 RADEG = 180.0/np.pi
@@ -38,31 +38,369 @@ tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettemp
 tempdir = tempdir.joinpath('numba')
 environ["NUMBA_CACHE_DIR"] = str(tempdir)
 
+def addphase(libtype=None, phasename=None,
+             spacegroup=None,
+             latticeparameter=None,
+             polefamilies=None):
 
-class BandVote:
-  def __init__(self, tripLib, angTol=3.0, high_fidelity=True):
-    self.tripLib = tripLib
-    self.phase_name = self.tripLib.phaseName
-    self.phase_sym = self.tripLib.pointgroup
-    self.lattice_param = self.tripLib.latticeParameter
+  if libtype is not None:
+
+    #set up generic FCC
+    if str(libtype).upper() == 'FCC':
+      if phasename is None:
+        phasename = 'FCC'
+      if spacegroup is None:
+        spacegroup = 225
+      if latticeparameter is None:
+        latticeparameter = np.array([1.0, 1.0, 1.0, 90.0, 90.0, 90.0])
+      else:
+        latticeparameter = np.array(latticeparameter)
+      if polefamilies is None:
+        polefamilies = np.array([[0, 0, 2], [1, 1, 1], [0, 2, 2], [1, 1, 3]])
+      else:
+        polefamilies = np.array(polefamilies)
+
+    # Set up a generic HCP
+    if str(libtype).upper() == 'BCC':
+      if phasename is None:
+        phasename = 'BCC'
+      if spacegroup is None:
+        spacegroup = 229
+      if latticeparameter is None:
+        latticeparameter = np.array([1.0, 1.0, 1.0, 90.0, 90.0, 90.0])
+      else:
+        latticeparameter = np.array(latticeparameter)
+      if polefamilies is None:
+        polefamilies = np.array([[0, 1, 1], [0, 0, 2], [1, 1, 2], [0, 1, 3]])
+      else:
+        polefamilies = np.array(polefamilies)
+
+    # Set up a generic HCP
+    if str(libtype).upper() == 'HCP':
+      if phasename is None:
+        phasename = 'HCP'
+      if spacegroup is None:
+        spacegroup = 229
+      if latticeparameter is None:
+        latticeparameter = np.array([1.0, 1.0, 1.63, 90.0, 90.0, 120.0])
+      else:
+        latticeparameter = np.array(latticeparameter)
+      if polefamilies is None:
+        polefamilies = np.array([[1, 0, -1, 0], [1, 0, -1, 1], [0, 0, 0, 2], [1, 0, -1, 3], [1, 1, -2, 0], [1, 0, -1, 2]])
+      else:
+        polefamilies = np.array(polefamilies)
+
+  else:
+    if spacegroup is None:
+      return addphase(libtype='FCC', latticeparameter=latticeparameter, polefamilies=polefamilies, phasename = phasename)
+    if latticeparameter is None:
+      latticeparameter = np.array([1.0, 1.0, 1.0, 90.0, 90.0, 90.0])
+    if polefamilies is None:
+      polefamilies = np.array([[0, 0, 2], [1, 1, 1], [0, 2, 2], [1, 1, 3]])
+
+  triplib = BandIndexer(phasename=phasename, spacegroup=spacegroup,
+                        latticeparameter=latticeparameter, polefamilies=polefamilies)
+
+  triplib.build_trip_lib()
+  return triplib
+
+class BandIndexer():
+  #def __init__(self, libType='FCC', phaseName=None, laticeParameter = None):
+  def __init__(self,
+               phasename=None,
+               spacegroup = None,
+               latticeparameter=None,
+               polefamilies = None,
+               angTol=3.0,
+               n_band_early_exit = 8):
+    self.phaseName = None  # User provided name of the phase.
+    self.spacegroup = None  # space group id 1-230
+    self.latticeParameter = None  # 6 element array for the lattice parameter.
+    self.polefamilies = None  # array of integer pole normals that should have reflections
+    self.npolefamilies = None  # number of unique reflector families
+    self.crystalmats = None  # store the four crystal matrices useful for angle/cartisian conversions.
+
+    self.lauecode = None  # Laue code for the space group (following DREAM.3D notation.
+    self.qsymops = None  # array of quaternions that represent proper symmetry operations for the laue group
+
+    self.pointgroup = ' '  # point group nomenclature
+    self.pointgroupid = None
+
     self.angTol = angTol
-    self.n_band_early_exit = 8
-    self.high_fidelity = high_fidelity
-    # these lookup tables are used to order the index for the pole-family when
-    # sorting triplet angles from low to high.
-    LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]],dtype=np.int64)
-    LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]],dtype=np.int64)
+    self.n_band_early_exit = n_band_early_exit
+    self.high_fidelity = True
 
-    LUT = np.zeros((3,3,3,3),dtype=np.int64)
+    # many objects to hold the information about the reflecting poles, angles between them ...
+    self.angpairs = None # dictionary that will store the possible unique angles between all pole families.
+    self.angtriplets = None # dictionary that will store all possible angle triplets within the pole family.
+    self.completelib = None # dictionary that will hold all possible angles (non-unique) between the families and
+    # all possible poles
+
+    # these Look Up Tables are used in the sorting/unsorting of angle triplets.
+    luta = np.array([[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]])
+    lutb = np.array([[0, 1, 2], [1, 0, 2], [0, 2, 1], [2, 0, 1], [1, 2, 0], [2, 1, 0]])
+    lut = np.zeros((3, 3, 3, 3), dtype=np.int64)
     for i in range(6):
-      LUT[:,LUTA[i,0],LUTA[i,1],LUTA[i,2]] = LUTB[i,:]
-    self.LUT = np.asarray(LUT).copy()
+      lut[:, luta[i, 0], luta[i, 1], luta[i, 2]] = lutb[i, :]
+    self.lut = np.asarray(lut).copy()
 
-  def tripvote(self, band_norms, band_intensity = None, goNumba = True, verbose=0):
+    if phasename is None:
+      self.phasename = ' '
+    else:
+      self.phasename = str(phasename)
+
+    if latticeparameter is not None:
+      self.setlatticeparameter(latticeparameter)
+
+
+    if spacegroup is not None:
+      self.setspacegroup(spacegroup)
+
+    if polefamilies is not None:
+      self.setpolefamilies(polefamilies)
+
+
+  def setlatticeparameter(self, latticeparameter):
+    self.latticeparameter = np.array(latticeparameter)
+    self.crystalmats = crystallometry.Crystal(self.phaseName,
+                                              self.latticeparameter[0],
+                                              self.latticeparameter[1],
+                                              self.latticeparameter[2],
+                                              self.latticeparameter[3],
+                                              self.latticeparameter[4],
+                                              self.latticeparameter[5])
+
+  def setspacegroup(self, spacegroup = 225):
+    self.spacegroup = spacegroup
+    self.lauecode = crystal_sym.spacegroup2lauenumber(self.spacegroup)
+    self.qsymops = crystal_sym.laueid2symops(self.lauecode)
+
+  def setpolefamilies(self, reflectors):
+    self.polefamilies = np.array(reflectors)
+
+  # def build_fcc(self):
+  #   if self.phaseName is None:
+  #     self.phaseName = 'FCC'
+  #   self.pointgroup = "Cubic m3m"
+  #   self.pointgroupid = 131
+  #   self.spacegroup = 225
+  #   self.lauecode = crystal_sym.spacegroup2lauenumber(self.spacegroup)
+  #   self.qsymops = crystal_sym.laueid2symops(self.lauecode)
+  #   poles = np.array([[0,0,2], [1,1,1], [0,2,2], [1,1,3]])
+  #   self.build_trip_lib(poles)
+  #
+  # def build_dc(self):
+  #   if self.phaseName is None:
+  #     self.phaseName = 'Diamond Cubic'
+  #   self.pointgroup = "Cubic m3m"
+  #   self.pointgroupid = 131
+  #   self.spacegroup = 227
+  #   self.lauecode = crystal_sym.spacegroup2lauenumber(self.spacegroup)
+  #   self.qsymops = crystal_sym.laueid2symops(self.lauecode)
+  #   poles = np.array([[1, 1, 1], [0, 2, 2], [0, 0, 4], [1, 1, 3], [2, 2, 4], [1, 3, 3]])
+  #   self.build_trip_lib(poles)
+  #
+  # def build_bcc(self):
+  #   if self.phaseName is None:
+  #     self.phaseName = 'BCC'
+  #   self.pointgroup = "Cubic m3m"
+  #   self.pointgroupid = 131
+  #   self.spacegroup = 229
+  #   self.lauecode = crystal_sym.spacegroup2lauenumber(self.spacegroup)
+  #   self.qsymops = crystal_sym.laueid2symops(self.lauecode)
+  #   poles = np.array([[0,1,1],[0,0,2],[1,1,2],[0,1,3]])
+  #   self.build_trip_lib(poles)
+
+
+
+  # def build_hcp(self):
+  #   if self.phaseName is None:
+  #     self.phaseName = 'HCP'
+  #   self.pointgroup = "Hexagonal 6/mmm"
+  #   self.spacegroup = 194
+  #   self.lauecode = crystal_sym.spacegroup2lauenumber(self.spacegroup)
+  #   self.qsymops = crystal_sym.laueid2symops(self.lauecode)
+  #   poles4 = np.array([[1,0, -1, 0], [1, 0, -1, 1], [0,0, 0, 2], [1, 0, -1, 3], [1,1,-2,0], [1,0,-1,2]])
+  #   self.build_hex_trip_lib(poles4)
+  #
+  # def build_hex_trip_lib(self, poles4):
+  #   poles3 = crystal_sym.hex4poles2hex3poles(poles4)
+  #   self.build_trip_lib(poles3)
+  #   p3temp = self.polefamilies
+  #   p4temp = crystal_sym.hex3poles2hex4poles(p3temp)
+  #   self.polefamilies = p4temp
+
+  def build_trip_lib(self):
+
+    if self.spacegroup is None:
+      print('No Space Group ID is set')
+      return
+    if self.latticeparameter is None:
+      print('No lattice parameter is set')
+      return
+    if self.polefamilies is None:
+      print('No pole familes are set')
+      return
+
+    crystalmats = self.crystalmats
+
+    poles = np.array(self.polefamilies)
+    if (self.lauecode == 62) or (self.lauecode == 6):
+      if self.polefamilies.shape[-1] == 4:
+        poles = crystal_sym.hex4poles2hex3poles(np.array(self.poles))
+    poles = np.reshape(poles, (-1,3) )
+
+    npoles = poles.shape[0]
+    sympoles = [] # list of all HKL variants which does not count the invariant pole as unique.
+
+    sympolesComplete = [] # list of all HKL variants with no duplicates
+    nFamComplete = np.zeros(npoles, dtype = np.int32) # number of
+    nFamily = np.zeros(npoles, dtype = np.int32)
+    polesFlt = np.array(poles, dtype=np.float32) # convert the input poles to floating point (but still HKL int values)
+
+    for i in range(npoles):
+      family = self._symrotpoles(polesFlt[i, :], crystalmats) #rotlib.quat_vector(symmetry,polesFlt[i,:])
+      uniqHKL = self._hkl_unique(family, reduceInversion=False)
+      uniqHKL = np.flip(uniqHKL, axis=0)
+      sympolesComplete.append(uniqHKL)
+      nFamComplete[i] = np.reshape(sympolesComplete[-1],(-1,3)).shape[0] #np.int32((sympolesComplete[-1]).size/3)
+
+      uniqHKL2 = self._hkl_unique(family, reduceInversion=True, rMT = crystalmats.reciprocalMetricTensor)
+      nFamily[i] = np.reshape(uniqHKL2,(-1,3)).shape[0] #np.int32(uniqHKL2.size/3)
+      sign = np.squeeze(self._calc_pole_dot_int(uniqHKL2, polesFlt[i, :], rMetricTensor=crystalmats.reciprocalMetricTensor))
+      sign = np.atleast_1d(sign)
+      whmx = (np.abs(sign)).argmax()
+
+      sign = np.round(sign[whmx])
+      uniqHKL2 *= sign
+
+      sympoles.append(np.round(uniqHKL2))
+      #sympolesN.append(self.xstalPlane2cart(family))
+
+    sympolesComplete = np.concatenate(sympolesComplete)
+    nsyms = np.sum(nFamily).astype(np.int32)
+    famindx = np.concatenate( ([0],np.cumsum(nFamComplete)) )
+    angs = []
+    familyID = []
+    polePairs = []
+    for i in range(npoles):
+      for j in range(i, npoles):
+        fampoles = sympolesComplete[famindx[j]:famindx[j+1], :].astype(np.float32)
+        #print('______', i,j)
+        #print(np.round(fampoles).astype(int))
+
+        ang = np.squeeze(self._calc_pole_dot_int(polesFlt[i, :], fampoles,
+                                                 rMetricTensor=crystalmats.reciprocalMetricTensor)) # for each input pole, calculate
+
+        ang = np.clip(ang, -1.0, 1.0)
+        #sign = (ang >= 0).astype(np.float32) - (ang < 0).astype(np.float32)
+        #sign = np.atleast_1d(sign)
+        ang = np.round(np.arccos(np.abs(ang))*RADEG*100).astype(np.int32) # get the unique angles between the input
+        ang = np.atleast_1d(ang)
+        # pole, and the family poles. Angles within 0.01 deg are taken as the same.
+        unqang, argunq = np.unique(ang, return_index=True)
+        unqang = unqang/100.0 # revert back to the actual angle in degrees.
+
+
+        wh = np.nonzero(unqang > 1.0)[0]
+        nwh = wh.size
+        #sign = sign[wh]
+        #sign = sign.reshape(nwh,1)
+        temp = np.zeros((nwh, 2, 3))
+        temp[:,0,:] = np.broadcast_to(poles[i,:], (nwh, 3))
+        temp[:,1,:] = np.broadcast_to(fampoles[argunq[wh],:], (nwh, 3))
+        for k in range(nwh):
+          angs.append(unqang[wh[k]])
+          familyID.append([i,j])
+          polePairs.append(temp[k,:,:])
+
+    angs = np.squeeze(np.array(angs))
+    nangs = angs.size
+    familyID = np.array(familyID)
+    polePairs = np.array(polePairs)
+
+    stuff, nFamilyID = np.unique(familyID[:,0], return_counts=True)
+    indx0FID = (np.concatenate( ([0],np.cumsum(nFamilyID)) ))[0:npoles]
+    #print(indx0FID)
+    #This completely over previsions the arrays, this is essentially 
+    #N Choose K with N = number of angles and K = 3
+    nlib = npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))/np.compat.long(np.math.factorial(3))
+    nlib = nlib.astype(int)
+
+    libANG = np.zeros((nlib, 3))
+    libID = np.zeros((nlib, 3), dtype=int)
+    counter = 0
+    # now actually catalog all the triplet angles.
+    for i in range(npoles):
+      id0 = familyID[indx0FID[i], 0]
+      for j in range(0,nFamilyID[i]):
+
+        ang0 = angs[j + indx0FID[i]]
+        id1 = familyID[j + indx0FID[i], 1]
+        for k in range(j, nFamilyID[i]):
+          ang1 = angs[k + indx0FID[i]]
+          id2 = familyID[k + indx0FID[i], 1]
+
+          whjk = np.nonzero( np.logical_and( familyID[:,0] == id1, familyID[:,1] == id2 ))[0]
+          for q in range(whjk.size):
+            ang2 = angs[whjk[q]]
+            libANG[counter, :] = np.array([ang0, ang1, ang2])
+            libID[counter, :] =  np.array([id0, id1, id2])
+            counter += 1
+
+    libANG = libANG[0:counter, :]
+    libID = libID[0:counter, :]
+
+    libANG, libID = self._sortlib_id(libANG, libID, findDups = True) # sorts each row of the library to make sure
+    # the triplets are in increasing order.
+
+    #print(libANG)
+    #print(libANG.shape)
+    # now make a table of the angle between all the poles (allowing inversino)
+    angTable = self._calc_pole_dot_int(sympolesComplete, sympolesComplete, rMetricTensor=crystalmats.reciprocalMetricTensor)
+    angTable = np.arccos(angTable)*RADEG
+    famindx0 = ((np.concatenate( ([0],np.cumsum(nFamComplete)) ))[0:-1]).astype(dtype=np.int64)
+    cartPoles = self._xstalplane2cart(sympolesComplete, rStructMatrix=crystalmats.reciprocalStructureMatrix)
+    cartPoles /= np.linalg.norm(cartPoles, axis = 1).reshape(np.int64(cartPoles.size/3),1)
+    completePoleFamId = np.zeros(sympolesComplete.shape[0], dtype=np.int32)
+    for i in range(npoles):
+      for j in range(nFamComplete[i]):
+        completePoleFamId[j+famindx0[i]] = i
+    self.completelib = {
+                   'poles' : sympolesComplete,
+                   'polesCart': cartPoles,
+                   'familyid': completePoleFamId,
+                   'angTable' : angTable,
+                   'nFamily'  : nFamComplete,
+                   'famIndex' : famindx0
+                  }
+
+    self.angpairs = {
+      'familyid': familyID,
+      'polepairs':polePairs,
+      'angles':angs
+    }
+    self.angtriplets = {
+      'angles': libANG,
+      'familyid': libID
+    }
+    if (self.lauecode == 62) or (self.lauecode == 6):
+      poles = crystal_sym.hex3poles2hex4poles(poles)
+    self.polefamilies = poles
+    self.npolefamilies = npoles
+
+    #self.angles = angs
+    #self.polePairs = polePairs
+    #self.angleFamilyID = familyID
+    #self.tripAngles = libANG
+    #self.tripID = libID
+
+
+  def bandindex(self, band_norms, band_intensity = None, verbose=0):
     tic0 = timer()
-    nfam = self.tripLib.polefamilies.shape[0]
+    nfam = self.polefamilies.shape[0]
     bandnorms = np.squeeze(band_norms)
-    n_bands = np.int64(bandnorms.size/3)
+    n_bands = np.reshape(bandnorms, (-1,3)).shape[0] #np.int64(bandnorms.size/3)
     if band_intensity is None:
       band_intensity = np.ones((n_bands))
     tic = timer()
@@ -70,66 +408,16 @@ class BandVote:
     bandangs = np.clip(bandangs, -1.0, 1.0)
     bandangs  = np.arccos(bandangs)*RADEG
 
+    tripangs = self.angtriplets['angles']
+    tripid = self.angtriplets['familyid']
 
-    if goNumba == True:
-      accumulator, bandFam, bandRank, band_cm = self.tripvote_numba(bandangs, self.LUT, self.angTol, self.tripLib.tripAngles, self.tripLib.tripID, nfam, n_bands)
-    else:
-      count = 0
-      accumulator = np.zeros((nfam,n_bands),dtype=np.int32)
-      for i in range(n_bands):
-        for j in range(i+1,n_bands):
-          for k in range(j+1, n_bands):
-            angtri = np.array([bandangs[i,j], bandangs[i,k], bandangs[j,k]])
-            srt = np.argsort(angtri)
-            srt2 = np.array(self.LUT[:, srt[0], srt[1], srt[2]])
-            unsrtFID = np.argsort(srt2)
-            angtriSRT = np.array(angtri[srt])
-            angTest = (np.abs(self.tripLib.tripAngles - angtriSRT)) <= self.angTol
-            angTest = np.all(angTest, axis = 1)
-            wh = angTest.nonzero()[0]
-
-            for q in wh:
-              f = self.tripLib.tripID[q,:]
-              f = f[unsrtFID]
-              accumulator[f, [i,j,k]] += 1
+    accumulator, bandFam, bandRank, band_cm = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
 
 
-      mxvote = np.amax(accumulator, axis = 0)
-      tvotes = np.sum(accumulator, axis = 0)
-      band_cm = np.zeros(n_bands)
-
-
-
-      for i in range(n_bands):
-        if tvotes[i] < 1:
-          band_cm[i] = 0.0
-        else:
-          srt = np.argsort(accumulator[:,i])
-          band_cm[i] = (accumulator[srt[-1], i] - accumulator[srt[-2], i])/tvotes[i]
-
-      bandFam = np.argmax(accumulator, axis=0)
-      bandRank = (n_bands - np.arange(n_bands))/n_bands * band_cm * mxvote
-    #print(np.sum(accumulator))
-    #print(accumulator)
-    #print(bandRank)
-    #print(tvotes, band_cm, mxvote)
-    #print('vote loops: ', timer() - tic)
     if verbose > 2:
       print('band Vote time:',timer() - tic)
     tic = timer()
 
-    # avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank,bandFam, angTol = self.angTol)
-    # if nMatch == 0:
-    #   srt = np.argsort(bandRank)
-    #   for i in range(np.min([5, n_bands])):
-    #     bandRank2 = bandRank
-    #     bandRank2[srt[i]] = -1.0
-    #     #avequat, fit, bandmatch, nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam,self.tripLib.completelib,self.angTol)
-    #     avequat,fit,bandmatch,nMatch = self.band_vote_refine(bandnorms,bandRank2,bandFam)
-    #     if nMatch > 2:
-    #       break
-    #print('refinement: ', timer() - tic)
-    #print('tripvote: ',timer() - tic0)
     sumaccum = np.sum(accumulator)
     bandRank_arg = np.argsort(bandRank).astype(np.int64)
     test  = 0
@@ -139,17 +427,17 @@ class BandVote:
     polematch = np.array([-1])
     whGood = -1
 
-    angTable = self.tripLib.completelib['angTable']
+    angTable = self.completelib['angTable']
     sztable = angTable.shape
-    famIndx = self.tripLib.completelib['famIndex']
-    nFam = self.tripLib.completelib['nFamily']
-    polesCart = self.tripLib.completelib['polesCart']
+    famIndx = self.completelib['famIndex']
+    nFam = self.completelib['nFamily']
+    polesCart = self.completelib['polesCart']
     angTol = self.angTol
     n_band_early = np.int64(self.n_band_early_exit)
 
     # this will check the vote, and return the exact band matching to specific poles of the best fitting solution.
     fit, polematch, nMatch, whGood, ij, R, fitb = \
-      self.band_index_nb(polesCart, bandRank_arg, bandFam, famIndx, nFam, angTable, bandnorms, angTol, n_band_early)
+      self._assign_bands_nb(polesCart, bandRank_arg, bandFam, famIndx, nFam, angTable, bandnorms, angTol, n_band_early)
 
     if verbose > 2:
       print('band index: ',timer() - tic)
@@ -166,14 +454,14 @@ class BandVote:
         pflt6 = (np.asarray(polesCart[polematch[whgood6], :], dtype=np.float64))
         bndnorm6 = (np.asarray(bandnorms[whgood6, :], dtype=np.float64))
 
-        avequat, fit = self.refine_orientation_quest(bndnorm6, pflt6 , weights=weights6)
+        avequat, fit = self._refine_orientation_quest(bndnorm6, pflt6, weights=weights6)
         fit = np.arccos(np.clip(fit, -1.0, 1.0))*RADEG
         #avequat, fit = self.refine_orientation(bandnorms,whGood,polematch)
       else:
         avequat = rotlib.om2qu(R)
       whmatch = np.nonzero(polematch >= 0)[0]
       cm = np.mean(band_cm[whmatch])
-      whfam = self.tripLib.completelib['poleFamID'][polematch[whmatch]]
+      whfam = self.completelib['familyid'][polematch[whmatch]]
       cm2 = np.sum(accumulator[[whfam], [whmatch]]).astype(np.float32)
       cm2 /= np.sum(accumulator.clip(1))
 
@@ -183,55 +471,175 @@ class BandVote:
     return avequat, fit, cm2, polematch, nMatch, ij, sumaccum
 
 
+  def _symrotpoles(self, pole, crystalmats):
 
-  def band_index(self,bandnorms,bnd1,bnd2,familyLabel,angTol=3.0, verbose = 0):
+    polecart = np.matmul(crystalmats.reciprocalStructureMatrix, np.array(pole).T)
+    sympolescart = rotlib.quat_vector(self.qsymops, polecart)
+    return np.transpose(np.matmul(crystalmats.invReciprocalStructureMatrix, sympolescart.T))
 
-    #nBands = np.int32(bandnorms.size/3)
-    angTable = self.tripLib.completelib['angTable']
-    sztable = angTable.shape
-    #whGood = -1
-    famIndx = self.tripLib.completelib['famIndex']
-    nFam = self.tripLib.completelib['nFamily']
-    poles = self.tripLib.completelib['polesCart']
-    #ang01 = 0.0
-    # need to check that the two selected bands are not parallel.
-    #v0 = bandnorms[bnd1, :]
-    #f0 = familyLabel[bnd1]
-    #v1 = bandnorms[bnd2, :]
-    #f1 = familyLabel[bnd2]
-    #ang01 = np.clip(np.dot(v0, v1), -1.0, 1.0)
-    #ang01 = np.arccos(ang01)*RADEG
-    #if ang01 < angTol: # the two poles are parallel, send in another two poles if available.
-    #  return 360.0, 0, whGood, -1
+  def _symrotdir(self, pole, crystalmats):
 
-    #wh01 = np.nonzero(np.abs(angTable[famIndx[f0], famIndx[f1]:np.int(famIndx[f1]+nFam[f1])] - ang01) < angTol)[0]
+    polecart = np.matmul(crystalmats.directStructureMatrix, np.array(pole).T)
+    sympolescart = rotlib.quat_vector(self.qsymops, polecart)
+    return np.transpose(np.matmul(crystalmats.invDirectStructureMatrix, sympolescart.T))
 
-    #n01 = wh01.size
-    #if  n01 == 0:
-    #  return 360.0, 0, whGood, -1
+  def _hkl_unique(self, poles, reduceInversion=True, rMT = np.identity(3)):
+    """
+    When given a list of integer HKL poles (plane normals), will return only the unique HKL variants
 
-    #wh01 += famIndx[f1]
-    #p0 = poles[famIndx[f0], :]
-    #print('pre first loop: ',timer() - tic)
-    #tic = timer()
-    # place numba code here ...
+    Parameters
+    ----------
+    poles: numpy.ndarray (n,3) in HKL integer form.
+    reduceInversion: True/False.  If True, then the any inverted crystal pole
+    will also be removed from the uniquelist.  The angle between poles
+    rMT: reciprocol metric tensor -- needed to calculated
+
+    Returns
+    -------
+    numpy.ndarray (n,3) in HKL integer form of the unique poles.
+    """
+
+    npoles = poles.shape[0]
+    intPoles =np.array(poles.round().astype(np.int32))
+    mn = intPoles.min()
+    intPoles -= mn
+    basis = intPoles.max()+1
+    basis3 = np.array([1,basis, basis**2])
+    test = intPoles.dot(basis3)
+
+    un, unq = np.unique(test, return_index=True)
+
+    polesout = poles[unq, :]
+
+    if reduceInversion == True:
+      family = polesout
+      nf = family.shape[0]
+      test = self._calc_pole_dot_int(family, family, rMetricTensor = rMT)
+
+      testSum = np.sum( (test < -0.99999).astype(np.int32)*np.arange(nf).reshape(1,nf), axis = 1)
+      whpos = np.nonzero( np.logical_or(testSum < np.arange(nf), (testSum == 0)))[0]
+      polesout = polesout[whpos, :]
+    return polesout
+
+  def _calc_pole_dot_int(self, poles1, poles2, rMetricTensor = np.identity(3)):
+
+    p1 = poles1.reshape(np.int64(poles1.size / 3), 3)
+    p2 = poles2.reshape(np.int64(poles2.size / 3), 3)
+
+    n1 = p1.shape[0]
+    n2 = p2.shape[0]
+
+    t1 = p1.dot(rMetricTensor)
+    t2 = rMetricTensor.dot(p2.T)
+    dot = t1.dot(p2.T)
+    dotnum = np.sqrt(np.diag(t1.dot(p1.T)))
+    dotnum = dotnum.reshape(n1,1)
+    dotnum2 = np.sqrt(np.diag(p2.dot(t2)))
+    dotnum2 = dotnum2.reshape(1,n2)
+    dotnum = dotnum.dot(dotnum2)
+
+    dot /= dotnum
+    dot = np.clip(dot, -1.0, 1.0)
+    return dot
+
+  def _xstalplane2cart(self, poles, rStructMatrix = np.identity(3)):
+    polesout = rStructMatrix.dot(poles.T)
+    return np.transpose(polesout)
+
+  def _sortlib_id(self, libANG, libID, findDups = False):
+    # will make sure that triplets are ordered from lowest to highest
+    # and maintain the pole family id
+    # optionally will locate any duplicates in the triplet list.
+
+    # LUTA = np.array([[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]])
+    # LUTB = np.array([[0,1,2],[1,0,2],[0,2,1],[2,0,1],[1,2,0],[2,1,0]])
+    #
+    # LUT = np.zeros((3,3,3,3), dtype=np.int64)
+    # for i in range(6):
+    #   LUT[:, LUTA[i,0], LUTA[i,1], LUTA[i,2]] = LUTB[i,:]
+    lut = self.lut
+
+    ntrips = np.int64(libANG.size / 3)
+    for i in range(ntrips):
+      temp = np.squeeze(libANG[i,:])
+      srt = np.argsort(temp)
+      libANG[i,:] = temp[srt]
+      srt2 = lut[:,srt[0], srt[1], srt[2]]
+      temp2 = libID[i,:]
+      temp2 = temp2[srt2]
+      libID[i,:] = temp2
+
+    if findDups == True:
+      angID = np.sum(np.round(libANG*100), axis = 1).astype(np.longlong)
+      basis = np.longlong(libID.max() + 1)
+      libID_ID = libID.dot(np.array([1,basis, basis**2]))
+      UID = np.ceil(np.log10(libID_ID.max()))
+      UID = np.where(UID > 2, UID, 2)
+      UID = (angID * 10**UID) + libID_ID
+
+      stuff, unq = np.unique(UID, return_index=True)
+      libANG = libANG[unq, :]
+      libID = libID[unq,:]
+      libID_ID = libID_ID[unq]
+      srt = np.argsort(libID_ID)
+      libANG  = libANG[srt, :]
+      libID = libID[srt, :]
+
+    return (libANG, libID)
 
 
 
-    #fit, polematch, R, nGood, whGood = self.band_vote_refine_loops1(poles,v0,v1, p0, wh01, bandnorms, angTol)
-    fit,polematch,R,nGood,whGood = self.band_vote_refine_loops1(poles, bnd1, bnd2, familyLabel,  famIndx, nFam, angTable, bandnorms, angTol)
 
-    #print('numba first loops',timer() - tic)
-    #whGood = np.nonzero(angFit < angTol)[0]
-    #nGood = np.int64(whGood.size)
-    #if nGood < 3:
-    #  return 360.0, -1, -1, -1
 
-    #fit = np.mean(angFit[whGood])
-    #print('all bindexed time', timer()-tic0)
-    return fit, nGood, whGood, polematch
 
-  def refine_orientation(self,bandnorms, whGood, polematch):
+  # def band_index(self,bandnorms,bnd1,bnd2,familyLabel,angTol=3.0, verbose = 0):
+  #
+  #   #nBands = np.int32(bandnorms.size/3)
+  #   angTable = self.tripLib.completelib['angTable']
+  #   sztable = angTable.shape
+  #   #whGood = -1
+  #   famIndx = self.tripLib.completelib['famIndex']
+  #   nFam = self.tripLib.completelib['nFamily']
+  #   poles = self.tripLib.completelib['polesCart']
+  #   #ang01 = 0.0
+  #   # need to check that the two selected bands are not parallel.
+  #   #v0 = bandnorms[bnd1, :]
+  #   #f0 = familyLabel[bnd1]
+  #   #v1 = bandnorms[bnd2, :]
+  #   #f1 = familyLabel[bnd2]
+  #   #ang01 = np.clip(np.dot(v0, v1), -1.0, 1.0)
+  #   #ang01 = np.arccos(ang01)*RADEG
+  #   #if ang01 < angTol: # the two poles are parallel, send in another two poles if available.
+  #   #  return 360.0, 0, whGood, -1
+  #
+  #   #wh01 = np.nonzero(np.abs(angTable[famIndx[f0], famIndx[f1]:np.int(famIndx[f1]+nFam[f1])] - ang01) < angTol)[0]
+  #
+  #   #n01 = wh01.size
+  #   #if  n01 == 0:
+  #   #  return 360.0, 0, whGood, -1
+  #
+  #   #wh01 += famIndx[f1]
+  #   #p0 = poles[famIndx[f0], :]
+  #   #print('pre first loop: ',timer() - tic)
+  #   #tic = timer()
+  #   # place numba code here ...
+  #
+  #
+  #
+  #   #fit, polematch, R, nGood, whGood = self.band_vote_refine_loops1(poles,v0,v1, p0, wh01, bandnorms, angTol)
+  #   fit,polematch,R,nGood,whGood = self.band_vote_refine_loops1(poles, bnd1, bnd2, familyLabel,  famIndx, nFam, angTable, bandnorms, angTol)
+  #
+  #   #print('numba first loops',timer() - tic)
+  #   #whGood = np.nonzero(angFit < angTol)[0]
+  #   #nGood = np.int64(whGood.size)
+  #   #if nGood < 3:
+  #   #  return 360.0, -1, -1, -1
+  #
+  #   #fit = np.mean(angFit[whGood])
+  #   #print('all bindexed time', timer()-tic0)
+  #   return fit, nGood, whGood, polematch
+
+  def _refine_orientation(self, bandnorms, whGood, polematch):
     tic = timer()
     poles = self.tripLib.completelib['polesCart']
     nGood = whGood.size
@@ -244,7 +652,7 @@ class BandVote:
     # tic = timer()
     # avequat = rotlib.quatave(quats)
 
-    AB, weights = self.orientation_refine_loops_am(nGood, whGood, poles, bandnorms, polematch, n2Fit)
+    AB, weights = self._orientation_refine_loops_am(nGood, whGood, poles, bandnorms, polematch, n2Fit)
 
     wh_weight = np.nonzero(weights < 359.0)[0]
     quats = rotlib.om2quL(AB[wh_weight, :, :])
@@ -279,7 +687,7 @@ class BandVote:
     #print('fitting: ',timer() - tic)
     return avequat, fit
 
-  def refine_orientation_quest(self, bandnorms, polecartmatch, weights = None):
+  def _refine_orientation_quest(self, bandnorms, polecartmatch, weights = None):
     tic = timer()
 
 
@@ -291,14 +699,76 @@ class BandVote:
     pflt = np.asarray(polecartmatch, dtype=np.float64)
     bndnorm = np.asarray(bandnorms, dtype=np.float64)
 
-    avequat, fit = self.orientation_quest_nb(pflt, bndnorm, weightsn)
+    avequat, fit = self._orientation_quest_nb(pflt, bndnorm, weightsn)
 
     return avequat, fit
+
+  @staticmethod
+  @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
+  def _orientation_quest_nb(polescart, bandnorms, weights):
+    # this uses the Quaternion Estimator AKA quest algorithm.
+
+    pflt = np.asarray(polescart, dtype=np.float64)
+    bndnorm = np.asarray(bandnorms, dtype=np.float64)
+    npoles = pflt.shape[0]
+    wn = (np.asarray(weights, dtype=np.float64)).reshape(npoles, 1)
+
+    # wn = np.ones((nGood,1), dtype=np.float32)/np.float32(nGood)  #(weights[whGood]).reshape(nGood,1)
+    wn /= np.sum(wn)
+
+    I = np.zeros((3, 3), dtype=np.float64)
+    I[0, 0] = 1.0;
+    I[1, 1] = 1.0;
+    I[2, 2] = 1.0
+    q = np.zeros((4), dtype=np.float64)
+
+    B = (wn * bndnorm).T @ pflt
+    S = B + B.T
+    z = np.asarray(np.sum(wn * np.cross(bndnorm, pflt), axis=0), dtype=np.float64)
+    S2 = S @ S
+    det = np.linalg.det(S)
+    k = (S[1, 1] * S[2, 2] - S[1, 2] * S[2, 1]) + (S[0, 0] * S[2, 2] - S[0, 2] * S[2, 0]) + (
+          S[0, 0] * S[1, 1] - S[1, 0] * S[0, 1])
+    sig = 0.5 * (S[0, 0] + S[1, 1] + S[2, 2])
+    sig2 = sig * sig
+    d = z.T @ S2 @ z
+    c = det + (z.T @ S @ z)
+    b = sig2 + (z.T @ z)
+    a = sig2 - k
+
+    lam = 1.0
+    tol = 1.0e-6
+    iter = 0
+    dlam = 1e6
+    # for i in range(10):
+    while (dlam > tol) and (iter < 10):
+      lam0 = lam
+      lam = lam - (lam ** 4 - (a + b) * lam ** 2 - c * lam + (a * b + c * sig - d)) / (
+            4 * lam ** 3 - 2 * (a + b) * lam - c)
+      dlam = np.fabs(lam0 - lam)
+      iter += 1
+
+    beta = lam - sig
+    alpha = lam ** 2 - sig2 + k
+    gamma = (lam + sig) * alpha - det
+    X = np.asarray((alpha * I + beta * S + S2), dtype=np.float64) @ z
+    qn = np.float64(0.0)
+    qn += gamma ** 2 + X[0] ** 2 + X[1] ** 2 + X[2] ** 2
+    qn = np.sqrt(qn)
+    q[0] = gamma
+    q[1:4] = X[0:3]
+    q /= qn
+    if (np.sign(gamma) < 0):
+      q *= -1.0
+
+    # polesrot = rotlib.quat_vectorL1N(q, pflt, npoles, np.float64, p=1)
+    # pdot = np.sum(polesrot*bndnorm, axis = 1, dtype=np.float64)
+    return q, lam  # , pdot
 
 
   @staticmethod
   @numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
-  def tripvote_numba( bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
+  def _tripvote_numba(bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
     LUTTemp = np.asarray(LUT).copy()
     accumulator = np.zeros((nfam, n_bands), dtype=np.int32)
     tshape = np.shape(tripAngles)
@@ -373,7 +843,7 @@ class BandVote:
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
-  def band_index_nb(polesCart, bandRank_arg, familyLabel, famIndx, nFam, angTable, bandnorms, angTol, n_band_early):
+  def _assign_bands_nb(polesCart, bandRank_arg, familyLabel, famIndx, nFam, angTable, bandnorms, angTol, n_band_early):
     eps = np.float32(1.0e-12)
     nBnds = bandnorms.shape[0]
 
@@ -539,7 +1009,7 @@ class BandVote:
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
-  def orientation_refine_loops_triad(nGood, whGood, poles, bandnorms, polematch, n2Fit):
+  def _orientation_refine_loops_triad(nGood, whGood, poles, bandnorms, polematch, n2Fit):
     #uses the TRIAD method for getting rotation matrix from imperfect poles.
     quats = np.zeros((n2Fit, 4), dtype=np.float32)
     counter = 0
@@ -593,7 +1063,7 @@ class BandVote:
 
   @staticmethod
   @numba.jit(nopython=True,cache=True,fastmath=True,parallel=False)
-  def orientation_refine_loops_am(nGood,whGood,poles,bandnorms,polematch,n2Fit):
+  def _orientation_refine_loops_am(nGood, whGood, poles, bandnorms, polematch, n2Fit):
     # this uses the method laid out by A. Morawiec 2020 Eq.4 for getting rotation matrix
     # from imperfect poles
     counter = 0
@@ -688,63 +1158,7 @@ class BandVote:
           counter += 1
     return AB,whgood2
 
-  @staticmethod
-  @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
-  def orientation_quest_nb(polescart, bandnorms, weights):
-    # this uses the Quaternion Estimator AKA quest algorithm.
 
-    pflt = np.asarray(polescart, dtype=np.float64)
-    bndnorm = np.asarray(bandnorms, dtype=np.float64)
-    npoles = pflt.shape[0]
-    wn = (np.asarray(weights, dtype=np.float64)).reshape(npoles, 1)
-
-    #wn = np.ones((nGood,1), dtype=np.float32)/np.float32(nGood)  #(weights[whGood]).reshape(nGood,1)
-    wn /= np.sum(wn)
-
-    I = np.zeros((3,3), dtype=np.float64)
-    I[0,0] = 1.0 ; I[1,1] = 1.0 ; I[2,2] = 1.0
-    q = np.zeros((4), dtype=np.float64)
-
-    B = (wn * bndnorm).T @ pflt
-    S = B + B.T
-    z = np.asarray(np.sum(wn * np.cross(bndnorm, pflt), axis = 0), dtype=np.float64)
-    S2 = S @ S
-    det = np.linalg.det(S)
-    k = (S[1,1]*S[2,2] - S[1,2]*S[2,1]) + (S[0,0]*S[2,2] - S[0,2]*S[2,0]) + (S[0,0]*S[1,1] - S[1,0]*S[0,1])
-    sig = 0.5 * (S[0,0] + S[1,1] + S[2,2])
-    sig2 = sig * sig
-    d = z.T @ S2 @ z
-    c = det + (z.T @ S @ z)
-    b = sig2 + (z.T @ z)
-    a = sig2 -k
-
-    lam = 1.0
-    tol = 1.0e-6
-    iter = 0
-    dlam = 1e6
-    #for i in range(10):
-    while (dlam > tol) and (iter < 10):
-      lam0 = lam
-      lam = lam - (lam**4 - (a + b) * lam**2 - c * lam + (a * b + c * sig - d))/ (4 * lam**3 - 2 * (a + b) * lam - c)
-      dlam = np.fabs(lam0-lam)
-      iter += 1
-
-    beta = lam - sig
-    alpha = lam ** 2 - sig2 + k
-    gamma = (lam + sig) * alpha - det
-    X = np.asarray( (alpha * I + beta * S + S2), dtype=np.float64)  @ z
-    qn = np.float64(0.0)
-    qn += gamma ** 2 + X[0] **2 + X[1] **2 + X[2] **2
-    qn = np.sqrt(qn)
-    q[0] = gamma
-    q[1:4] = X[0:3]
-    q /= qn
-    if (np.sign(gamma) < 0):
-      q *= -1.0
-
-    #polesrot = rotlib.quat_vectorL1N(q, pflt, npoles, np.float64, p=1)
-    #pdot = np.sum(polesrot*bndnorm, axis = 1, dtype=np.float64)
-    return q, lam#, pdot
 
   def pairVoteOrientation(self,bandnormsIN,goNumba=True):
     tic0 = timer()
@@ -769,7 +1183,7 @@ class BandVote:
 
 
     if goNumba == True:
-      solutions, nsolutions, solutionVotes, solSrt = self.pairVoteOrientationNumba(bandnorms,bandangs,qsym,angTableReduce,poles,polesReduce, self.angTol)
+      solutions, nsolutions, solutionVotes, solSrt = self._pairvote_nb(bandnorms, bandangs, qsym, angTableReduce, poles, polesReduce, self.angTol)
     else:
       solutions = np.empty((500, 24, 4), dtype=np.float32)
       solutions[0,:,:] = rotlib.quat_multiply(qsym, np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32))
@@ -849,7 +1263,7 @@ class BandVote:
         nMatch[q] = len(whGood[0])
         poleMatch[q,whGood[0]] = poleMatch1[whGood[0]]
 
-        avequat1, fit1 = self.refine_orientation(bandnorms,whGood[0],poleMatch1)
+        avequat1, fit1 = self._refine_orientation(bandnorms, whGood[0], poleMatch1)
 
         fit[q] = fit1
         avequat[q,:] = avequat1
@@ -870,7 +1284,7 @@ class BandVote:
 
   @staticmethod
   @numba.jit(nopython=True,cache=True,fastmath=True,parallel=False)
-  def pairVoteOrientationNumba(bandnorms,bandangs, qsym, angTableReduce, poles, polesReduce, angTol):
+  def _pairvote_nb(bandnorms, bandangs, qsym, angTableReduce, poles, polesReduce, angTol):
     n_bands = bandnorms.shape[0]
     nsym = qsym.shape[0]
     solutions = np.empty((500,24,4),dtype=np.float32)

@@ -20,15 +20,15 @@ def writeang(filename, indexer, data,
     nphase = len(indexer.phaseLib)
     for phase in reversed(indexer.phaseLib):
       f.write('# Phase '+str(nphase - pcount + 1)+'\r\n')
-      f.write('# MaterialName \t' + str(phase.phase_name)+'\r\n')
+      f.write('# MaterialName \t' + str(phase.phasename)+'\r\n')
       f.write('# Formula '+'\t \r\n')
       f.write('# Info '+'\t\t \r\n')
-      f.write('# Symmetry              '+str(phase.tripLib.laue_code)+'\r\n')
-      f.write('# PointGroupID              ' + str(phase.tripLib.symmetry_pgid)+'\r\n')
-      f.write('# LatticeConstants      '+ ' '.join(str(' {:.3f}'.format(x)) for x in phase.tripLib.latticeParameter)+'\r\n')
-      f.write('# NumberFamilies             ' + str(phase.tripLib.nfamily)+'\r\n')
-      for i in range(phase.tripLib.nfamily):
-        f.write('# hklFamilies   \t' + (' '.join(str(x).rjust(2,' ') for x in phase.tripLib.family[i,:])) + ' 1 0.00000 1'+'\r\n')
+      f.write('# Symmetry              ' + str(phase.lauecode) + '\r\n')
+      f.write('# PointGroupID              ' + str(phase.pointgroupid) + '\r\n')
+      f.write('# LatticeConstants      '+ ' '.join(str(' {:.3f}'.format(x)) for x in phase.latticeParameter)+'\r\n')
+      f.write('# NumberFamilies             ' + str(phase.npolefamilies) + '\r\n')
+      for i in range(phase.npolefamilies):
+        f.write('# hklFamilies   \t' + (' '.join(str(x).rjust(2,' ') for x in phase.polefamilies[i, :])) + ' 1 0.00000 1' + '\r\n')
       f.write('# '+'\r\n')
       pcount += 1
 
