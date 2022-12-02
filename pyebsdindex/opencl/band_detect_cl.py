@@ -167,21 +167,19 @@ class BandDetect(band_detect.BandDetect):
         im2show += 6
         im2show[0:rhoMaskTrim,:] = 0
         im2show[-rhoMaskTrim:,:] = 0
-
         im2show = np.fliplr(im2show)
         plt.imshow(im2show, cmap='gray', extent = [0, 180, -self.rhoMax, self.rhoMax],
                    interpolation='none', zorder = 1, aspect='auto')
-
         width = bandData['width'][-1, :]
         width /= width.min()
-        width *= 2.0
-        xplt = np.squeeze(180.0 - np.interp(bandData['aveloc'][-1,:,1]+0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
-        yplt = np.squeeze( -1.0 * np.interp(bandData['aveloc'][-1,:,0]-0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
+        width *= 2
+        xplt = np.squeeze(180.0 - np.interp(bandData['aveloc'][-1,:,1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
+        yplt = np.squeeze( -1.0 * np.interp(bandData['aveloc'][-1,:,0], np.arange(self.radonPlan.nRho), self.radonPlan.rho))
 
         plt.scatter(y=yplt, x=xplt, c='r', s=width, zorder = 2)
 
         for pt in range(self.nBands):
-          plt.annotate(str(pt + 1),np.squeeze([xplt[pt]+4,yplt[pt]]), color='yellow')
+          plt.annotate(str(pt + 1),np.squeeze([xplt[pt],yplt[pt]]), color='yellow')
         plt.xlim(0,180)
         plt.ylim(-self.rhoMax, self.rhoMax)
         plt.show()

@@ -369,14 +369,14 @@ class BandDetect:
       width /= width.min()
       width *= 2
       xplt = np.squeeze(
-        180.0 - np.interp(bandData['aveloc'][-1, :, 1]+0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
+        180.0 - np.interp(bandData['aveloc'][-1, :, 1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
       yplt = np.squeeze(
-        -1.0 * np.interp(bandData['aveloc'][-1, :, 0]-0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
+        -1.0 * np.interp(bandData['aveloc'][-1, :, 0], np.arange(self.radonPlan.nRho), self.radonPlan.rho))
 
       plt.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
 
       for pt in range(self.nBands):
-        plt.annotate(str(pt + 1), np.squeeze([xplt[pt]+4, yplt[pt]]), color='yellow')
+        plt.annotate(str(pt + 1), np.squeeze([xplt[pt], yplt[pt]]), color='yellow')
       plt.xlim(0,180)
       plt.ylim(-self.rhoMax, self.rhoMax)
       plt.show()
