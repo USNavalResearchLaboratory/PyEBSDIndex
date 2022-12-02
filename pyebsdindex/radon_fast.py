@@ -226,10 +226,6 @@ class Radon:
     nPats = bandData.shape[0]
     nBands = bandData.shape[1]
 
-    # This translation from the Radon to theta and rho assumes that the first pixel read
-    # in off the detector is in the bottom left corner. -- No longer the assumption --- see below.
-    # theta = self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1], dtype=np.int)]/RADEG
-    # rho = self.radonPlan.rho[np.array(bandData['aveloc'][:, :, 0], dtype=np.int)]
 
     # This translation from the Radon to theta and rho assumes that the first pixel read
     # in off the detector is in the top left corner.
