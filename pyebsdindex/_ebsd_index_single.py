@@ -297,6 +297,7 @@ class EBSDIndexer:
         rhoMaskFrac=0.15,
         nBands=9,
         patDim=None,
+        nband_earlyexit = 7,
         **kwargs
     ):
         """Create an EBSD indexer."""
@@ -352,6 +353,7 @@ class EBSDIndexer:
         elif patDim is not None:
             self.bandDetectPlan.band_detect_setup(patDim=patDim)
 
+        self.nband_earlyexit = nband_earlyexit
         self.dataTemplate = np.dtype(
             [
                 ("quat", np.float64, 4),
@@ -495,7 +497,15 @@ class EBSDIndexer:
         indxData["phase"] = -1
         indxData["fit"] = 180.0
         indxData["totvotes"] = 0
-        earlyexit = max(7, shpBandDat[1])
+
+        if self.nband_earlyexit is None:
+            earlyexit = shpBandDat[1] # default to all the poles.
+            # for ph in self.phaselist:
+            #     if hasattr(ph, 'nband_earlyexit'):
+            #         earlyexit = min(earlyexit, ph.nband_earlyexit)
+        else:
+            earlyexit = self.nband_earlyexit
+
         for i in range(npoints):
             bandNorm1 = bandNorm[i, :, :]
             bDat1 = bandData[i, :]
@@ -515,7 +525,7 @@ class EBSDIndexer:
                         matchAttempts,
                         totvotes,
                     ) = self.phaseLib[j].bandindex(
-                        bandNorm1, band_intensity=bDat1["avemax"], verbose=verbose,
+                        bandNorm1, band_intensity=bDat1["avemax"], band_widths=bDat1["width"], verbose=verbose,
                     )
                     # avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].pairVoteOrientation(bandNorm1,goNumba=True)
                     if nMatch >= 3:

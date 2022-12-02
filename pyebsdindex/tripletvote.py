@@ -112,7 +112,7 @@ class BandIndexer():
                latticeparameter=None,
                polefamilies = None,
                angTol=3.0,
-               n_band_early_exit = 8):
+               nband_earlyexit = 8):
     self.phaseName = None  # User provided name of the phase.
     self.spacegroup = None  # space group id 1-230
     self.latticeParameter = None  # 6 element array for the lattice parameter.
@@ -127,7 +127,7 @@ class BandIndexer():
     self.pointgroupid = None
 
     self.angTol = angTol
-    self.n_band_early_exit = n_band_early_exit
+    self.nband_earlyexit = nband_earlyexit
     self.high_fidelity = True
 
     # many objects to hold the information about the reflecting poles, angles between them ...
@@ -396,7 +396,7 @@ class BandIndexer():
     #self.tripID = libID
 
 
-  def bandindex(self, band_norms, band_intensity = None, verbose=0):
+  def bandindex(self, band_norms, band_intensity = None, band_widths=None, verbose=0):
     tic0 = timer()
     nfam = self.polefamilies.shape[0]
     bandnorms = np.squeeze(band_norms)
@@ -433,7 +433,7 @@ class BandIndexer():
     nFam = self.completelib['nFamily']
     polesCart = self.completelib['polesCart']
     angTol = self.angTol
-    n_band_early = np.int64(self.n_band_early_exit)
+    n_band_early = np.int64(self.nband_earlyexit)
 
     # this will check the vote, and return the exact band matching to specific poles of the best fitting solution.
     fit, polematch, nMatch, whGood, ij, R, fitb = \

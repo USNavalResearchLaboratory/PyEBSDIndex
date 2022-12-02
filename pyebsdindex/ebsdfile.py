@@ -24,7 +24,7 @@ def writeang(filename, indexer, data,
       f.write('# Formula '+'\t \r\n')
       f.write('# Info '+'\t\t \r\n')
       f.write('# Symmetry              ' + str(phase.lauecode) + '\r\n')
-      f.write('# PointGroupID              ' + str(phase.pointgroupid) + '\r\n')
+      #f.write('# PointGroupID              ' + str(phase.pointgroupid) + '\r\n')
       f.write('# LatticeConstants      '+ ' '.join(str(' {:.3f}'.format(x)) for x in phase.latticeParameter)+'\r\n')
       f.write('# NumberFamilies             ' + str(phase.npolefamilies) + '\r\n')
       for i in range(phase.npolefamilies):
