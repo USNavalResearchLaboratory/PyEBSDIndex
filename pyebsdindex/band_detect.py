@@ -561,8 +561,12 @@ class BandDetect:
         det = (dxx * dyy - dxy * dxy)
         det = det if np.fabs(det) > 1e-12 else 1.0e-12
         det = 1.0/det
-        cnn = c - (dyy * dx - dxy * dy) * det
-        rnn = r - (dxx * dy - dxy * dx) * det
+        dc =  (dyy * dx - dxy * dy) * det
+        rc = (dxx * dy - dxy * dx) * det
+        dc = max(-1.0, dc) ; rc = max(-1.0, rc)
+        dc = min(1.0, dc) ;  rc = min(1.0, rc)
+        cnn = c - dc
+        rnn = r - rc
         bandData_aveloc[q,i,:] = np.array([rnn,cnn])
         bandData_valid[q,i] = 1
 

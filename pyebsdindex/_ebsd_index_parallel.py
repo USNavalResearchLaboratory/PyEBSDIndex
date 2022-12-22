@@ -278,7 +278,7 @@ def index_pats_distributed(
         logging_level=logging.WARNING,
     )  # Supress INFO messages from ray.
 
-    # Place indexer obj in shared memory store so all workers can use it
+    # Place indexer obj in shared memory store so all workers can use it - this is read only.
     remote_indexer = ray.put(indexer)
     # Get the function that will collect opencl parameters - if opencl
     # is not installed, this is None, and the program will automatically
@@ -322,7 +322,8 @@ def index_pats_distributed(
         chunkave = 0.0
         for i in range(n_cpu_nodes):
             job_pstart_end = p_indx_start_end.pop(0)
-            workers.append(
+            workers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
+                # These actors are read/write, thus can initialize the GPU queues
                 IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote(
                     i, clparamfunction, gpu_id=gpu_id
                 )
