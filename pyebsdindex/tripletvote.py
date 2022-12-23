@@ -86,7 +86,7 @@ def addphase(libtype=None, phasename=None,
       else:
         latticeparameter = np.array(latticeparameter)
       if polefamilies is None:
-        polefamilies = np.array([ [0, 0, 0, 2],[1, 0, -1, 0], [1, 0, -1, 1], [1, 0, -1, 2], [1, 1, -2, 0],
+        polefamilies = np.array([ [1, 0, -1, 0], [0, 0, 0, 2],[1, 0, -1, 1], [1, 0, -1, 2], [1, 1, -2, 0],
                                  [1, 0, -1, 3], [1, 1,-2, 2], [2,0,-2,1]])
       else:
         polefamilies = np.atleast_2d(np.array(polefamilies))
@@ -419,6 +419,8 @@ class BandIndexer():
 
     accumulator, bandFam, bandRank, band_cm = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
     #print(accumulator)
+    if verbose >= 3:
+      print(accumulator)
 
     if verbose > 2:
       print('band Vote time:',timer() - tic)
