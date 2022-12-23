@@ -86,7 +86,7 @@ def addphase(libtype=None, phasename=None,
       else:
         latticeparameter = np.array(latticeparameter)
       if polefamilies is None:
-        polefamilies = np.array([ [0, 0, 0, 2], [1, 0, -1, 0],[1, 0, -1, 1], [1, 0, -1, 2], [1, 1, -2, 0],
+        polefamilies = np.array([ [0, 0, 0, 2],[1, 0, -1, 0], [1, 0, -1, 1], [1, 0, -1, 2], [1, 1, -2, 0],
                                  [1, 0, -1, 3], [1, 1,-2, 2], [2,0,-2,1]])
       else:
         polefamilies = np.atleast_2d(np.array(polefamilies))
@@ -418,7 +418,7 @@ class BandIndexer():
     tripid = self.angtriplets['familyid']
 
     accumulator, bandFam, bandRank, band_cm = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
-    print(accumulator)
+    #print(accumulator)
 
     if verbose > 2:
       print('band Vote time:',timer() - tic)
@@ -570,7 +570,7 @@ class BandIndexer():
       temp = np.squeeze(libANG[i,:])
       srt = np.argsort(temp)
       libANG[i,:] = temp[srt]
-      srt2 = lut[:,srt[0], srt[1], srt[2]]
+      srt2 = np.squeeze(lut[:,srt[0], srt[1], srt[2]])
       temp2 = libID[i,:]
       temp2 = temp2[srt2]
       libID[i,:] = temp2
@@ -779,49 +779,81 @@ class BandIndexer():
     accumulator = np.zeros((nfam, n_bands), dtype=np.int32)
     tshape = np.shape(tripAngles)
     ntrip = int(tshape[0])
-    count  = 0.0
+    #count  = 0.0
     #angTest2 = np.zeros(ntrip, dtype=numba.boolean)
     #angTest2 = np.empty(ntrip,dtype=numba.boolean)
     for i in range(n_bands):
       for j in range(i + 1,n_bands):
         for k in range(j + 1,n_bands):
-          angtri = np.array([bandangs[i,j],bandangs[i,k],bandangs[j,k]], dtype=numba.float32)
+          ijk = [i,j,k]
+          angtri = np.array([bandangs[i,j],bandangs[i,k],bandangs[j,k]], dtype=np.float32)
           srt = angtri.argsort(kind='quicksort') #np.array(np.argsort(angtri), dtype=numba.int64)
-          srt2 = np.asarray(LUTTemp[:,srt[0],srt[1],srt[2]], dtype=numba.int64).copy()
-          unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
+
+          #srt2 = np.asarray(LUTTemp[:,srt[0],srt[1],srt[2]], dtype=numba.int64).copy()
+          #unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
           angtriSRT = np.asarray(angtri[srt])
           angTest = (np.abs(tripAngles - angtriSRT)) <= angTol
 
           for q in range(ntrip):
-            angTest2 = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
+            #angTest2 = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
+            angTest2 = (angTest[q, 0] and angTest[q, 1] and angTest[q, 2]) == True
             if angTest2:
               f = tripID[q,:]
-              f = f[unsrtFID]
-              accumulator[f[0],i] += 1
-              accumulator[f[1],j] += 1
-              accumulator[f[2],k] += 1
+              #print(angtriSRT, tripAngles[q,:], f)
+              accumulator[f[0], ijk[srt[0]]] += 1
+              accumulator[f[1], ijk[srt[1]]] += 1
+              accumulator[f[2], ijk[srt[2]]] += 1
               t1 = False
               t2 = False
               t3 = False
               if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
-                accumulator[f[0],i] += 1
-                accumulator[f[1],k] += 1
-                accumulator[f[2],j] += 1
+                accumulator[f[0],ijk[srt[0]]] += 1
+                accumulator[f[1],ijk[srt[2]]] += 1
+                accumulator[f[2],ijk[srt[1]]] += 1
                 t1 = True
               if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
-                accumulator[f[0],j] += 1
-                accumulator[f[1],i] += 1
-                accumulator[f[2],k] += 1
+                accumulator[f[0],ijk[srt[1]]] += 1
+                accumulator[f[1],ijk[srt[0]]] += 1
+                accumulator[f[2],ijk[srt[2]]] += 1
                 t2 = True
               if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
-                accumulator[f[0],k] += 1
-                accumulator[f[1],j] += 1
-                accumulator[f[2],i] += 1
+                accumulator[f[0],ijk[srt[2]]] += 1
+                accumulator[f[1],ijk[srt[1]]] += 1
+                accumulator[f[2],ijk[srt[0]]] += 1
                 t3 = True
               if (t1 and t2 and t3):
-                accumulator[f[0],k] += 1
-                accumulator[f[1],i] += 1
-                accumulator[f[2],j] += 1
+                accumulator[f[0],ijk[srt[2]]] += 1
+                accumulator[f[1],ijk[srt[0]]] += 1
+                accumulator[f[2],ijk[srt[1]]] += 1
+
+
+              # f = tripID[q,:]
+              # f = f[unsrtFID]
+              # accumulator[f[0],i] += 1
+              # accumulator[f[1],j] += 1
+              # accumulator[f[2],k] += 1
+              # t1 = False
+              # t2 = False
+              # t3 = False
+              # if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
+              #   accumulator[f[0],i] += 1
+              #   accumulator[f[1],k] += 1
+              #   accumulator[f[2],j] += 1
+              #   t1 = True
+              # if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
+              #   accumulator[f[0],j] += 1
+              #   accumulator[f[1],i] += 1
+              #   accumulator[f[2],k] += 1
+              #   t2 = True
+              # if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
+              #   accumulator[f[0],k] += 1
+              #   accumulator[f[1],j] += 1
+              #   accumulator[f[2],i] += 1
+              #   t3 = True
+              # if (t1 and t2 and t3):
+              #   accumulator[f[0],k] += 1
+              #   accumulator[f[1],i] += 1
+              #   accumulator[f[2],j] += 1
 
     mxvote = np.zeros(n_bands, dtype=np.int32)
     tvotes = np.zeros(n_bands, dtype=np.int32)
