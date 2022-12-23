@@ -418,7 +418,7 @@ class BandIndexer():
     tripid = self.angtriplets['familyid']
 
     accumulator, bandFam, bandRank, band_cm = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
-    print(accumulator)
+    #print(accumulator)
 
     if verbose > 2:
       print('band Vote time:',timer() - tic)
