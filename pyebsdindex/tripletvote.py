@@ -58,9 +58,9 @@ def addphase(libtype=None, phasename=None,
       if polefamilies is None:
         polefamilies = np.array([[0, 0, 2], [1, 1, 1], [0, 2, 2], [1, 1, 3]])
       else:
-        polefamilies = np.array(polefamilies)
+        polefamilies = np.atleast_2d(np.array(polefamilies))
 
-    # Set up a generic HCP
+    # Set up a generic BCC
     if str(libtype).upper() == 'BCC':
       if phasename is None:
         phasename = 'BCC'
@@ -73,22 +73,23 @@ def addphase(libtype=None, phasename=None,
       if polefamilies is None:
         polefamilies = np.array([[0, 1, 1], [0, 0, 2], [1, 1, 2], [0, 1, 3]])
       else:
-        polefamilies = np.array(polefamilies)
+        polefamilies = np.atleast_2d(np.array(polefamilies))
 
     # Set up a generic HCP
     if str(libtype).upper() == 'HCP':
       if phasename is None:
         phasename = 'HCP'
       if spacegroup is None:
-        spacegroup = 229
+        spacegroup = 194
       if latticeparameter is None:
         latticeparameter = np.array([1.0, 1.0, 1.63, 90.0, 90.0, 120.0])
       else:
         latticeparameter = np.array(latticeparameter)
       if polefamilies is None:
-        polefamilies = np.array([[1, 0, -1, 0], [1, 0, -1, 1], [0, 0, 0, 2], [1, 0, -1, 3], [1, 1, -2, 0], [1, 0, -1, 2]])
+        polefamilies = np.array([ [0, 0, 0, 2], [1, 0, -1, 0],[1, 0, -1, 1], [1, 0, -1, 2], [1, 1, -2, 0],
+                                 [1, 0, -1, 3], [1, 1,-2, 2], [2,0,-2,1]])
       else:
-        polefamilies = np.array(polefamilies)
+        polefamilies = np.atleast_2d(np.array(polefamilies))
 
   else:
     if spacegroup is None:
@@ -99,7 +100,7 @@ def addphase(libtype=None, phasename=None,
       polefamilies = np.array([[0, 0, 2], [1, 1, 1], [0, 2, 2], [1, 1, 3]])
 
   triplib = BandIndexer(phasename=phasename, spacegroup=spacegroup,
-                        latticeparameter=latticeparameter, polefamilies=polefamilies)
+                        latticeparameter=latticeparameter, polefamilies=np.atleast_2d(polefamilies))
 
   triplib.build_trip_lib()
   return triplib
@@ -115,7 +116,7 @@ class BandIndexer():
                nband_earlyexit = 8):
     self.phaseName = None  # User provided name of the phase.
     self.spacegroup = None  # space group id 1-230
-    self.latticeParameter = None  # 6 element array for the lattice parameter.
+    self.latticeparameter = None  # 6 element array for the lattice parameter.
     self.polefamilies = None  # array of integer pole normals that should have reflections
     self.npolefamilies = None  # number of unique reflector families
     self.crystalmats = None  # store the four crystal matrices useful for angle/cartisian conversions.
@@ -247,7 +248,7 @@ class BandIndexer():
     poles = np.array(self.polefamilies)
     if (self.lauecode == 62) or (self.lauecode == 6):
       if self.polefamilies.shape[-1] == 4:
-        poles = crystal_sym.hex4poles2hex3poles(np.array(self.poles))
+        poles = crystal_sym.hex4poles2hex3poles(np.array(self.polefamilies))
     poles = np.reshape(poles, (-1,3) )
 
     npoles = poles.shape[0]
@@ -278,6 +279,7 @@ class BandIndexer():
       #sympolesN.append(self.xstalPlane2cart(family))
 
     sympolesComplete = np.concatenate(sympolesComplete)
+    #print(sympolesComplete)
     nsyms = np.sum(nFamily).astype(np.int32)
     famindx = np.concatenate( ([0],np.cumsum(nFamComplete)) )
     angs = []
@@ -314,13 +316,15 @@ class BandIndexer():
           familyID.append([i,j])
           polePairs.append(temp[k,:,:])
 
-    angs = np.squeeze(np.array(angs))
+    angs = np.atleast_1d(np.squeeze(np.array(angs)))
     nangs = angs.size
     familyID = np.array(familyID)
     polePairs = np.array(polePairs)
 
     stuff, nFamilyID = np.unique(familyID[:,0], return_counts=True)
     indx0FID = (np.concatenate( ([0],np.cumsum(nFamilyID)) ))[0:npoles]
+    #print(familyID)
+    #print(nFamilyID)
     #print(indx0FID)
     #This completely over previsions the arrays, this is essentially 
     #N Choose K with N = number of angles and K = 3
@@ -332,6 +336,8 @@ class BandIndexer():
     counter = 0
     # now actually catalog all the triplet angles.
     for i in range(npoles):
+      if indx0FID[i] >= npoles:
+        break
       id0 = familyID[indx0FID[i], 0]
       for j in range(0,nFamilyID[i]):
 
@@ -412,7 +418,7 @@ class BandIndexer():
     tripid = self.angtriplets['familyid']
 
     accumulator, bandFam, bandRank, band_cm = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
-
+    print(accumulator)
 
     if verbose > 2:
       print('band Vote time:',timer() - tic)
