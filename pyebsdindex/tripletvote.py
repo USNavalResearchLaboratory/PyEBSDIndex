@@ -336,8 +336,8 @@ class BandIndexer():
     counter = 0
     # now actually catalog all the triplet angles.
     for i in range(npoles):
-      if indx0FID[i] >= npoles:
-        break
+      #if indx0FID[i] >= npoles:
+      #  break
       id0 = familyID[indx0FID[i], 0]
       for j in range(0,nFamilyID[i]):
 
