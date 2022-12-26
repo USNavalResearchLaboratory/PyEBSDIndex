@@ -801,7 +801,7 @@ class BandIndexer():
             angTest2 = (angTest[q, 0] and angTest[q, 1] and angTest[q, 2]) == True
             if angTest2:
               f = tripID[q,:]
-              #print(angtriSRT, tripAngles[q,:], f)
+              print(angtriSRT, tripAngles[q,:], f)
               accumulator[f[0], ijk[srt[0]]] += 1
               accumulator[f[1], ijk[srt[1]]] += 1
               accumulator[f[2], ijk[srt[2]]] += 1
@@ -810,23 +810,23 @@ class BandIndexer():
               t3 = False
               if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
                 accumulator[f[0],ijk[srt[0]]] += 1
-                accumulator[f[1],ijk[srt[2]]] += 1
-                accumulator[f[2],ijk[srt[1]]] += 1
+                accumulator[f[1],ijk[srt[1]]] += 1
+                accumulator[f[2],ijk[srt[2]]] += 1
                 t1 = True
               if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
-                accumulator[f[0],ijk[srt[1]]] += 1
-                accumulator[f[1],ijk[srt[0]]] += 1
-                accumulator[f[2],ijk[srt[2]]] += 1
+                accumulator[f[0],ijk[srt[0]]] += 1
+                accumulator[f[2],ijk[srt[1]]] += 1
+                accumulator[f[1],ijk[srt[2]]] += 1
                 t2 = True
               if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
-                accumulator[f[0],ijk[srt[2]]] += 1
-                accumulator[f[1],ijk[srt[1]]] += 1
                 accumulator[f[2],ijk[srt[0]]] += 1
+                accumulator[f[1],ijk[srt[1]]] += 1
+                accumulator[f[0],ijk[srt[2]]] += 1
                 t3 = True
               if (t1 and t2 and t3):
-                accumulator[f[0],ijk[srt[2]]] += 1
                 accumulator[f[1],ijk[srt[0]]] += 1
                 accumulator[f[2],ijk[srt[1]]] += 1
+                accumulator[f[0],ijk[srt[2]]] += 1
 
 
               # f = tripID[q,:]
