@@ -573,7 +573,7 @@ class BandIndexer():
       srt = np.argsort(temp)
       libANG[i,:] = temp[srt]
       srt2 = np.squeeze(lut[:,srt[0], srt[1], srt[2]])
-      temp2 = libID[i,:]
+      temp2 = np.squeeze(libID[i,:])
       temp2 = temp2[srt2]
       libID[i,:] = temp2
 
@@ -801,7 +801,7 @@ class BandIndexer():
             angTest2 = (angTest[q, 0] and angTest[q, 1] and angTest[q, 2]) == True
             if angTest2:
               f = tripID[q,:]
-              #print(angtriSRT, tripAngles[q,:], f)
+              print(f, ijk[srt[0]], ijk[srt[1]], ijk[srt[2]])
               accumulator[f[0], ijk[srt[0]]] += 1
               accumulator[f[1], ijk[srt[1]]] += 1
               accumulator[f[2], ijk[srt[2]]] += 1
