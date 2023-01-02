@@ -363,7 +363,7 @@ class EBSDIndexer:
                 ("phase", np.int32),
                 ("fit", np.float32),
                 ("nmatch", np.int32),
-                ("matchattempts", np.int32, 2),
+                ("matchattempts", np.int32, 4),
                 ("totvotes", np.int32),
             ]
         )

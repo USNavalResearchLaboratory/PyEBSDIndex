@@ -876,7 +876,7 @@ class BandIndexer():
     #fit = np.float32(360.0)
     #whGood = np.zeros(nBnds, dtype=np.int64) - 1
     nGood = np.int64(-1)
-    ij = (-1,-1)
+    ij = (-1,-1, -1,-1)
     for ii in range(nBnds-1):
       for jj in range(ii+1,nBnds):
 
@@ -994,7 +994,7 @@ class BandIndexer():
           whGood_out = whGood
           polematch_out = polematch
           Rout = R
-          ij  = (bnd1,bnd2)
+          ij  = (ii, jj, bnd1,bnd2)
           break
         else:
           if nMatch < nGood:
@@ -1004,7 +1004,7 @@ class BandIndexer():
             whGood_out = whGood
             polematch_out = polematch
             Rout = R
-            ij = (bnd1, bnd2)
+            ij = (ii, jj, bnd1,bnd2)
           elif nMatch == nGood:
             if fitout > fit:
               fitout = np.float32(fit)
@@ -1013,7 +1013,7 @@ class BandIndexer():
               whGood_out = whGood
               polematch_out = polematch
               Rout = R
-              ij = (bnd1, bnd2)
+              ij = (ii, jj, bnd1,bnd2)
       if nMatch >= (n_band_early):
         break
     #quatout = rotlib.om2quL(Rout)
