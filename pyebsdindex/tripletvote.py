@@ -1068,22 +1068,18 @@ class BandIndexer():
 
         if nGood >= (n_band_early):
           testout = testp
-          dave = (angFit, whGood)
+
           fitout = fit
           fitbout = fitb
           nMatch = nGood
           whGood_out = whGood
           polematch_out = polematch
           Rout = R
-
-
           ij  = (ii,jj,bnd1,bnd2)
-
           break
         else:
           if nMatch < nGood:
             testout = testp
-            dave = (angFit, whGood)
             fitout = np.float32(fit)
             fitbout = fitb
             nMatch = nGood
@@ -1096,7 +1092,6 @@ class BandIndexer():
           elif nMatch == nGood:
             if fitout > fit:
               testout = testp
-              dave = (angFit, whGood)
               fitout = np.float32(fit)
               fitbout = fitb
               nMatch = nGood
@@ -1106,8 +1101,14 @@ class BandIndexer():
 
               ij = (ii, jj, bnd1,bnd2)
 
+      #print('----')
+      #print(ij)
+
+      #print(testout.T)
+      #print(pflt[polematch_out, :])
       if nMatch >= (n_band_early):
         break
+
     #print(testout.T)
     #print(pflt[polematch_out,:])
     #print(dave)
