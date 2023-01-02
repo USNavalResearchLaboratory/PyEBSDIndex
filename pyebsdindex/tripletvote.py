@@ -806,14 +806,14 @@ class BandIndexer():
               t2 = False
               t3 = False
               if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
-                accumulator[f[0],i] += 1
-                accumulator[f[1],k] += 1
-                accumulator[f[2],j] += 1
-                t1 = True
-              if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
                 accumulator[f[0],j] += 1
                 accumulator[f[1],i] += 1
                 accumulator[f[2],k] += 1
+                t1 = True
+              if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
+                accumulator[f[0],i] += 1
+                accumulator[f[1],k] += 1
+                accumulator[f[2],j] += 1
                 t2 = True
               if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
                 accumulator[f[0],k] += 1
@@ -824,6 +824,10 @@ class BandIndexer():
                 accumulator[f[0],k] += 1
                 accumulator[f[1],i] += 1
                 accumulator[f[2],j] += 1
+
+                accumulator[f[0], j] += 1
+                accumulator[f[1], k] += 1
+                accumulator[f[2], i] += 1
 
     mxvote = np.zeros(n_bands, dtype=np.int32)
     tvotes = np.zeros(n_bands, dtype=np.int32)
