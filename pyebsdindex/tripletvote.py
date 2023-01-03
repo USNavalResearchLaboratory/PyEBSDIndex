@@ -112,7 +112,7 @@ class BandIndexer():
                spacegroup = None,
                latticeparameter=None,
                polefamilies = None,
-               angTol=3.0,
+               angTol=2.0,
                nband_earlyexit = 8):
     self.phaseName = None  # User provided name of the phase.
     self.spacegroup = None  # space group id 1-230
@@ -800,6 +800,7 @@ class BandIndexer():
     count  = 0.0
     #angTest2 = np.zeros(ntrip, dtype=numba.boolean)
     #angTest2 = np.empty(ntrip,dtype=numba.boolean)
+    angTest0 = np.zeros((3), dtype=np.float32)
     for i in range(n_bands):
       for j in range(i + 1,n_bands):
         for k in range(j + 1,n_bands):
@@ -808,49 +809,72 @@ class BandIndexer():
           srt2 = np.asarray(LUTTemp[:,srt[0],srt[1],srt[2]], dtype=np.int64).copy()
           unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
           angtriSRT = np.asarray(angtri[srt])
-          angTest0 = (np.abs(tripAngles - angtriSRT)).astype(np.float32)
+
+          #angTest0 = (np.abs(tripAngles - angtriSRT)).astype(np.float32)
           #print(angTest0.shape)
-          angTest = (angTest0 <= angTol)#.astype(np.int)
+          #angTest = (angTest0 <= angTol)#.astype(np.int)
 
           for q in range(ntrip):
-            angTest2 = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
-            if angTest2:
-              f = tripID[q,:]
-              f = f[unsrtFID]
-              #print(angTest0[q,:])
-              w1 = (2.0 * angTol - (angTest0[q,0] + angTest0[q,1]))
-              w2 = (2.0 * angTol - (angTest0[q,0] + angTest0[q,2]))
-              w3 = (2.0 * angTol - (angTest0[q,1] + angTest0[q,2]))
-              #print(w1, w2, w3)
-              accumulator[f[0],i] += w1
-              accumulator[f[1],j] += w2
-              accumulator[f[2],k] += w3
-              t1 = False
-              t2 = False
-              t3 = False
-              if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
-                accumulator[f[0],j] += w1
-                accumulator[f[1],i] += w2
-                accumulator[f[2],k] += w3
-                t1 = True
-              if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
-                accumulator[f[0],i] += w1
-                accumulator[f[1],k] += w2
-                accumulator[f[2],j] += w3
-                t2 = True
-              if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
-                accumulator[f[0],k] += w1
-                accumulator[f[1],j] += w2
-                accumulator[f[2],i] += w3
-                t3 = True
-              if (t1 and t2 and t3):
-                accumulator[f[0],k] += w1
-                accumulator[f[1],i] += w2
-                accumulator[f[2],j] += w3
+            #print('____')
+            #print(tripAngles[q,:], angtriSRT)
 
-                accumulator[f[0], j] += w1
-                accumulator[f[1], k] += w2
-                accumulator[f[2], i] += w3
+            test1 = np.abs(tripAngles[q,0] - angtriSRT[0])
+            if test1 > angTol:
+              continue
+            else:
+              angTest0[0] = test1
+
+            test2 = np.abs(tripAngles[q, 1] - angtriSRT[1])
+            if test2 > angTol:
+              continue
+            else:
+              angTest0[1] = test2
+
+            test3 = np.abs(tripAngles[q, 2] - angtriSRT[2])
+            if test3 > angTol:
+              continue
+            else:
+              angTest0[2] = test3
+
+            #print('here')
+            #angTest2 = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
+            #if angTest2:
+            f = tripID[q,:]
+            f = f[unsrtFID]
+            #print(angTest0[q,:])
+            w1 = (2.0 * angTol - (angTest0[0] + angTest0[1]))
+            w2 = (2.0 * angTol - (angTest0[0] + angTest0[2]))
+            w3 = (2.0 * angTol - (angTest0[1] + angTest0[2]))
+            #print(w1, w2, w3)
+            accumulator[f[0],i] += w1
+            accumulator[f[1],j] += w2
+            accumulator[f[2],k] += w3
+            t1 = False
+            t2 = False
+            t3 = False
+            if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
+              accumulator[f[0],j] += w1
+              accumulator[f[1],i] += w2
+              accumulator[f[2],k] += w3
+              t1 = True
+            if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
+              accumulator[f[0],i] += w1
+              accumulator[f[1],k] += w2
+              accumulator[f[2],j] += w3
+              t2 = True
+            if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
+              accumulator[f[0],k] += w1
+              accumulator[f[1],j] += w2
+              accumulator[f[2],i] += w3
+              t3 = True
+            if (t1 and t2 and t3):
+              accumulator[f[0],k] += w1
+              accumulator[f[1],i] += w2
+              accumulator[f[2],j] += w3
+
+              accumulator[f[0], j] += w1
+              accumulator[f[1], k] += w2
+              accumulator[f[2], i] += w3
 
     mxvote = np.zeros(n_bands, dtype=np.int32)
     tvotes = np.zeros(n_bands, dtype=np.int32)
@@ -948,7 +972,7 @@ class BandIndexer():
     R = np.zeros((1, 3, 3), dtype=np.float32)
     #fit = np.float32(360.0)
     #whGood = np.zeros(nBnds, dtype=np.int64) - 1
-    nGood = np.int64(-1)
+    nMatch = np.int64(0)
 
     ij = (-1,-1,-1,-1)
 
@@ -1079,6 +1103,8 @@ class BandIndexer():
           break
         else:
           if nMatch < nGood:
+          #print((nMatch*(3.0-fitout)) , (nGood*(3.0-fit)))
+          #if (nMatch*(2.0-fitout)) < (nGood*(2.0-fit)):
             testout = testp
             fitout = np.float32(fit)
             fitbout = fitb
@@ -1090,6 +1116,7 @@ class BandIndexer():
             ij = (ii,jj,bnd1,bnd2)
 
           elif nMatch == nGood:
+          #elif (nMatch*(2.0-fitout)) == (nGood*(2.0-fit)):
             if fitout > fit:
               testout = testp
               fitout = np.float32(fit)
