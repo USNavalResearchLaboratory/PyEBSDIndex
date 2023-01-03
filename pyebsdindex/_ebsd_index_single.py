@@ -545,8 +545,9 @@ class EBSDIndexer:
         q = rotlib.quatnorm(q)
         q = q.reshape(nPhases, npoints, 4)
         indxData["quat"][0:nPhases, :, :] = q
+        indxData[-1, :] = indxData[0, :]
         if nPhases > 1:
-            for j in range(nPhases - 1):
+            for j in range(1, nPhases-1):
                 #indxData[-1, :] = np.where(
                 #    (indxData[j, :]["cm"] * indxData[j, :]["nmatch"])
                 #    > (indxData[j + 1, :]["cm"] * indxData[j + 1, :]["nmatch"]),
@@ -554,13 +555,12 @@ class EBSDIndexer:
                 #    indxData[j + 1, :],
                 indxData[-1, :] = np.where(
                    ((3.0 - indxData[j, :]["fit"]) * indxData[j, :]["nmatch"])
-                    > ((3.0 - indxData[j + 1, :]["fit"]) * indxData[j + 1, :]["nmatch"]),
+                    > ((3.0 - indxData[-1, :]["fit"]) * indxData[-1, :]["nmatch"]),
                     indxData[j, :],
-                    indxData[j + 1, :],
-
+                    indxData[-1, :]
                 )
-        else:
-            indxData[-1, :] = indxData[0, :]
+
+
 
         if verbose > 0:
             print("Band Vote Time: ", timer() - tic)
