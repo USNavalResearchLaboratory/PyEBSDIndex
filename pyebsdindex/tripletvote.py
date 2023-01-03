@@ -423,10 +423,13 @@ class BandIndexer():
     accumulator, bandFam, bandRank, band_cm = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
     #accumulator, bandFam, bandRank, band_cm = self._pairvote_numba(bandangs, self.angTol, pairangs, pairfam,
     #                                                               nfam, n_bands)
-    if verbose >= 3:
+    if verbose > 3:
       with np.printoptions(precision=2, suppress=True):
+        print('___Accumulator___')
         print(accumulator)
+        print('___Band Rank___')
         print(bandRank)
+        print('___Band Family ID___')
         print(bandFam)
 
 
@@ -456,11 +459,16 @@ class BandIndexer():
     fit, polematch, nMatch, whGood, ij, R, fitb = \
       self._assign_bands_nb(polesCart, bandRank_arg, bandFam, famIndx, nFam, angTable, bandnorms, angTol, n_band_early)
 
-    if verbose > 2:
+    if verbose > 3:
+      print('___Assigned Band___')
       print(self.completelib['familyid'][polematch])
+    acc_correct = np.sum( np.array(self.completelib['familyid'][polematch] == bandFam).astype(int)).astype(int)
+    if verbose > 2:
       #print(polematch)
       #print(fit, fitb, fitb[whGood])
       print('band index: ',timer() - tic)
+
+
 
     tic = timer()
 
@@ -492,7 +500,7 @@ class BandIndexer():
     if verbose > 2:
       print('refinement: ', timer() - tic)
       print('all: ',timer() - tic0)
-    return avequat, fit, cm2, polematch, nMatch, ij, sumaccum
+    return avequat, fit, cm2, polematch, nMatch, ij, acc_correct #sumaccum
 
 
   def _symrotpoles(self, pole, crystalmats):
