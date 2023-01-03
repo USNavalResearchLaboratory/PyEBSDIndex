@@ -86,7 +86,11 @@ def addphase(libtype=None, phasename=None,
       else:
         latticeparameter = np.array(latticeparameter)
       if polefamilies is None:
+<<<<<<< HEAD
         polefamilies = np.array([ [1, 0, -1, 0], [0, 0, 0, 2],[1, 0, -1, 1], [1, 0, -1, 2], [1, 1, -2, 0],
+=======
+        polefamilies = np.array([  [1, 0, -1, 0],[0, 0, 0, 2],[1, 0, -1, 1], [1, 0, -1, 2], [1, 1, -2, 0],
+>>>>>>> WeightedVote
                                  [1, 0, -1, 3], [1, 1,-2, 2], [2,0,-2,1]])
       else:
         polefamilies = np.atleast_2d(np.array(polefamilies))
@@ -112,7 +116,7 @@ class BandIndexer():
                spacegroup = None,
                latticeparameter=None,
                polefamilies = None,
-               angTol=3.0,
+               angTol=2.0,
                nband_earlyexit = 8):
     self.phaseName = None  # User provided name of the phase.
     self.spacegroup = None  # space group id 1-230
@@ -414,20 +418,38 @@ class BandIndexer():
     bandangs = np.clip(bandangs, -1.0, 1.0)
     bandangs  = np.arccos(bandangs)*RADEG
 
+
     tripangs = self.angtriplets['angles']
     tripid = self.angtriplets['familyid']
+    pairangs = self.angpairs['angles']
+    pairfam = self.angpairs['familyid']
 
     accumulator, bandFam, bandRank, band_cm = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
+<<<<<<< HEAD
     #print(accumulator)
     if verbose >= 3:
       print(accumulator)
+=======
+    #accumulator, bandFam, bandRank, band_cm = self._pairvote_numba(bandangs, self.angTol, pairangs, pairfam,
+    #                                                               nfam, n_bands)
+    if verbose > 3:
+      with np.printoptions(precision=2, suppress=True):
+        print('___Accumulator___')
+        print(accumulator)
+        print('___Band Rank___')
+        print(bandRank)
+        print('___Band Family ID___')
+        print(bandFam)
+
+
+>>>>>>> WeightedVote
 
     if verbose > 2:
       print('band Vote time:',timer() - tic)
     tic = timer()
 
     sumaccum = np.sum(accumulator)
-    bandRank_arg = np.argsort(bandRank).astype(np.int64)
+    bandRank_arg = np.argsort(bandRank).astype(np.int64) # n_bands - np.arange(n_bands, dtype=np.int64) #
     test  = 0
     fit = 1000.0
     nMatch = -1
@@ -447,8 +469,17 @@ class BandIndexer():
     fit, polematch, nMatch, whGood, ij, R, fitb = \
       self._assign_bands_nb(polesCart, bandRank_arg, bandFam, famIndx, nFam, angTable, bandnorms, angTol, n_band_early)
 
+    if verbose > 3:
+      print('___Assigned Band___')
+      print(self.completelib['familyid'][polematch])
+    acc_correct = np.sum( np.array(self.completelib['familyid'][polematch] == bandFam).astype(int)).astype(int)
     if verbose > 2:
+      #print(polematch)
+      #print(fit, fitb, fitb[whGood])
       print('band index: ',timer() - tic)
+
+
+
     tic = timer()
 
     cm2 = 0.0
@@ -461,7 +492,10 @@ class BandIndexer():
         weights6 = band_intensity[whgood6]
         pflt6 = (np.asarray(polesCart[polematch[whgood6], :], dtype=np.float64))
         bndnorm6 = (np.asarray(bandnorms[whgood6, :], dtype=np.float64))
-
+        #print('____')
+        #print(pflt6)
+        #print(bndnorm6)
+        #print('____')
         avequat, fit = self._refine_orientation_quest(bndnorm6, pflt6, weights=weights6)
         fit = np.arccos(np.clip(fit, -1.0, 1.0))*RADEG
         #avequat, fit = self.refine_orientation(bandnorms,whGood,polematch)
@@ -476,7 +510,7 @@ class BandIndexer():
     if verbose > 2:
       print('refinement: ', timer() - tic)
       print('all: ',timer() - tic0)
-    return avequat, fit, cm2, polematch, nMatch, ij, sumaccum
+    return avequat, fit, cm2, polematch, nMatch, ij, acc_correct #sumaccum
 
 
   def _symrotpoles(self, pole, crystalmats):
@@ -778,25 +812,37 @@ class BandIndexer():
   @numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
   def _tripvote_numba(bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
     LUTTemp = np.asarray(LUT).copy()
-    accumulator = np.zeros((nfam, n_bands), dtype=np.int32)
+    accumulator = np.zeros((nfam, n_bands), dtype=np.float32)
     tshape = np.shape(tripAngles)
     ntrip = int(tshape[0])
     #count  = 0.0
     #angTest2 = np.zeros(ntrip, dtype=numba.boolean)
     #angTest2 = np.empty(ntrip,dtype=numba.boolean)
+    angTest0 = np.zeros((3), dtype=np.float32)
     for i in range(n_bands):
       for j in range(i + 1,n_bands):
         for k in range(j + 1,n_bands):
+<<<<<<< HEAD
           ijk = [i,j,k]
           angtri = np.array([bandangs[i,j],bandangs[i,k],bandangs[j,k]], dtype=np.float32)
           srt = angtri.argsort(kind='quicksort') #np.array(np.argsort(angtri), dtype=numba.int64)
 
           #srt2 = np.asarray(LUTTemp[:,srt[0],srt[1],srt[2]], dtype=numba.int64).copy()
           #unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
+=======
+          angtri = np.array([bandangs[i,j],bandangs[i,k],bandangs[j,k]], dtype=np.float32)
+          srt = angtri.argsort(kind='quicksort') #np.array(np.argsort(angtri), dtype=numba.int64)
+          srt2 = np.asarray(LUTTemp[:,srt[0],srt[1],srt[2]], dtype=np.int64).copy()
+          unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
+>>>>>>> WeightedVote
           angtriSRT = np.asarray(angtri[srt])
-          angTest = (np.abs(tripAngles - angtriSRT)) <= angTol
+
+          #angTest0 = (np.abs(tripAngles - angtriSRT)).astype(np.float32)
+          #print(angTest0.shape)
+          #angTest = (angTest0 <= angTol)#.astype(np.int)
 
           for q in range(ntrip):
+<<<<<<< HEAD
             #angTest2 = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
             angTest2 = (angTest[q, 0] and angTest[q, 1] and angTest[q, 2]) == True
             if angTest2:
@@ -856,6 +902,68 @@ class BandIndexer():
               #   accumulator[f[0],k] += 1
               #   accumulator[f[1],i] += 1
               #   accumulator[f[2],j] += 1
+=======
+            #print('____')
+            #print(tripAngles[q,:], angtriSRT)
+
+            test1 = np.abs(tripAngles[q,0] - angtriSRT[0])
+            if test1 > angTol:
+              continue
+            else:
+              angTest0[0] = test1
+
+            test2 = np.abs(tripAngles[q, 1] - angtriSRT[1])
+            if test2 > angTol:
+              continue
+            else:
+              angTest0[1] = test2
+
+            test3 = np.abs(tripAngles[q, 2] - angtriSRT[2])
+            if test3 > angTol:
+              continue
+            else:
+              angTest0[2] = test3
+
+            #print('here')
+            #angTest2 = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
+            #if angTest2:
+            f = tripID[q,:]
+            f = f[unsrtFID]
+            #print(angTest0[q,:])
+            w1 = (2.0 * angTol - (angTest0[0] + angTest0[1]))
+            w2 = (2.0 * angTol - (angTest0[0] + angTest0[2]))
+            w3 = (2.0 * angTol - (angTest0[1] + angTest0[2]))
+            #print(w1, w2, w3)
+            accumulator[f[0],i] += w1
+            accumulator[f[1],j] += w2
+            accumulator[f[2],k] += w3
+            t1 = False
+            t2 = False
+            t3 = False
+            if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
+              accumulator[f[0],j] += w1
+              accumulator[f[1],i] += w2
+              accumulator[f[2],k] += w3
+              t1 = True
+            if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
+              accumulator[f[0],i] += w1
+              accumulator[f[1],k] += w2
+              accumulator[f[2],j] += w3
+              t2 = True
+            if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
+              accumulator[f[0],k] += w1
+              accumulator[f[1],j] += w2
+              accumulator[f[2],i] += w3
+              t3 = True
+            if (t1 and t2 and t3):
+              accumulator[f[0],k] += w1
+              accumulator[f[1],i] += w2
+              accumulator[f[2],j] += w3
+
+              accumulator[f[0], j] += w1
+              accumulator[f[1], k] += w2
+              accumulator[f[2], i] += w3
+>>>>>>> WeightedVote
 
     mxvote = np.zeros(n_bands, dtype=np.int32)
     tvotes = np.zeros(n_bands, dtype=np.int32)
@@ -882,6 +990,56 @@ class BandIndexer():
     return accumulator, bandFam, bandRank, band_cm
 
   @staticmethod
+  @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
+  def _pairvote_numba(bandangs, angTol, pairAngs, pairID, nfam, n_bands):
+
+    accumulator = np.zeros((nfam, n_bands), dtype=np.float32)
+    pairshape = np.shape(pairAngs)
+    npair = int(pairshape[0])
+    count = 0.0
+    # angTest2 = np.zeros(ntrip, dtype=numba.boolean)
+    # angTest2 = np.empty(ntrip,dtype=numba.boolean)
+    for i in range(n_bands):
+      for j in range(i + 1, n_bands):
+          bandangpair = bandangs[i, j]
+          angTest = (np.abs(pairAngs - bandangpair)).astype(np.float32)
+          # print(angTest0.shape)
+
+
+          for q in range(npair):
+            if angTest[q] <= angTol:
+              w1 = (angTol - angTest[q])
+
+              # print(w1, w2, w3)
+              accumulator[pairID[q,0], i] += w1
+              accumulator[pairID[q,1], i] += w1
+              accumulator[pairID[q,0], j] += w1
+              accumulator[pairID[q,1], j] += w1
+
+
+    mxvote = np.zeros(n_bands, dtype=np.int32)
+    tvotes = np.zeros(n_bands, dtype=np.int32)
+    band_cm = np.zeros(n_bands, dtype=np.float32)
+    for q in range(n_bands):
+      mxvote[q] = np.amax(accumulator[:, q])
+      tvotes[q] = np.sum(accumulator[:, q])
+
+    for i in range(n_bands):
+      if tvotes[i] < 1:
+        band_cm[i] = 0.0
+      else:
+        srt = np.argsort(accumulator[:, i])
+        band_cm[i] = (accumulator[srt[-1], i] - accumulator[srt[-2], i]) / tvotes[i]
+
+    bandRank = np.zeros(n_bands, dtype=np.float32)
+    bandFam = np.zeros(n_bands, dtype=np.int32)
+    for q in range(n_bands):
+      bandFam[q] = np.argmax(accumulator[:, q])
+    bandRank = (n_bands - np.arange(n_bands)) / n_bands * band_cm * mxvote
+
+    return accumulator, bandFam, bandRank, band_cm
+
+  @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
   def _assign_bands_nb(polesCart, bandRank_arg, familyLabel, famIndx, nFam, angTable, bandnorms, angTol, n_band_early):
     eps = np.float32(1.0e-12)
@@ -903,79 +1061,85 @@ class BandIndexer():
     R = np.zeros((1, 3, 3), dtype=np.float32)
     #fit = np.float32(360.0)
     #whGood = np.zeros(nBnds, dtype=np.int64) - 1
-    nGood = np.int64(-1)
-    ij = (-1,-1)
+    nMatch = np.int64(0)
+
+    ij = (-1,-1,-1,-1)
+
     for ii in range(nBnds-1):
       for jj in range(ii+1,nBnds):
-
+        #print(ii,jj)
         polematch = np.zeros((nBnds),dtype=np.int64) - 1
 
         bnd1 = bandRank_arg[-1 - ii]
         bnd2 = bandRank_arg[-1 - jj]
 
-        v0 = bandnorms[bnd1,:]
-        f0 = familyLabel[bnd1]
-        v1 = bandnorms[bnd2,:]
-        f1 = familyLabel[bnd2]
-        ang01 = np.dot(v0,v1)
+        v1 = bandnorms[bnd1,:]
+        f1 = familyLabel[bnd1]
+        v2 = bandnorms[bnd2,:]
+        f2 = familyLabel[bnd2]
+        ang01 = (np.dot(v1,v2))
+        #if ang01 < 0:
+        #  v2 *= -1
+        #  ang01 *= -1
+
         if ang01 > np.float32(1.0):
           ang01 = np.float32(1.0-eps)
         if ang01 < np.float32(-1.0):
           ang01 = np.float32(-1.0+eps)
 
         paralleltest = np.arccos(np.fabs(ang01)) * RADEG
+
         if paralleltest < angTol:  # the two poles are parallel, send in another two poles if available.
           continue
-
         ang01 = np.arccos(ang01) * RADEG
+        wh12 = np.nonzero(np.abs(angTable[famIndx[f1],famIndx[f2]:np.int64(famIndx[f2] + nFam[f2])] - ang01) < angTol)[0]
 
-        wh01 = np.nonzero(np.abs(angTable[famIndx[f0],famIndx[f1]:np.int64(famIndx[f1] + nFam[f1])] - ang01) < angTol)[0]
-
-        n01 = wh01.size
-        if n01 == 0:
+        n12 = wh12.size
+        if n12 == 0:
           continue
 
-        wh01 += famIndx[f1]
-        p0 = polesCart[famIndx[f0], :]
+        wh12 += famIndx[f2]
+        p1 = polesCart[famIndx[f1], :]
 
-        n01 = wh01.size
-        v0v1c = np.cross(v0,v1)
-        v0v1c /= np.linalg.norm(v0v1c)
+        n12 = wh12.size
+        v1v2c = np.cross(v1,v2)
+        v1v2c /= np.linalg.norm(v1v2c)
         # attempt to see which solution gives the best match to all the poles
         # best is measured as the number of poles that are within tolerance,
         # divided by the angular deviation.
         # Use the TRIAD method for finding the rotation matrix
 
-        Rtry = np.zeros((n01,3,3), dtype = np.float32)
+        Rtry = np.zeros((n12,3,3), dtype = np.float32)
 
         #score = np.zeros((n01), dtype = np.float32)
         A = np.zeros((3,3), dtype = np.float32)
         B = np.zeros((3,3), dtype = np.float32)
         #AB = np.zeros((3,3),dtype=np.float32)
-        b2 = np.cross(v0,v0v1c)
-        B[0,:] = v0
-        B[1,:] = v0v1c
+        b2 = np.cross(v1,v1v2c)
+        B[0,:] = v1
+        B[1,:] = v1v2c
         B[2,:] = b2
-        A[:,0] = p0
+        A[:,0] = p1
         score = -1.0
 
-        for i in range(n01):
-          p1 = polesCart[wh01[i], :]
-          ntemp = np.linalg.norm(p1) + 1.0e-35
-          p1 = p1 / ntemp
-          p0p1c = np.cross(p0,p1)
-          ntemp = np.linalg.norm(p0p1c) + 1.0e-35
-          p0p1c = p0p1c / ntemp
-          A[:,1] = p0p1c
-          A[:,2] = np.cross(p0,p0p1c)
-          AB = A.dot(B)
+        for i in range(n12):
+          p2 = polesCart[wh12[i], :]
+          ntemp = np.linalg.norm(p2) + 1.0e-35
+          p2 = p2 / ntemp
+          p1p2c = np.cross(p1,p2)
+          ntemp = np.linalg.norm(p1p2c) + 1.0e-35
+          p1p2c = p1p2c / ntemp
+          A[:,1] = p1p2c
+          A[:,2] = np.cross(p1,p1p2c)
+          AB = (A.dot(B))
           Rtry[i,:,:] = AB
 
           testp = (AB.dot(bndnorm))
-          test = pflt.dot(testp)
+          test =  (pflt.dot(testp))
           #print(test.shape)
           angfitTry = np.zeros((nBnds), dtype = np.float32)
           #angfitTry = np.max(test,axis=0)
+          #print(test.shape)
           for j in range(nBnds):
             angfitTry[j] = np.max(test[:,j])
             angfitTry[j] = -1.0 if angfitTry[j] < -1.0 else angfitTry[j]
@@ -1016,35 +1180,54 @@ class BandIndexer():
 
 
         if nGood >= (n_band_early):
+          testout = testp
+
           fitout = fit
           fitbout = fitb
           nMatch = nGood
           whGood_out = whGood
           polematch_out = polematch
           Rout = R
-          ij  = (bnd1,bnd2)
+          ij  = (ii,jj,bnd1,bnd2)
           break
         else:
           if nMatch < nGood:
+          #print((nMatch*(3.0-fitout)) , (nGood*(3.0-fit)))
+          #if (nMatch*(2.0-fitout)) < (nGood*(2.0-fit)):
+            testout = testp
             fitout = np.float32(fit)
             fitbout = fitb
             nMatch = nGood
             whGood_out = whGood
             polematch_out = polematch
             Rout = R
-            ij = (bnd1, bnd2)
+
+            ij = (ii,jj,bnd1,bnd2)
+
           elif nMatch == nGood:
+          #elif (nMatch*(2.0-fitout)) == (nGood*(2.0-fit)):
             if fitout > fit:
+              testout = testp
               fitout = np.float32(fit)
               fitbout = fitb
               nMatch = nGood
               whGood_out = whGood
               polematch_out = polematch
               Rout = R
-              ij = (bnd1, bnd2)
+
+              ij = (ii, jj, bnd1,bnd2)
+
+      #print('----')
+      #print(ij)
+
+      #print(testout.T)
+      #print(pflt[polematch_out, :])
       if nMatch >= (n_band_early):
         break
-    #quatout = rotlib.om2quL(Rout)
+
+    #print(testout.T)
+    #print(pflt[polematch_out,:])
+    #print(dave)
     return fitout, polematch_out,nMatch, whGood_out, ij, Rout, fitbout
 
   @staticmethod

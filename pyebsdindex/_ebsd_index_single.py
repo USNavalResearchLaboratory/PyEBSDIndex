@@ -363,7 +363,7 @@ class EBSDIndexer:
                 ("phase", np.int32),
                 ("fit", np.float32),
                 ("nmatch", np.int32),
-                ("matchattempts", np.int32, 2),
+                ("matchattempts", np.int32, 4),
                 ("totvotes", np.int32),
             ]
         )
@@ -547,11 +547,17 @@ class EBSDIndexer:
         indxData["quat"][0:nPhases, :, :] = q
         if nPhases > 1:
             for j in range(nPhases - 1):
+                #indxData[-1, :] = np.where(
+                #    (indxData[j, :]["cm"] * indxData[j, :]["nmatch"])
+                #    > (indxData[j + 1, :]["cm"] * indxData[j + 1, :]["nmatch"]),
+                #    indxData[j, :],
+                #    indxData[j + 1, :],
                 indxData[-1, :] = np.where(
-                    (indxData[j, :]["cm"] * indxData[j, :]["nmatch"])
-                    > (indxData[j + 1, :]["cm"] * indxData[j + 1, :]["nmatch"]),
+                   ((3.0 - indxData[j, :]["fit"]) * indxData[j, :]["nmatch"])
+                    > ((3.0 - indxData[j + 1, :]["fit"]) * indxData[j + 1, :]["nmatch"]),
                     indxData[j, :],
                     indxData[j + 1, :],
+
                 )
         else:
             indxData[-1, :] = indxData[0, :]
