@@ -25,10 +25,18 @@ def writeang(filename, indexer, data,
       f.write('# Info '+'\t\t \r\n')
       f.write('# Symmetry              ' + str(phase.lauecode) + '\r\n')
       #f.write('# PointGroupID              ' + str(phase.pointgroupid) + '\r\n')
-      f.write('# LatticeConstants      '+ ' '.join(str(' {:.3f}'.format(x)) for x in phase.latticeparameter)+'\r\n')
+      latticeparameter = np.array(phase.latticeparameter).astype(float) * np.array([10.0, 10.0, 10.0, 1.0, 1.0, 1.0])
+      f.write('# LatticeConstants      '+ ' '.join(str(' {:.3f}'.format(x)) for x in latticeparameter)+'\r\n')
       f.write('# NumberFamilies             ' + str(phase.npolefamilies) + '\r\n')
+      poles = np.array(phase.polefamilies).astype(int)
+      if (phase.lauecode == 62) or (phase.lauecode == 6):
+        if poles.shape[-1] == 4:
+          poles = poles[:,[0,1,3]]
+
       for i in range(phase.npolefamilies):
-        f.write('# hklFamilies   \t' + (' '.join(str(x).rjust(2,' ') for x in phase.polefamilies[i, :])) + ' 1 0.00000 1' + '\r\n')
+        f.write('# hklFamilies   \t' + (' '.join(str(x).rjust(2,' ') for x in poles[i, :])) + ' 1 0.00000 1' + '\r\n')
+
+
       f.write('# '+'\r\n')
       pcount += 1
 

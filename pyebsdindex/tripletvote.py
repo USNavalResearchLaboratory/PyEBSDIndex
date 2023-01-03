@@ -56,7 +56,7 @@ def addphase(libtype=None, phasename=None,
       else:
         latticeparameter = np.array(latticeparameter)
       if polefamilies is None:
-        polefamilies = np.array([[0, 0, 2], [1, 1, 1], [0, 2, 2], [1, 1, 3]])
+        polefamilies = np.array([[0, 0, 2], [1, 1, 1], [0, 2, 2], [1, 1, 3]]).astype(np.int32)
       else:
         polefamilies = np.atleast_2d(np.array(polefamilies))
 
@@ -71,7 +71,7 @@ def addphase(libtype=None, phasename=None,
       else:
         latticeparameter = np.array(latticeparameter)
       if polefamilies is None:
-        polefamilies = np.array([[0, 1, 1], [0, 0, 2], [1, 1, 2], [0, 1, 3]])
+        polefamilies = np.array([[0, 1, 1], [0, 0, 2], [1, 1, 2], [0, 1, 3]]).astype(np.int32)
       else:
         polefamilies = np.atleast_2d(np.array(polefamilies))
 
@@ -87,7 +87,7 @@ def addphase(libtype=None, phasename=None,
         latticeparameter = np.array(latticeparameter)
       if polefamilies is None:
         polefamilies = np.array([ [1, 0, -1, 0], [0, 0, 0, 2],[1, 0, -1, 1], [1, 0, -1, 2], [1, 1, -2, 0],
-                                 [1, 0, -1, 3], [1, 1,-2, 2], [2,0,-2,1]])
+                                 [1, 0, -1, 3], [1, 1,-2, 2], [2,0,-2,1]]).astype(np.int32)
       else:
         polefamilies = np.atleast_2d(np.array(polefamilies))
 
@@ -97,7 +97,7 @@ def addphase(libtype=None, phasename=None,
     if latticeparameter is None:
       latticeparameter = np.array([1.0, 1.0, 1.0, 90.0, 90.0, 90.0])
     if polefamilies is None:
-      polefamilies = np.array([[0, 0, 2], [1, 1, 1], [0, 2, 2], [1, 1, 3]])
+      polefamilies = np.array([[0, 0, 2], [1, 1, 1], [0, 2, 2], [1, 1, 3]]).astype(np.int32)
 
   triplib = BandIndexer(phasename=phasename, spacegroup=spacegroup,
                         latticeparameter=latticeparameter, polefamilies=np.atleast_2d(polefamilies))
@@ -423,20 +423,18 @@ class BandIndexer():
     accumulator, bandFam, bandRank, band_cm = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
     #accumulator, bandFam, bandRank, band_cm = self._pairvote_numba(bandangs, self.angTol, pairangs, pairfam,
     #                                                               nfam, n_bands)
-    if verbose > 3:
-      with np.printoptions(precision=2, suppress=True):
-        print('___Accumulator___')
-        print(accumulator)
-        print('___Band Rank___')
-        print(bandRank)
-        print('___Band Family ID___')
-        print(bandFam)
-
-
-
     if verbose > 2:
       print('band Vote time:',timer() - tic)
+      if verbose > 3:
+        with np.printoptions(precision=2, suppress=True):
+          print('___Accumulator___')
+          print(accumulator)
+          print('___Band Rank___')
+          print(bandRank)
+          print('___Band Family ID___')
+          print(bandFam)
     tic = timer()
+
 
     sumaccum = np.sum(accumulator)
     bandRank_arg = np.argsort(bandRank).astype(np.int64) # n_bands - np.arange(n_bands, dtype=np.int64) #
@@ -444,7 +442,7 @@ class BandIndexer():
     fit = 1000.0
     nMatch = -1
     avequat = np.zeros(4, dtype=np.float32)
-    polematch = np.array([-1])
+    polematch = np.zeros([n_bands], dtype = int)-1
     whGood = -1
 
     angTable = self.completelib['angTable']
@@ -467,8 +465,6 @@ class BandIndexer():
       #print(polematch)
       #print(fit, fitb, fitb[whGood])
       print('band index: ',timer() - tic)
-
-
 
     tic = timer()
 
