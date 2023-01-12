@@ -310,6 +310,8 @@ class EBSDIndexer:
         self.phaselist = phaselist
         self.phaseLib = []
         for ph in self.phaselist:
+            if ph is None:
+                self.phaseLib.append(None)
             if (ph.__class__.__name__).lower() == 'str':
                 self.phaseLib.append(bandindexer.addphase(libtype=ph))
             if (ph.__class__.__name__) == 'BandIndexer':
@@ -494,9 +496,13 @@ class EBSDIndexer:
         q = np.zeros((nPhases, npoints, 4))
         indxData = np.zeros((nPhases + 1, npoints), dtype=self.dataTemplate)
 
+
+
         indxData["phase"] = -1
         indxData["fit"] = 180.0
         indxData["totvotes"] = 0
+        if self.phaseLib[0] is None:
+            return indxData, bandData, patstart, npats
 
         if self.nband_earlyexit is None:
             earlyexit = shpBandDat[1] # default to all the poles.

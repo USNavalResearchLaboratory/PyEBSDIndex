@@ -473,7 +473,7 @@ class BandIndexer():
       if self.high_fidelity == True:
 
         srt = np.argsort(fitb[whGood])
-        whgood6 = whGood[srt[0:np.min([8, whGood.shape[0]])]]
+        whgood6 = whGood[srt[0:np.min([9, whGood.shape[0]])]]
 
         weights6 = band_intensity[whgood6]
         pflt6 = (np.asarray(polesCart[polematch[whgood6], :], dtype=np.float64))
