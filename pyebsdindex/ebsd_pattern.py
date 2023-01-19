@@ -173,6 +173,8 @@ class EBSDPatterns():
     self.patStart = [0,0] #starting point of the pattern location in the file. len==1
     # if 2D, then it is the row/column starting points
     self.patterns = None
+    self.xyLocations = None
+    # The x,y locations of the pattern collection relative to the center of the SEM field-of-view.
 
 
 
@@ -189,8 +191,10 @@ class EBSDPatternFile():
     self.nPatterns = None
     self.patternW = None
     self.patternH = None
-    self.xStep = None
+    self.xStep = None  # assumming square grid data, with constant step size
     self.yStep = None
+    self.xyCenter = np.array([0.0, 0.0])
+    # This is the location of the center of the scan relative to center of SEM field-of-view
     self.hexflag = False
     self.filetype = filetype
     self.filedatatype = np.uint8  # the data type of the patterns within the file
@@ -242,7 +246,7 @@ class EBSDPatternFile():
 
 
       # this function does the actual reading from the file.
-      readpats = self.pat_reader(patStart, nPatToRead)
+      readpats, xyloc = self.pat_reader(patStart, nPatToRead)
       patterns = readpats.astype(typeout)
 
 
@@ -293,6 +297,7 @@ class EBSDPatternFile():
       patsout.yStep = self.yStep
       patsout.patStart = np.array(patStart)
       patsout.patterns = patterns
+      patsout.xyLocations = xyloc
       return patsout # note this function uses multiple return statements
 
   def pat_reader(self, patStart, nPatToRead):
@@ -444,6 +449,10 @@ class UPFile(EBSDPatternFile):
       self.filePos = dat[2]
       self.nPatterns = np.int((Path(self.filepath).expanduser().stat().st_size - 16) /
                               (self.patternW * self.patternH * (self.filedatatype(0).nbytes)))
+      if self.xStep is None:
+        self.xStep = 0.0
+      if self.yStep is None:
+        self.yStep = 0.0
 
     elif self.version >= 3:
       dat = np.fromfile(f, dtype=np.uint32, count=3)
@@ -478,7 +487,8 @@ class UPFile(EBSDPatternFile):
     readpats = np.fromfile(f,dtype=typeread,count=int(nPatToRead * nPerPat))
     readpats = readpats.reshape(nPatToRead,self.patternH,self.patternW)
     f.close()
-    return readpats
+    xyloc = None
+    return readpats, xyloc
 
 
   def write_header(self, writeBlank=False, bitdepth=None):
@@ -680,7 +690,8 @@ class HDF5PatFile(EBSDPatternFile):
     readpats = np.array(patterndset[int(patStart):int(patStart+nPatToRead), :, :])
     readpats = readpats.reshape(nPatToRead,self.patternH,self.patternW)
     f.close()
-    return readpats
+    xyloc = None
+    return readpats, xyloc
 
   def copy_file(self, newpath, **kwargs):
     # oh - this is a mess!
