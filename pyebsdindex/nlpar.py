@@ -219,7 +219,7 @@ class NLPAR():
       rowstartread = np.int64(j)
       rowend = min(j + chunksize + nn,nrows)
       rowcountread = np.int64(rowend - rowstartread)
-      data = patternfile.read_data(patStartCount=[[0,rowstartread],[ncols,rowcountread]],
+      data, xyloc = patternfile.read_data(patStartCount=[[0,rowstartread],[ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
 
       shp = data.shape
@@ -346,7 +346,7 @@ class NLPAR():
       rowstartread = np.int64(max(0, j-sr))
       rowend = min(j + chunksize+sr,nrows)
       rowcountread = np.int64(rowend-rowstartread)
-      data = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
+      data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
 
       shpdata = data.shape
@@ -427,7 +427,7 @@ class NLPAR():
       rowstartread = np.int64(max(0, j-nn))
       rowend = min(j + chunksize+nn,nrows)
       rowcountread = np.int64(rowend-rowstartread)
-      data = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
+      data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
 
       shp = data.shape

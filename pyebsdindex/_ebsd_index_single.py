@@ -395,6 +395,7 @@ class EBSDIndexer:
         patsin=None,
         patstart=0,
         npats=-1,
+        xyloc = None,
         clparams=None,
         PC=None,
         verbose=0,
@@ -452,11 +453,13 @@ class EBSDIndexer:
             for the distributed indexing procedures.
         """
         if patsin is None:
-            pats = self.fID.read_data(
+            pats, xylocin = self.fID.read_data(
                 returnArrayOnly=True,
                 patStartCount=[patstart, npats],
                 convertToFloat=True,
             )
+            if xyloc is None:
+                xyloc = xylocin
         else:
             pshape = patsin.shape
             if len(pshape) == 2:

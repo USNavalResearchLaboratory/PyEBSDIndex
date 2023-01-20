@@ -167,7 +167,7 @@ class EBSDPatterns():
     self.nFileCols = None
     self.nFileRows = None
     self.nPatterns = None
-    self.hexFlag = None
+    self.hexflag = None
     self.xStep = None
     self.yStep = None
     self.patStart = [0,0] #starting point of the pattern location in the file. len==1
@@ -276,12 +276,12 @@ class EBSDPatternFile():
 
         for i in range(nrowread):
           pstart = int(((rowstart+i)*self.nCols)+colstart)
-          ptemp = self.read_data(convertToFloat=convertToFloat,patStartCount = [pstart,ncolread],returnArrayOnly=True)
+          ptemp, xyloc = self.read_data(convertToFloat=convertToFloat,patStartCount = [pstart,ncolread],returnArrayOnly=True)
 
           patterns[int(i*ncolread):int((i+1)*ncolread), :, :] = ptemp
 
     if returnArrayOnly == True:
-      return patterns
+      return patterns, xyloc
     else:  # package this up in an EBSDPatterns Object
       patsout = EBSDPatterns()
       patsout.vendor = self.vendor
@@ -289,10 +289,10 @@ class EBSDPatternFile():
       patsout.filetype = self.filetype
       patsout.patternW = self.patternW
       patsout.patternH = self.patternH
-      patsout.nFileCols = self.nCols
-      patsout.nFileRows = self.nRows
+      patsout.nFileCols = np.uint64(self.nCols)
+      patsout.nFileRows = np.uint64(self.nRows)
       patsout.nPatterns = np.array(nPatToRead)
-      patsout.hexFlag = self.hexFlag
+      patsout.hexflag = self.hexflag
       patsout.xStep = self.xStep
       patsout.yStep = self.yStep
       patsout.patStart = np.array(patStart)
@@ -300,8 +300,9 @@ class EBSDPatternFile():
       patsout.xyLocations = xyloc
       return patsout # note this function uses multiple return statements
 
-  def pat_reader(self, patStart, nPatToRead):
-    '''Depending on the file type, it will return a numpy array of patterns.'''
+  def pat_reader(self, patStart=0, nPatToRead=1):
+    '''Depending on the file type, it will return a numpy array of patterns, and the positions of the patterns
+    in the scan.'''
     pass
 
   def write_header(self):
@@ -392,9 +393,9 @@ class EBSDPatternFile():
     return copy.deepcopy(self)
 
   def set_scan_rc(self, rc=(0,0)): # helper function for pattern files that don't record the scan rows and columns
-    self.nCols = rc[1]
-    self.nRows = rc[0]
-    self.nPatterns = self.nCols * self.nRows
+    self.nCols = np.uint64(rc[1])
+    self.nRows = np.uint64(rc[0])
+    self.nPatterns = np.uint64(self.nCols * self.nRows)
 
 
 class UPFile(EBSDPatternFile):
@@ -408,7 +409,7 @@ class UPFile(EBSDPatternFile):
     #self.bitdepth = None
     self.filePos = None  # file location in bytes where pattern data starts
     self.extraPatterns = 0
-    self.hexFlag = 0
+    self.hexflag = 0
 
 
   def read_header(self,path=None,bitdepth=None):  # readInterval=[0, -1], arrayOnly=False,
@@ -453,6 +454,12 @@ class UPFile(EBSDPatternFile):
         self.xStep = 0.0
       if self.yStep is None:
         self.yStep = 0.0
+      if self.nCols is None:
+        self.nCols = np.uint64(1)
+      if self.nCols == 0:
+        self.nCols = np.uint64(1)
+      if self.nRows is None:
+        self.nRows = np.uint64(np.floor(self.nPatterns/self.nCols))
 
     elif self.version >= 3:
       dat = np.fromfile(f, dtype=np.uint32, count=3)
@@ -461,17 +468,17 @@ class UPFile(EBSDPatternFile):
       self.filePos = dat[2]
       self.extraPatterns = np.fromfile(f, dtype=np.uint8, count=1)[0]
       dat = np.fromfile(f, dtype=np.uint32, count=2)
-      self.nCols = dat[0]
-      self.nRows = dat[1]
+      self.nCols = np.uint64(dat[0])
+      self.nRows = np.uint64(dat[1])
       self.nPatterns = np.int(self.nCols.astype(np.uint64) * self.nRows.astype(np.uint64))
-      self.hexFlag = np.fromfile(f, dtype=np.uint8, count=1)[0]
+      self.hexflag = np.fromfile(f, dtype=np.uint8, count=1)[0]
       dat = np.fromfile(f, dtype=np.float64, count=2)
       self.xStep = dat[0]
       self.yStep = dat[1]
     f.close()
     return 0 #note this function uses multiple returns
 
-  def pat_reader(self, patStart, nPatToRead):
+  def pat_reader(self, patStart=0, nPatToRead=1):
     try:
       f = open(Path(self.filepath).expanduser(),'rb')
     except:
@@ -487,7 +494,14 @@ class UPFile(EBSDPatternFile):
     readpats = np.fromfile(f,dtype=typeread,count=int(nPatToRead * nPerPat))
     readpats = readpats.reshape(nPatToRead,self.patternH,self.patternW)
     f.close()
-    xyloc = None
+    yx = np.unravel_index(np.arange(int(patStart), int(patStart+nPatToRead), dtype = np.uint64),
+                          (int(self.nRows), int(self.nCols)))
+
+    xyloc = np.array([yx[1],yx[0]]).T.copy().astype(np.float32)
+    xyloc[:,0] -= self.nCols * 0.5
+    xyloc[:, 1] -= self.nRows * 0.5
+    xyloc[:,0] *= self.xStep
+    xyloc[:,1] *= self.yStep
     return readpats, xyloc
 
 
@@ -538,7 +552,7 @@ class UPFile(EBSDPatternFile):
       np.asarray(self.extraPatterns,dtype=np.uint8).tofile(f)
       np.asarray(self.nCols,dtype=np.uint32).tofile(f)
       np.asarray(self.nRows,dtype=np.uint32).tofile(f)
-      np.asarray(self.hexFlag,dtype=np.uint8).tofile(f)
+      np.asarray(self.hexflag,dtype=np.uint8).tofile(f)
       np.asarray(self.xStep,dtype=np.float64).tofile(f)
       np.asarray(self.yStep,dtype=np.float64).tofile(f)
 
@@ -583,7 +597,7 @@ class UPFile(EBSDPatternFile):
 
     self.filePos = 42  # file location in bytes where pattern data starts
     self.extraPatterns = 0
-    self.hexFlag = 0
+    self.hexflag = 0
 
     if isinstance(patternobj, EBSDPatterns):
       shp = (patternobj.nPatterns.prod(),patternobj.patternH,patternobj.patternW)
@@ -599,9 +613,9 @@ class UPFile(EBSDPatternFile):
     self.patternH = shp[1]
     self.patternW = shp[2]
 
-    self.nCols = shp[0]
-    self.nRows = 1
-    self.nPatterns = shp[0]
+    self.nCols = np.uint64(shp[0])
+    self.nRows = np.uint64(1)
+    self.nPatterns = np.uint64(shp[0])
 
     if bitdepth is None: #make a guess
       self.bitdepth = 16
@@ -675,7 +689,7 @@ class HDF5PatFile(EBSDPatternFile):
 
 
 
-  def pat_reader(self,patStart,nPatToRead):
+  def pat_reader(self,patStart=0,nPatToRead=1):
     '''This is a basic function that will read a chunk of patterns from the HDF5 file.
     Mainly this is intended to be called by the parent class function read_data.
     It assumes that patterns are laid out in a HDF5 dataset as an array
@@ -690,7 +704,14 @@ class HDF5PatFile(EBSDPatternFile):
     readpats = np.array(patterndset[int(patStart):int(patStart+nPatToRead), :, :])
     readpats = readpats.reshape(nPatToRead,self.patternH,self.patternW)
     f.close()
-    xyloc = None
+    yx = np.unravel_index(np.arange(patStart, patStart + nPatToRead), (self.nRows, self.nCols))
+
+    xyloc = np.array([yx[1], yx[0]]).T.copy().astype(np.float32)
+    xyloc[:, 0] -= self.nCols * 0.5
+    xyloc[:, 1] -= self.nRows * 0.5
+    xyloc[:, 0] *= self.xStep
+    xyloc[:, 1] *= self.yStep
+
     return readpats, xyloc
 
   def copy_file(self, newpath, **kwargs):
@@ -779,6 +800,16 @@ class HDF5PatFile(EBSDPatternFile):
       self.patternH = shp[-2]
       self.nPatterns = shp[-3]
       self.filedatatype = dset.dtype.type
+      if self.xStep is None:
+        self.xStep = 0.0
+      if self.yStep is None:
+        self.yStep = 0.0
+      if self.nCols is None:
+        self.nCols = np.uint64(1)
+      if self.nCols == 0:
+        self.nCols = np.uint64(1)
+      if self.nRows is None:
+        self.nRows = np.uint64(np.floor(self.nPatterns/self.nCols))
 
 class EDAXOH5(HDF5PatFile):
   def __init__(self, path=None):
@@ -826,9 +857,9 @@ class EDAXOH5(HDF5PatFile):
       self.nPatterns = shp[-3]
       self.filedatatype = dset.dtype.type
       headerpath = (f[self.h5patdatpth].parent.parent)["Header"]
-      self.nCols = np.int32(headerpath['nColumns'][()][0])
-      self.nRows = np.int32(headerpath['nRows'][()][0])
-      self.hexFlag = np.int32(headerpath['Grid Type'][()][0] == 'HexGrid')
+      self.nCols = np.uint32(headerpath['nColumns'][()][0])
+      self.nRows = np.uint32(headerpath['nRows'][()][0])
+      self.hexflag = np.uint32(headerpath['Grid Type'][()][0] == 'HexGrid')
 
       self.xStep = np.float32(headerpath['Step X'][()][0])
       self.yStep = np.float32(headerpath['Step Y'][()][0])
@@ -881,9 +912,9 @@ class KIKUCHIPYH5(HDF5PatFile):
       self.nPatterns = shp[-3]
       self.filedatatype = dset.dtype.type
       headerpath = (f[self.h5patdatpth].parent.parent)["Header"]
-      self.nCols = np.int32(headerpath['n_columns'][()][0])
-      self.nRows = np.int32(headerpath['n_rows'][()][0])
-      self.hexFlag = np.int32(headerpath['grid_type'][()][0] == 'hexagonal')
+      self.nCols = np.uint32(headerpath['n_columns'][()][0])
+      self.nRows = np.uint32(headerpath['n_rows'][()][0])
+      self.hexflag = np.uint32(headerpath['grid_type'][()][0] == 'hexagonal')
 
       self.xStep = np.float32(headerpath['step_x'][()][0])
       self.yStep = np.float32(headerpath['step_y'][()][0])
@@ -936,9 +967,9 @@ class BRUKERH5(HDF5PatFile):
       self.nPatterns = shp[-3]
       self.filedatatype = dset.dtype.type
       headerpath = (f[self.h5patdatpth].parent.parent)["Header"]
-      self.nCols = np.int32(headerpath['NCOLS'][()][0])
-      self.nRows = np.int32(headerpath['NROWS'][()][0])
-      #self.hexFlag = np.int32(f[headerpath+'Grid Type'][()][0] == 'HexGrid')
+      self.nCols = np.uint32(headerpath['NCOLS'][()][0])
+      self.nRows = np.uint32(headerpath['NROWS'][()][0])
+      #self.hexflag = np.int32(f[headerpath+'Grid Type'][()][0] == 'HexGrid')
 
       self.xStep = np.float32(headerpath['XSTEP'][()][0])
       self.yStep = np.float32(headerpath['YSTEP'][()][0])
@@ -1024,11 +1055,26 @@ class OXFORDOINA(HDF5PatFile):
       self.nPatterns = shp[-3]
       self.filedatatype = dset.dtype.type
       headerpath = (f[self.h5patdatpth].parent.parent)["Header"]
-      self.nCols = np.int32(headerpath['X Cells'][()][0])
-      self.nRows = np.int32(headerpath['Y Cells'][()][0])
-      #self.hexFlag = np.int32(headerpath['Grid Type'][()][0] == 'HexGrid')
+      self.nCols = np.uint32(headerpath['X Cells'][()][0])
+      self.nRows = np.uint32(headerpath['Y Cells'][()][0])
+      #self.hexflag = np.int32(headerpath['Grid Type'][()][0] == 'HexGrid')
 
       self.xStep = np.float32(headerpath['X Step'][()][0])
       self.yStep = np.float32(headerpath['Y Step'][()][0])
 
     return 0 #note this function uses multiple returns
+
+  def pat_reader(self, patStart=0, nPatToRead=1):
+
+    patterns, xyloc = HDF5PatFile.pat_reader(self, patStart, nPatToRead)
+    try:
+      f = h5py.File(Path(self.filepath).expanduser(),'r')
+      xloc = (f[self.h5patdatpth].parent)["Beam Position X"]
+      xyloc[:,0] = np.array(xloc[int(patStart):int(patStart + nPatToRead)]).astype(np.float32)
+      yloc = (f[self.h5patdatpth].parent)["Beam Position Y"]
+      xyloc[:, 1] = np.array(yloc[int(patStart):int(patStart + nPatToRead)]).astype(np.float32)
+      f.close()
+    except:
+      print("File Not Found:",str(Path(self.filepath)))
+
+    return patterns, xyloc
