@@ -214,6 +214,7 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05):
     else:
         PC0 = np.asarray(PC0)
 
+    emsoftflag = False
     if indexer.vendor == "EMSOFT":  # Convert to EDAX for optimization
         emsoftflag = True
         indexer.vendor = "EDAX"
