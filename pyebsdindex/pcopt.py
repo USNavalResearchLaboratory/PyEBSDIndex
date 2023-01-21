@@ -44,6 +44,7 @@ def _optfunction(PC_i, indexer, banddat):
     average_fit = 0
     nbands_fit = 0
     phase = indexer.phaseLib[0]
+    nbands = indexer.bandDetectPlan.nBands
 
     for i in range(n_points):
         band_norm1 = band_norm[i, :, :]
@@ -56,7 +57,8 @@ def _optfunction(PC_i, indexer, banddat):
             nMatch = dat[4]
 
             if fit < 90:
-                average_fit += fit
+
+                average_fit += fit*(nbands+1 - nMatch )
                 n_averages += 1
                 nbands_fit += nMatch
 
@@ -64,7 +66,7 @@ def _optfunction(PC_i, indexer, banddat):
         average_fit = 100
     else:
         average_fit /= n_averages
-        average_fit /= nbands_fit
+        #average_fit *=  (n_averages*(nbands+1) - nbands_fit)/(n_averages*nbands)
     return average_fit
 
 
@@ -168,7 +170,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
     return PCoutRet
 
 
-def optimize_pso(pats, indexer, PC0=None, batch=False):
+def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
     of the :attr:`indexer.vendor` with particle swarms.
 
@@ -191,6 +193,8 @@ def optimize_pso(pats, indexer, PC0=None, batch=False):
         the patterns, and one PC will be returned. If ``True``, then an
         optimization is run for each individual pattern, and an array of
         PC values is returned.
+    search_limit : float, optional
+        Default is 0.05 for all PC values, and sets the +/- limit for the optimization search.
 
     Returns
     -------
@@ -200,8 +204,7 @@ def optimize_pso(pats, indexer, PC0=None, batch=False):
     Notes
     -----
     :mod:`pyswarms` particle swarm algorithm is used with 50 particles,
-    bounds of +/- 0.05 on the PC values, and parameters c1 = 2.05, c2 =
-    2.05 and w = 0.8.
+    and parameters c1 = 2.05, c2 = 2.05 and w = 0.8.
     """
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
@@ -211,11 +214,24 @@ def optimize_pso(pats, indexer, PC0=None, batch=False):
     else:
         PC0 = np.asarray(PC0)
 
+    if indexer.vendor == "EMSOFT":  # Convert to EDAX for optimization
+        emsoftflag = True
+        indexer.vendor = "EDAX"
+        delta = indexer.PC
+        PCtemp = PC0[0:3]
+        PCtemp[0] *= -1.0
+        PCtemp[0] += 0.5 * indexer.bandDetectPlan.patDim[1]
+        PCtemp[1] += 0.5 * indexer.bandDetectPlan.patDim[0]
+        PCtemp /= indexer.bandDetectPlan.patDim[1]
+        PCtemp[2] /= delta[3]
+        PC0 = PCtemp
+
+
     optimizer = pso.single.GlobalBestPSO(
         n_particles=50,
         dimensions=3,
         options={"c1": 2.05, "c2": 2.05, "w": 0.8},
-        bounds=(PC0 - 0.05, PC0 + 0.05),
+        bounds=(PC0 - search_limit, PC0 + search_limit),
     )
 
     if not batch:
@@ -229,6 +245,31 @@ def optimize_pso(pats, indexer, PC0=None, batch=False):
             cost, PCoutRet[i, :] = optimizer.optimize(
                 _optfunction, 100, indexer=indexer, banddat=banddat[i, :, :]
             )
+
+    if emsoftflag:  # Return original state for indexer
+        indexer.vendor = "EMSOFT"
+        indexer.PC = delta
+        if PCoutRet.ndim == 2:
+            newout = np.zeros((npoints, 4))
+            PCoutRet[:, 0] -= 0.5
+            PCoutRet[:, :3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[:, 1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
+            PCoutRet[:, 0] *= -1.0
+            PCoutRet[:, 2] *= delta[3]
+            newout[:, :3] = PCoutRet
+            newout[:, 3] = delta[3]
+            PCoutRet = newout
+        else:
+            newout = np.zeros(4)
+            PCoutRet[0] -= 0.5
+            PCoutRet[:3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
+            PCoutRet[0] *= -1.0
+            PCoutRet[2] *= delta[3]
+            newout[:3] = PCoutRet
+            newout[3] = delta[3]
+            PCoutRet = newout
+
     return PCoutRet
 
 
