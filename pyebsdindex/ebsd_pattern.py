@@ -659,7 +659,7 @@ class EBSDPFile(EBSDPatternFile):
       # going to assume that all patterns are the same as the first pattern the file.
       f.seek(int(loc0))
       patdata = np.fromfile(f, dtype=np.uint32, count=4)
-      print(loc0, patdata)
+      #print(loc0, patdata)
       self.patternW = patdata[2]
       self.patternH = np.uint32(patdata[1])
       nbytespat = patdata[3]

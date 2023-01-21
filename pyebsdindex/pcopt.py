@@ -42,6 +42,7 @@ def _optfunction(PC_i, indexer, banddat):
     n_points = banddat.shape[0]
     n_averages = 0
     average_fit = 0
+    nbands_fit = 0
     phase = indexer.phaseLib[0]
 
     for i in range(n_points):
@@ -50,15 +51,20 @@ def _optfunction(PC_i, indexer, banddat):
         whgood = np.nonzero(band_data1['max'] > -1e6)[0]
         if whgood.size >= 3:
             band_norm1 = band_norm1[whgood, :]
-            fit = phase.bandindex(band_norm1)[1]
+            dat = phase.bandindex(band_norm1)
+            fit = dat[1]
+            nMatch = dat[4]
+
             if fit < 90:
                 average_fit += fit
                 n_averages += 1
+                nbands_fit += nMatch
 
     if n_averages < 0.9:
         average_fit = 100
     else:
         average_fit /= n_averages
+        average_fit /= nbands_fit
     return average_fit
 
 
