@@ -43,7 +43,7 @@ def writeang(filename, indexer, data,
     f.write('# '+'\r\n')
     f.write('# GRID: '+gridtype+'\r\n')
     if indexer.fID is not None:
-      if indexer.fID.xStep is not None:
+      if indexer.fID.xStep > 1e-6:
         xstep = indexer.fID.xStep
         ystep = indexer.fID.yStep
 

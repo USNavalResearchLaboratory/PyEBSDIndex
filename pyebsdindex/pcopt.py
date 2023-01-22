@@ -57,7 +57,6 @@ def _optfunction(PC_i, indexer, banddat):
             nMatch = dat[4]
 
             if fit < 90:
-
                 average_fit += fit*(nbands+1 - nMatch )
                 n_averages += 1
                 nbands_fit += nMatch
