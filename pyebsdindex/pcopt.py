@@ -36,35 +36,47 @@ RADEG = 180.0 / np.pi
 
 
 def _optfunction(PC_i, indexer, banddat):
-    band_norm = indexer.bandDetectPlan.radonPlan.radon2pole(
+    bandnorm = indexer.bandDetectPlan.radonPlan.radon2pole(
         banddat, PC=PC_i, vendor=indexer.vendor
     )
-    n_points = banddat.shape[0]
-    n_averages = 0
-    average_fit = 0
-    nbands_fit = 0
-    phase = indexer.phaseLib[0]
+    #npoints = banddat.shape[0]
+    #n_averages = 0
+    #average_fit = 0
+    #nbands_fit = 0
+    #phase = indexer.phaseLib[0]
     nbands = indexer.bandDetectPlan.nBands
+    indexdata = indexer._indexbandsphase( banddat, bandnorm)
 
-    for i in range(n_points):
-        band_norm1 = band_norm[i, :, :]
-        band_data1 = banddat[i, :]
-        whgood = np.nonzero(band_data1['max'] > -1e6)[0]
-        if whgood.size >= 3:
-            band_norm1 = band_norm1[whgood, :]
-            dat = phase.bandindex(band_norm1)
-            fit = dat[1]
-            nMatch = dat[4]
 
-            if fit < 90:
-                average_fit += fit*(nbands+1 - nMatch )
-                n_averages += 1
-                nbands_fit += nMatch
+
+    fit = indexdata[-1]['fit']
+    nmatch = indexdata[-1]['nmatch']
+    average_fit = fit*(nbands+1 - nmatch)
+    whgood = np.nonzero(fit < 90.0)
+
+    n_averages = len(whgood[0])
+
+
+    # for i in range(npoints):
+    #     band_norm1 = band_norm[i, :, :]
+    #     band_data1 = banddat[i, :]
+    #     whgood = np.nonzero(band_data1['max'] > -1e6)[0]
+    #     if whgood.size >= 3:
+    #         band_norm1 = band_norm1[whgood, :]
+    #         dat = phase.bandindex(band_norm1)
+    #         fit = dat[1]
+    #         nMatch = dat[4]
+    #
+    #         if fit < 90:
+    #             average_fit += fit*(nbands+1 - nMatch )
+    #             n_averages += 1
+    #             nbands_fit += nMatch
 
     if n_averages < 0.9:
         average_fit = 100
     else:
-        average_fit /= n_averages
+        average_fit = np.mean(average_fit[whgood[0]])
+        #average_fit /= n_averages
         #average_fit *=  (n_averages*(nbands+1) - nbands_fit)/(n_averages*nbands)
     return average_fit
 
@@ -238,7 +250,7 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05):
         cost, PCoutRet = optimizer.optimize(
             _optfunction, 1000, indexer=indexer, banddat=banddat
         )
-        print(cost)
+        #print(cost)
     else:
         PCoutRet = np.zeros((npoints, 3))
         for i in range(npoints):

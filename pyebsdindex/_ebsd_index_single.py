@@ -444,7 +444,7 @@ class EBSDIndexer:
             Number of Bands Matched (nmatch). There are some other
             metrics reported, but these are mostly for debugging
             purposes.
-        bandData : numpy.ndarray
+        banddata : numpy.ndarray
             Band identification data from the Radon transform.
         patstart : int
             Starting index of the indexed patterns.
@@ -481,34 +481,58 @@ class EBSDIndexer:
         if npats == -1:
             npats = npoints
 
-        bandData = self.bandDetectPlan.find_bands(
+        banddata = self.bandDetectPlan.find_bands(
             pats, clparams=clparams, verbose=verbose, chunksize=chunksize
         )
-        shpBandDat = bandData.shape
+        #  shpBandDat = banddata.shape
         if PC is None:
             PC_0 = self.PC
         else:
             PC_0 = PC
-        bandNorm = self.bandDetectPlan.radonPlan.radon2pole(
-            bandData, PC=PC_0, vendor=self.vendor
+        bandnorm = self.bandDetectPlan.radonPlan.radon2pole(
+            banddata, PC=PC_0, vendor=self.vendor
         )
 
-        # Return bandNorm, patStart, patEnd
         tic = timer()
+
+        indxData = self._indexbandsphase(banddata, bandnorm, verbose=verbose)
+
+        if verbose > 0:
+            print("Band Vote Time: ", timer() - tic)
+
+        return indxData, banddata, patstart, npats
+
+    def _detector2refframe(self):
+        ven = str.upper(self.vendor)
+        if ven in ["EDAX", "EMSOFT", "KIKUCHIPY"]:
+            q0 = np.array([np.sqrt(2.0) * 0.5, 0.0, 0.0, -1.0 * np.sqrt(2.0) * 0.5])
+            tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
+            q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
+            quatref2detect = rotlib.quat_multiply(q1, q0)
+        elif ven in ["OXFORD", "BRUKER"]:
+            tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
+            q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
+            quatref2detect = q1
+        else:
+            raise ValueError("`self.vendor` unknown")
+
+        return quatref2detect
+    def _indexbandsphase(self, banddata, bandnorm, verbose = 0):
+
+        shpBandDat = banddata.shape
+        npoints = int(banddata.size/(shpBandDat[-1])+0.1)
         nPhases = len(self.phaseLib)
         q = np.zeros((nPhases, npoints, 4))
         indxData = np.zeros((nPhases + 1, npoints), dtype=self.dataTemplate)
-
-
 
         indxData["phase"] = -1
         indxData["fit"] = 180.0
         indxData["totvotes"] = 0
         if self.phaseLib[0] is None:
-            return indxData, bandData, patstart, npats
+            return indxData
 
         if self.nband_earlyexit is None:
-            earlyexit = shpBandDat[1] # default to all the poles.
+            earlyexit = shpBandDat[1]  # default to all the poles.
             # for ph in self.phaselist:
             #     if hasattr(ph, 'nband_earlyexit'):
             #         earlyexit = min(earlyexit, ph.nband_earlyexit)
@@ -516,8 +540,8 @@ class EBSDIndexer:
             earlyexit = self.nband_earlyexit
 
         for i in range(npoints):
-            bandNorm1 = bandNorm[i, :, :]
-            bDat1 = bandData[i, :]
+            bandNorm1 = bandnorm[i, :, :]
+            bDat1 = banddata[i, :]
             whgood = np.nonzero(bDat1["max"] > -1.0e6)[0]
             if whgood.size >= 3:
                 bDat1 = bDat1[whgood]
@@ -548,7 +572,7 @@ class EBSDIndexer:
                     if nMatch >= earlyexit:
                         break
 
-        qref2detect = self._refframe2detector()
+        qref2detect = self._detector2refframe()
         q = q.reshape(nPhases * npoints, 4)
         q = rotlib.quat_multiply(q, qref2detect)
         q = rotlib.quatnorm(q)
@@ -557,41 +581,19 @@ class EBSDIndexer:
         indxData[-1, :] = indxData[0, :]
         if nPhases > 1:
             for j in range(1, nPhases):
-                #indxData[-1, :] = np.where(
+                # indxData[-1, :] = np.where(
                 #    (indxData[j, :]["cm"] * indxData[j, :]["nmatch"])
                 #    > (indxData[j + 1, :]["cm"] * indxData[j + 1, :]["nmatch"]),
                 #    indxData[j, :],
                 #    indxData[j + 1, :],
                 indxData[-1, :] = np.where(
-                   ((3.0 - indxData[j, :]["fit"]) * indxData[j, :]["nmatch"])
+                    ((3.0 - indxData[j, :]["fit"]) * indxData[j, :]["nmatch"])
                     > ((3.0 - indxData[-1, :]["fit"]) * indxData[-1, :]["nmatch"]),
                     indxData[j, :],
                     indxData[-1, :]
                 )
 
-
-
-        if verbose > 0:
-            print("Band Vote Time: ", timer() - tic)
-
-        return indxData, bandData, patstart, npats
-
-    def _refframe2detector(self):
-        ven = str.upper(self.vendor)
-        if ven in ["EDAX", "EMSOFT", "KIKUCHIPY"]:
-            q0 = np.array([np.sqrt(2.0) * 0.5, 0.0, 0.0, -1.0 * np.sqrt(2.0) * 0.5])
-            tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
-            q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
-            quatref2detect = rotlib.quat_multiply(q1, q0)
-        elif ven in ["OXFORD", "BRUKER"]:
-            tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
-            q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
-            quatref2detect = q1
-        else:
-            raise ValueError("`self.vendor` unknown")
-
-        return quatref2detect
-
+        return indxData
 #    def pcCorrect(self, xy=[[0.0, 0.0]]):
 #        # TODO: At somepoint we will put some methods here for
 #        #  correcting the PC depending on the location within the scan.
