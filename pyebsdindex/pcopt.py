@@ -181,7 +181,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
     return PCoutRet
 
 
-def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05):
+def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05, nswarmpoints=50):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
     of the :attr:`indexer.vendor` with particle swarms.
 
@@ -240,7 +240,7 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05):
 
 
     optimizer = pso.single.GlobalBestPSO(
-        n_particles=50,
+        n_particles=nswarmpoints,
         dimensions=3,
         options={"c1": 2.05, "c2": 2.05, "w": 0.8},
         bounds=(PC0 - search_limit, PC0 + search_limit),
