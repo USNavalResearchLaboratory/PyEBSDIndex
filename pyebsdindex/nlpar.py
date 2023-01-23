@@ -109,7 +109,8 @@ class NLPAR():
 
     if patternfile is not None: # the user has set no path.
       hdf5path = None
-      if patternfile.filetype == 'UP':
+      
+      if patternfile.filetype in ['UP', 'EBSP']:
         p = Path(patternfile.filepath)
         appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
         newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))

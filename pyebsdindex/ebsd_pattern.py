@@ -631,7 +631,7 @@ class EBSDPFile(EBSDPatternFile):
 
   def __init__(self, path=None):
     EBSDPatternFile.__init__(self, path)
-    self.filetype = 'EBSDP'
+    self.filetype = 'EBSP'
     self.vendor = 'OXFORD'
     self.filedatatype = None
     # UP only attributes
