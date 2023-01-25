@@ -216,9 +216,9 @@ class BandDetect:
       elif method.upper() == 'EVENSTRIDE':
         step = int(npats / nsample) # not great, but maybe good enough.
         stride = np.arange(0,npats, step, dypte = np.uint64)
-      pat1 = fileobj.read_data(convertToFloat=True,patStartCount=[stride[0], 1],returnArrayOnly=True)
+      pat1 = fileobj.read_data(convertToFloat=True,patStartCount=[stride[0], 1],returnArrayOnly=True)[0]
       for i in stride[1:]:
-        pat1 += fileobj.read_data(convertToFloat=True,patStartCount=[i, 1],returnArrayOnly=True)
+        pat1 += fileobj.read_data(convertToFloat=True,patStartCount=[i, 1],returnArrayOnly=True)[0]
       back = pat1 / float(len(stride))
       #pshape = pat1.shape
     # a bit of image processing.
@@ -230,7 +230,7 @@ class BandDetect:
       #back -= np.mean(back)
     self.backgroundsub = back
 
-  def backsub_fit(self, back):
+  def backsub_fit(self, back, mask = None):
     # This function will fit a 2D gaussian on top of a plane to the averaged set of patterns (data) that is provided.
     # It will automatically use whatever mask is defined for valid data.
     # If the gaussian fit fails to converge, it will fall back to just using the mean set of patterns for the background
@@ -254,11 +254,13 @@ class BandDetect:
     x = (np.broadcast_to(x.reshape(1,nx), (ny, nx))).ravel()
     y = np.arange(ny, dtype=float)
     y = (np.broadcast_to(y, (nx, ny)).T).ravel()
-    # make a circular mask - even if not EDAX, this should work OK.
-    cx = (np.arange(nx) - nx*0.5)**2
-    cy = (np.arange(ny) - ny*0.5)**2
-    cmask = np.sqrt(np.broadcast_to(cx.reshape(1,nx), (ny, nx)) + np.broadcast_to(cy, (nx, ny)).T) < (ny*0.49)
-
+    if mask is None:
+      # make a circular mask - even if not EDAX, this should work OK.
+      cx = (np.arange(nx) - nx*0.5)**2
+      cy = (np.arange(ny) - ny*0.5)**2
+      cmask = np.sqrt(np.broadcast_to(cx.reshape(1,nx), (ny, nx)) + np.broadcast_to(cy, (nx, ny)).T) < (ny*0.49)
+    else:
+      cmask = mask
     # need to grab only the values that are in the mask.
     wh = np.nonzero(cmask.ravel())[0]
     xwh = x[wh]

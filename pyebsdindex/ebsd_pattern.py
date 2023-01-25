@@ -217,7 +217,7 @@ class EBSDPatternFile():
       self.read_header()
     if self.version is None:
       self.read_header()
-
+    patStartCount = np.array(patStartCount, dtype=np.int64)
     # bitD = 8 * (self.bitdepth == 8) + 16 * (self.bitdepth == 16)
 
     # # this will allow for overriding the original file spec -- not sure why would want to but ...
@@ -543,13 +543,20 @@ class UPFile(EBSDPatternFile):
       print("File Not Found:", str(Path(filepath)))
       return -1
 
+    if self.version is None:
+      self.version = 3
+
     np.asarray(self.version, dtype=np.uint32).tofile(f)
     if self.version == 1:
+      if self.filePos is None:
+        self.filePos = 16
       np.asarray(self.patternW,dtype=np.uint32).tofile(f)
       np.asarray(self.patternH,dtype=np.uint32).tofile(f)
       np.asarray(self.filePos,dtype=np.uint32).tofile(f)
 
     elif self.version >= 3:
+      if self.filePos is None:
+        self.filePos = 42
       np.asarray(self.patternW,dtype=np.uint32).tofile(f)
       np.asarray(self.patternH,dtype=np.uint32).tofile(f)
       np.asarray(self.filePos,dtype=np.uint32).tofile(f)
@@ -654,16 +661,45 @@ class EBSDPFile(EBSDPatternFile):
     self.version = int(np.uint64(0)-version)
 
     if self.version >= 1:
+
       loc0 = int(np.fromfile(f, dtype=np.uint64, count=1))
+      currentloc = f.tell()
+      loc1 = loc0
+      npat = 0
+
+      while loc1 != currentloc:
+        loc11 = int(np.fromfile(f, dtype=np.uint64, count = 1))
+        loc1 = min([loc1, loc11])
+        currentloc = f.tell()
+        #print(loc1, currentloc)
+        #return
+
+      self.nPatterns = int((currentloc-8)/int(8))
+
+      f.seek(8)
+      self.filePos = np.fromfile(f, dtype=np.uint64, count=self.nPatterns)
 
       # going to assume that all patterns are the same as the first pattern the file.
-      f.seek(int(loc0))
+      f.seek(self.filePos[0])
+      #patdata = np.fromfile(f, dtype=np.uint32, count=4)
+      #patdata0 = np.fromfile(f, dtype=np.uint8, count=1)
+
       patdata = np.fromfile(f, dtype=np.uint32, count=4)
       #print(loc0, patdata)
+      #f.seek(self.filePos[2])
+      #print(np.fromfile(f, dtype=np.uint32, count=4))
+      #print(np.fromfile(f, dtype=np.uint32, count=8))
+      #print(np.fromfile(f, dtype=np.uint32, count=1))
+
       self.patternW = patdata[2]
       self.patternH = np.uint32(patdata[1])
       nbytespat = patdata[3]
+
+
+      #if self.version == 1:
       bitdepth = nbytespat / (self.patternW * self.patternH) * 8
+      #elif self.version >= 2:
+      #bitdepth = nbytespat
 
       if bitdepth == 8:
         self.filedatatype = np.uint8
@@ -673,13 +709,14 @@ class EBSDPFile(EBSDPatternFile):
         self.filedatatype = np.uint32
 
 
-      self.nPatterns = int(
-                      (Path(self.filepath).expanduser().stat().st_size - int(8)) /
-                              (24 + 18 +
-                               int(self.patternW) * int(self.patternH) * int(self.filedatatype(0).nbytes)))
+      #self.nPatterns = int(
+      #                (Path(self.filepath).expanduser().stat().st_size - int(8)) /
+      #                        (24 + 18 +
+      #                         int(self.patternW) * int(self.patternH) * int(self.filedatatype(0).nbytes)))
 
-      f.seek(8)
-      self.filePos = np.fromfile(f, dtype=np.uint64, count=self.nPatterns)
+      #print(self.nPatterns)
+
+
 
       xall = np.zeros(self.nPatterns, dtype=np.float64)
       yall = np.zeros(self.nPatterns, dtype=np.float64)
