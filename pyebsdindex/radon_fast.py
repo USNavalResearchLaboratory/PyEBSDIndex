@@ -264,7 +264,9 @@ class Radon:
 
 
     dimf = np.array(self.imDim, dtype=np.float32)
-    if ven in ['EDAX', 'OXFORD']:
+    if ven in ['EDAX']:
+      t *= np.array([dimf[1], dimf[0], -dimf[0]])
+    if ven in ['OXFORD']:
       t *= np.array([dimf[1], dimf[1], -dimf[1]])
     if ven == 'EMSOFT':
       t[:, 0] *= -1.0
