@@ -24,8 +24,8 @@
 parallel.
 """
 
-from os import path
-import multiprocessing
+
+import os
 import logging
 import sys
 import time
@@ -242,10 +242,10 @@ def index_pats_distributed(
         npats = npatsTotal - patstart
 
     # Now set up the cluster with the indexer
-    n_cpu_nodes = int(multiprocessing.cpu_count())
+    n_cpu_nodes = int(os.cpu_count())
     # int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
     if ncpu != -1:
-        n_cpu_nodes = ncpu
+        n_cpu_nodes = int(ncpu)
 
     ngpu = None
     if gpu_id is not None:
@@ -274,7 +274,7 @@ def index_pats_distributed(
         num_cpus=n_cpu_nodes,
         num_gpus=ngpu,
         _node_ip_address="0.0.0.0",
-        runtime_env={"env_vars": {"PYTHONPATH": path.dirname(path.dirname(__file__))}},
+        runtime_env={"env_vars": {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__))}},
         logging_level=logging.WARNING,
     )  # Supress INFO messages from ray.
 

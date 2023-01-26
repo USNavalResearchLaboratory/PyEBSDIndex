@@ -39,7 +39,7 @@ def _optfunction(PC_i, indexer, banddat):
     bandnorm = indexer.bandDetectPlan.radonPlan.radon2pole(
         banddat, PC=PC_i, vendor=indexer.vendor
     )
-    #npoints = banddat.shape[0]
+    npoints = banddat.shape[0]
     #n_averages = 0
     #average_fit = 0
     #nbands_fit = 0
@@ -52,30 +52,16 @@ def _optfunction(PC_i, indexer, banddat):
     fit = indexdata[-1]['fit']
     nmatch = indexdata[-1]['nmatch']
     average_fit = fit*(nbands+1 - nmatch)
+    #average_fit = -1.0*(3.0-fit)*nmatch
     whgood = np.nonzero(fit < 90.0)
 
     n_averages = len(whgood[0])
 
 
-    # for i in range(npoints):
-    #     band_norm1 = band_norm[i, :, :]
-    #     band_data1 = banddat[i, :]
-    #     whgood = np.nonzero(band_data1['max'] > -1e6)[0]
-    #     if whgood.size >= 3:
-    #         band_norm1 = band_norm1[whgood, :]
-    #         dat = phase.bandindex(band_norm1)
-    #         fit = dat[1]
-    #         nMatch = dat[4]
-    #
-    #         if fit < 90:
-    #             average_fit += fit*(nbands+1 - nMatch )
-    #             n_averages += 1
-    #             nbands_fit += nMatch
-
     if n_averages < 0.9:
         average_fit = 100
     else:
-        average_fit = np.mean(average_fit[whgood[0]])
+        average_fit = np.mean(average_fit[whgood[0]])*npoints/n_averages
         #average_fit /= n_averages
         #average_fit *=  (n_averages*(nbands+1) - nbands_fit)/(n_averages*nbands)
     return average_fit
@@ -181,7 +167,8 @@ def optimize(pats, indexer, PC0=None, batch=False):
     return PCoutRet
 
 
-def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05, nswarmpoints=50):
+def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05,
+                 nswarmpoints=None, pswarmpar=None, ninter=500):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
     of the :attr:`indexer.vendor` with particle swarms.
 
@@ -219,9 +206,16 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05, nswa
     """
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
+    if pswarmpar is None:
+        pswarmpar = {"c1": 2.05, "c2": 2.05, "w": 0.8}
+
+    if nswarmpoints is None:
+        nswarmpoints = int(np.array(search_limit).max() * (75.0/0.2))
+        nswarmpoints = max(50, nswarmpoints)
+
 
     if PC0 is None:
-        PC0 = indexer.PC
+        PC0 = np.asarray(indexer.PC)
     else:
         PC0 = np.asarray(PC0)
 
@@ -242,20 +236,20 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05, nswa
     optimizer = pso.single.GlobalBestPSO(
         n_particles=nswarmpoints,
         dimensions=3,
-        options={"c1": 2.05, "c2": 2.05, "w": 0.8},
+        options=pswarmpar,#options={"c1": 2.05, "c2": 2.05, "w": 0.8},
         bounds=(PC0 - search_limit, PC0 + search_limit),
     )
 
     if not batch:
         cost, PCoutRet = optimizer.optimize(
-            _optfunction, 1000, indexer=indexer, banddat=banddat
+            _optfunction, ninter, indexer=indexer, banddat=banddat
         )
         #print(cost)
     else:
         PCoutRet = np.zeros((npoints, 3))
         for i in range(npoints):
             cost, PCoutRet[i, :] = optimizer.optimize(
-                _optfunction, 100, indexer=indexer, banddat=banddat[i, :, :]
+                _optfunction, ninter, indexer=indexer, banddat=banddat[i, :, :]
             )
 
     if emsoftflag:  # Return original state for indexer
