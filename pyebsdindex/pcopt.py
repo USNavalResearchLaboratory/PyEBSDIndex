@@ -59,9 +59,10 @@ def _optfunction(PC_i, indexer, banddat):
 
 
     if n_averages < 0.9:
-        average_fit = 100
+        average_fit = 1000
     else:
-        average_fit = np.mean(average_fit[whgood[0]])*npoints/n_averages
+        average_fit = np.sum(average_fit[whgood[0]]) + 4.0*(nbands+1)*(npoints - n_averages)
+        average_fit /= npoints
         #average_fit /= n_averages
         #average_fit *=  (n_averages*(nbands+1) - nbands_fit)/(n_averages*nbands)
     return average_fit
@@ -207,10 +208,10 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05,
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
     if pswarmpar is None:
-        pswarmpar = {"c1": 2.05, "c2": 2.05, "w": 0.8}
+        pswarmpar = {"c1": 2.05, "c2": 2.05, "w": 0.8}#, 'k': 2, 'p': 2}
 
     if nswarmpoints is None:
-        nswarmpoints = int(np.array(search_limit).max() * (75.0/0.2))
+        nswarmpoints = int(np.array(search_limit).max() * (100.0/0.2))
         nswarmpoints = max(50, nswarmpoints)
 
 
@@ -230,14 +231,15 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05,
         PCtemp[1] += 0.5 * indexer.bandDetectPlan.patDim[0]
         PCtemp /= indexer.bandDetectPlan.patDim[1]
         PCtemp[2] /= delta[3]
-        PC0 = PCtemp
+        PC0 = np.array(PCtemp)
 
 
+    #optimizer = pso.single.GlobalBestPSO(
     optimizer = pso.single.GlobalBestPSO(
         n_particles=nswarmpoints,
         dimensions=3,
-        options=pswarmpar,#options={"c1": 2.05, "c2": 2.05, "w": 0.8},
-        bounds=(PC0 - search_limit, PC0 + search_limit),
+        options=pswarmpar,
+        bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
     )
 
     if not batch:

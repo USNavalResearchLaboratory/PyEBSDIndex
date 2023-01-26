@@ -306,22 +306,25 @@ class BandIndexer():
 
         wh = np.nonzero(unqang > 1.0)[0]
         nwh = wh.size
-        #sign = sign[wh]
-        #sign = sign.reshape(nwh,1)
-        temp = np.zeros((nwh, 2, 3))
-        temp[:,0,:] = np.broadcast_to(poles[i,:], (nwh, 3))
-        temp[:,1,:] = np.broadcast_to(fampoles[argunq[wh],:], (nwh, 3))
-        for k in range(nwh):
-          angs.append(unqang[wh[k]])
-          familyID.append([i,j])
-          polePairs.append(temp[k,:,:])
+        if nwh > 0:
+          #sign = sign[wh]
+          #sign = sign.reshape(nwh,1)
+          temp = np.zeros((nwh, 2, 3))
+          temp[:,0,:] = np.broadcast_to(poles[i,:], (nwh, 3))
+          temp[:,1,:] = np.broadcast_to(fampoles[argunq[wh],:], (nwh, 3))
+          for k in range(nwh):
+            angs.append(unqang[wh[k]])
+            familyID.append([i,j])
+            polePairs.append(temp[k,:,:])
 
     angs = np.atleast_1d(np.squeeze(np.array(angs)))
     nangs = angs.size
     familyID = np.array(familyID)
     polePairs = np.array(polePairs)
+    nFamilyID = np.bincount(np.squeeze(familyID[:,0]).astype(int), minlength=int(npoles))
 
-    stuff, nFamilyID = np.unique(familyID[:,0], return_counts=True)
+    #stuff, nFamilyID = np.unique(familyID[:,0], return_counts=True)
+
     indx0FID = (np.concatenate( ([0],np.cumsum(nFamilyID)) ))[0:npoles]
     #print(familyID)
     #print(nFamilyID)
@@ -336,8 +339,8 @@ class BandIndexer():
     counter = 0
     # now actually catalog all the triplet angles.
     for i in range(npoles):
-      #if indx0FID[i] >= npoles:
-      #  break
+      if nFamilyID[i] <= 0:
+        continue
       id0 = familyID[indx0FID[i], 0]
       for j in range(0,nFamilyID[i]):
 
