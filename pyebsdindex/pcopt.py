@@ -212,8 +212,8 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05,
 
     if nswarmpoints is None:
         nswarmpoints = int(np.array(search_limit).max() * (100.0/0.2))
-        nswarmpoints = max(50, nswarmpoints)
 
+    nswarmpoints = max(50, nswarmpoints)
 
     if PC0 is None:
         PC0 = np.asarray(indexer.PC)
