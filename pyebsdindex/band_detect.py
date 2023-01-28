@@ -43,7 +43,7 @@ environ["NUMBA_CACHE_DIR"] = str(tempdir)
 RADEG = 180.0/np.pi
 
 
-class BandDetect:
+class BandDetect():
   def __init__(
     self,
     patterns=None,

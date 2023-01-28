@@ -23,8 +23,11 @@
 """Optimization of the pattern center (PC) of EBSD patterns."""
 
 import numpy as np
+import multiprocessing
 import pyswarms as pso
 import scipy.optimize as opt
+from functools import partial
+
 
 
 __all__ = [
@@ -36,36 +39,44 @@ RADEG = 180.0 / np.pi
 
 
 def _optfunction(PC_i, indexer, banddat):
-    bandnorm = indexer.bandDetectPlan.radonPlan.radon2pole(
-        banddat, PC=PC_i, vendor=indexer.vendor
-    )
-    npoints = banddat.shape[0]
-    #n_averages = 0
-    #average_fit = 0
-    #nbands_fit = 0
-    #phase = indexer.phaseLib[0]
-    nbands = indexer.bandDetectPlan.nBands
-    indexdata = indexer._indexbandsphase( banddat, bandnorm)
+
+    PC = np.atleast_2d(PC_i)
+    result = np.zeros(PC.shape[0])
+    # this loop is here because pyswarms expects a vectorized function
+    for q in range(PC.shape[0]):
+
+        bandnorm = indexer.bandDetectPlan.radonPlan.radon2pole(
+            banddat, PC=PC[q,:], vendor=indexer.vendor
+        )
+
+        npoints = banddat.shape[0]
+        #n_averages = 0
+        #average_fit = 0
+        #nbands_fit = 0
+        #phase = indexer.phaseLib[0]
+        nbands = indexer.bandDetectPlan.nBands
+        indexdata = indexer._indexbandsphase( banddat, bandnorm)
 
 
 
-    fit = indexdata[-1]['fit']
-    nmatch = indexdata[-1]['nmatch']
-    average_fit = fit*(nbands+1 - nmatch)
-    #average_fit = -1.0*(3.0-fit)*nmatch
-    whgood = np.nonzero(fit < 90.0)
+        fit = indexdata[-1]['fit']
+        nmatch = indexdata[-1]['nmatch']
+        average_fit = fit*(nbands+1 - nmatch)
+        #average_fit = -1.0*(3.0-fit)*nmatch
+        whgood = np.nonzero(fit < 90.0)
 
-    n_averages = len(whgood[0])
+        n_averages = len(whgood[0])
 
 
-    if n_averages < 0.9:
-        average_fit = 1000
-    else:
-        average_fit = np.sum(average_fit[whgood[0]]) + 4.0*(nbands+1)*(npoints - n_averages)
-        average_fit /= npoints
-        #average_fit /= n_averages
-        #average_fit *=  (n_averages*(nbands+1) - nbands_fit)/(n_averages*nbands)
-    return average_fit
+        if n_averages < 0.9:
+            average_fit = 1000
+        else:
+            average_fit = np.sum(average_fit[whgood[0]]) + 4.0*(nbands+1)*(npoints - n_averages)
+            average_fit /= npoints
+            #average_fit /= n_averages
+            #average_fit *=  (n_averages*(nbands+1) - nbands_fit)/(n_averages*nbands)
+        result[q] = average_fit
+    return result
 
 
 def optimize(pats, indexer, PC0=None, batch=False):
@@ -168,8 +179,8 @@ def optimize(pats, indexer, PC0=None, batch=False):
     return PCoutRet
 
 
-def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05,
-                 nswarmpoints=None, pswarmpar=None, ninter=500):
+def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.1,
+                 nswarmpoints=30, pswarmpar=None, niter=50):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
     of the :attr:`indexer.vendor` with particle swarms.
 
@@ -211,9 +222,10 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05,
         pswarmpar = {"c1": 2.05, "c2": 2.05, "w": 0.8}#, 'k': 2, 'p': 2}
 
     if nswarmpoints is None:
-        nswarmpoints = int(np.array(search_limit).max() * (100.0/0.2))
+        #nswarmpoints = int(np.array(search_limit).max() * (10.0/0.2))
+        nswarmpoints = 25
 
-    nswarmpoints = max(50, nswarmpoints)
+    nswarmpoints = max(10, nswarmpoints)
 
     if PC0 is None:
         PC0 = np.asarray(indexer.PC)
@@ -234,25 +246,37 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.05,
         PC0 = np.array(PCtemp)
 
 
-    #optimizer = pso.single.GlobalBestPSO(
-    optimizer = pso.single.GlobalBestPSO(
-        n_particles=nswarmpoints,
-        dimensions=3,
-        options=pswarmpar,
-        bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
-    )
+
+    # optimizer = pso.single.GlobalBestPSO(
+    #     n_particles=nswarmpoints,
+    #     dimensions=3,
+    #     options=pswarmpar,
+    #     bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
+    # )
+    optimizer = PSOOpt(dimensions=3,n_particles=nswarmpoints,
+                       c1=pswarmpar['c1'],
+                       c2 = pswarmpar['c2'], w = pswarmpar['w'] )
 
     if not batch:
-        cost, PCoutRet = optimizer.optimize(
-            _optfunction, ninter, indexer=indexer, banddat=banddat
-        )
+        # cost, PCoutRet = optimizer.optimize(
+        #     _optfunction, niter, indexer=indexer, banddat=banddat
+        # )
+        cost, PCoutRet = optimizer.optimize(_optfunction, indexer=indexer, banddat=banddat,
+                                            start=PC0, bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
+                                            niter=niter)
+
         #print(cost)
     else:
         PCoutRet = np.zeros((npoints, 3))
         for i in range(npoints):
-            cost, PCoutRet[i, :] = optimizer.optimize(
-                _optfunction, ninter, indexer=indexer, banddat=banddat[i, :, :]
-            )
+            # cost, PCoutRet[i, :] = optimizer.optimize(
+            #     _optfunction, niter, indexer=indexer, banddat=banddat[i, :, :]
+            # )
+
+            cost, PCoutRet = optimizer.optimize(_optfunction, indexer=indexer, banddat=banddat[i, :, :],
+               start=PC0, bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
+               niter=niter)
+
 
     if emsoftflag:  # Return original state for indexer
         indexer.vendor = "EMSOFT"
@@ -302,3 +326,168 @@ def _file_opt(fobj, indexer, stride=200, groupsz = 3):
             pcopt[i, j, :] = pc
 
     return pcopt
+
+
+class PSOOpt():
+    def __init__(self,
+                dimensions=3,
+                n_particles=50,
+                c1 = 2.05,
+                c2 = 2.05,
+                w = 0.8,
+                boundmethod = 'bounce'):
+        self.n_particles = int(n_particles)
+        self.dimensions = int(dimensions)
+        self.c1 = c1
+        self.c2 = c2
+        self.w = w
+        self.boundmethod = boundmethod
+        self.vellimit = None
+        self.start = None
+        self.bounds = None
+        self.range = None
+        self.niter = None
+        self.pos = None
+        self.vel = None
+
+
+    def initializeswarm(self, start=None, bounds=None):
+
+
+        if start is None:
+            if bounds is not None:
+                start = 0.5*(bounds[0]+bounds[1])
+            else:
+                start = np.zeros(self.dimensions, dtype=np.float32)
+
+        self.start = start
+
+        if bounds is None:
+            bounds = (-1*np.ones(self.dimensions, dtype=np.float32),np.ones(self.dimensions, dtype=np.float32) )
+
+        self.bounds = bounds
+        self.range = self.bounds[1] - self.bounds[0]
+
+        self.pos = np.random.uniform(low=bounds[0], high=bounds[1], size=(self.n_particles, self.dimensions))
+        self.pos[0,:] = start
+
+        self.vel = np.random.normal(size=(self.n_particles, self.dimensions), loc=0.0, scale=1.0)
+        meanv = np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
+        self.vel *= self.range/(10. * meanv)
+        self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
+
+        self.vel[0,:] = 0.0
+
+        self.pbest = np.zeros(self.n_particles) + np.infty
+        self.pbest_loc = np.copy(self.pos)
+        self.gbest = np.infty
+        self.gbest_loc = start
+
+
+
+
+    def updateswarmbest(self, fun2opt, pool, **kwargs):
+
+        val = np.zeros(self.n_particles)
+
+        #for part_i in range(self.n_particles):
+        #    val[part_i] = fun2opt(self.pos[part_i, :], **kwargs)
+
+        pos = self.pos.copy()
+        results = pool.map(partial(fun2opt, **kwargs),list(pos) )
+        #print(len(results[0]), type(results[0]))
+        #print(len(results))
+        val = np.concatenate(results)
+
+        wh_newpbest = np.nonzero(val < self.pbest)[0]
+
+        self.pbest[wh_newpbest] = val[wh_newpbest]
+        self.pbest_loc[wh_newpbest, :] = self.pos[wh_newpbest, :]
+
+        wh_minpbest = np.argmin(self.pbest)
+        if self.pbest[wh_minpbest] < self.gbest:
+            self.gbest = self.pbest[wh_minpbest]
+            self.gbest_loc = self.pbest_loc[wh_minpbest, :]
+
+
+    def updateswarmvelpos(self):
+
+        w = self.w
+        c1 = self.c1
+        c2 = self.c2
+        r1 = np.random.random((self.n_particles,1))
+        r2 = np.random.random((self.n_particles,1))
+        nvel = self.vel.copy()
+        nvel = w * nvel + \
+               c1 * r1 * (self.pbest_loc - self.pos) + \
+               c2 * r2 * (self.gbest_loc - self.pos)
+
+        mag = np.expand_dims(np.sqrt(np.sum(nvel**2, axis=1)), axis=1)
+        wh_toofast = np.nonzero(mag > self.vellimit)[0]
+        #print(nvel.shape, wh_toofast.shape, mag.shape)
+        nvel[wh_toofast, :] *= self.vellimit/mag[wh_toofast]
+
+        self.vel = nvel
+        self.pos += nvel
+
+        self.boundarycheck()
+
+        #print(mag.max(), mag.min(), wh_toofast.size, self.vellimit)
+        #mag = np.expand_dims(np.sqrt(np.sum(nvel ** 2, axis=1)), axis=1)
+        #print(mag.max(), mag.min(), wh_toofast.size)
+
+
+    def boundarycheck(self):
+
+        if str.lower(self.boundmethod) == 'bounce':
+            self.boundarybounce()
+
+
+    def boundarybounce(self):
+
+        lb,ub = self.bounds
+        for d in range(self.dimensions):
+            wh_under = np.nonzero(self.pos[:,d] < lb[d])[0]
+            self.pos[wh_under,d] = lb[d]
+            self.vel[wh_under,d] *= -1.0
+
+            wh_over = np.nonzero(self.pos[:, d] > ub[d])[0]
+            self.pos[wh_over, d] = ub[d]
+            self.vel[wh_over, d] *= -1.0
+
+
+    def printprogress(self, iter):
+
+        progress = int(round(10*float(iter)/self.niter))
+        print('',end='\r' )
+        print('Progress [',
+              '*' * progress, ' '*(10-progress),'] ', iter+1 , '/', self.niter,
+              '  global best:', "{0:.3g}".format(self.gbest),
+              '  best loc:', np.array_str(self.gbest_loc, precision=4, suppress_small=True),
+              sep='', end='')
+    def optimize(self, function, start=None, bounds=None, niter=50, **kwargs):
+
+        self.initializeswarm(start, bounds)
+
+        with multiprocessing.Pool(min(multiprocessing.cpu_count(), self.n_particles)) as pool:
+
+            print('n_particle:', self.n_particles, 'c1:', self.c1, 'c2:', self.c2, 'w:', self.w )
+
+            self.niter = niter
+            for iter in range(niter):
+                self.updateswarmbest(function, pool, **kwargs)
+                self.printprogress(iter)
+                self.updateswarmvelpos()
+
+
+        pool.close()
+        final_best = self.gbest
+        final_loc = self.gbest_loc
+        print('', end='\n')
+        print("Optimization finished | best cost: {}, best pos: {}".format(
+            final_best, final_loc))
+        print(' ')
+        return final_best, final_loc
+
+
+
