@@ -179,8 +179,8 @@ def optimize(pats, indexer, PC0=None, batch=False):
     return PCoutRet
 
 
-def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.1,
-                 nswarmpoints=30, pswarmpar=None, niter=50):
+def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
+                 nswarmpoints=None, pswarmpar=None, niter=50):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
     of the :attr:`indexer.vendor` with particle swarms.
 
@@ -219,13 +219,13 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.1,
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
     if pswarmpar is None:
-        pswarmpar = {"c1": 2.05, "c2": 2.05, "w": 0.8}#, 'k': 2, 'p': 2}
+        pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}#, 'k': 2, 'p': 2}
 
     if nswarmpoints is None:
         #nswarmpoints = int(np.array(search_limit).max() * (10.0/0.2))
-        nswarmpoints = 25
+        nswarmpoints = 30
 
-    nswarmpoints = max(10, nswarmpoints)
+    nswarmpoints = max(5, nswarmpoints)
 
     if PC0 is None:
         PC0 = np.asarray(indexer.PC)
@@ -373,7 +373,7 @@ class PSOOpt():
 
         self.vel = np.random.normal(size=(self.n_particles, self.dimensions), loc=0.0, scale=1.0)
         meanv = np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
-        self.vel *= self.range/(10. * meanv)
+        self.vel *= np.sqrt(np.sum(self.range**2))/(20. * meanv)
         self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
 
         self.vel[0,:] = 0.0
