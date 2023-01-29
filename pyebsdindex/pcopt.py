@@ -219,8 +219,8 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints = banddat.shape[0]
     if pswarmpar is None:
-        pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}#, 'k': 2, 'p': 2}
-
+        #pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}
+        pswarmpar = {"c1": 3.5, "c2": 3.5, "w": 0.8}
     if nswarmpoints is None:
         #nswarmpoints = int(np.array(search_limit).max() * (10.0/0.2))
         nswarmpoints = 30
@@ -255,7 +255,7 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
     # )
     optimizer = PSOOpt(dimensions=3,n_particles=nswarmpoints,
                        c1=pswarmpar['c1'],
-                       c2 = pswarmpar['c2'], w = pswarmpar['w'] )
+                       c2 = pswarmpar['c2'], w = pswarmpar['w'], hyperparammethod='auto')
 
     if not batch:
         # cost, PCoutRet = optimizer.optimize(
@@ -335,12 +335,17 @@ class PSOOpt():
                 c1 = 2.05,
                 c2 = 2.05,
                 w = 0.8,
+                hyperparammethod = 'static',
                 boundmethod = 'bounce'):
         self.n_particles = int(n_particles)
         self.dimensions = int(dimensions)
         self.c1 = c1
         self.c2 = c2
+        self.c1i = None
+        self.c2i = None
         self.w = w
+        self.wi = None
+        self.hyperparammethod = hyperparammethod
         self.boundmethod = boundmethod
         self.vellimit = None
         self.start = None
@@ -369,14 +374,13 @@ class PSOOpt():
         self.range = self.bounds[1] - self.bounds[0]
 
         self.pos = np.random.uniform(low=bounds[0], high=bounds[1], size=(self.n_particles, self.dimensions))
-        self.pos[0,:] = start
+        self.pos[0, :] = start
 
         self.vel = np.random.normal(size=(self.n_particles, self.dimensions), loc=0.0, scale=1.0)
         meanv = np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
         self.vel *= np.sqrt(np.sum(self.range**2))/(20. * meanv)
         self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
 
-        self.vel[0,:] = 0.0
 
         self.pbest = np.zeros(self.n_particles) + np.infty
         self.pbest_loc = np.copy(self.pos)
@@ -412,9 +416,9 @@ class PSOOpt():
 
     def updateswarmvelpos(self):
 
-        w = self.w
-        c1 = self.c1
-        c2 = self.c2
+        w = self.wi
+        c1 = self.c1i
+        c2 = self.c2i
         r1 = np.random.random((self.n_particles,1))
         r2 = np.random.random((self.n_particles,1))
         nvel = self.vel.copy()
@@ -432,9 +436,7 @@ class PSOOpt():
 
         self.boundarycheck()
 
-        #print(mag.max(), mag.min(), wh_toofast.size, self.vellimit)
-        #mag = np.expand_dims(np.sqrt(np.sum(nvel ** 2, axis=1)), axis=1)
-        #print(mag.max(), mag.min(), wh_toofast.size)
+
 
 
     def boundarycheck(self):
@@ -455,7 +457,21 @@ class PSOOpt():
             self.pos[wh_over, d] = ub[d]
             self.vel[wh_over, d] *= -1.0
 
+    def updatehyperparam(self, iter):
+        if str.lower(self.hyperparammethod) == 'auto':
 
+            N = float(self.niter)-1
+            self.c1i = (self.c1 - self.c1/7) * (N-iter)/N + self.c1 / 7.0
+            self.c2i = (self.c1 - self.c1 / 7) * (iter) / N + self.c1 / 7.0
+            self.wi = self.w/2 * ((N - iter)/N)**2 + self.w/2
+
+        else:
+            self.c1i = self.c1
+            self.c2i = self.c2
+            self.wi = self.w
+
+
+        pass
     def printprogress(self, iter):
 
         progress = int(round(10*float(iter)/self.niter))
@@ -475,12 +491,14 @@ class PSOOpt():
 
             self.niter = niter
             for iter in range(niter):
+                self.updatehyperparam(iter)
                 self.updateswarmbest(function, pool, **kwargs)
                 self.printprogress(iter)
                 self.updateswarmvelpos()
 
 
         pool.close()
+        pool.terminate()
         final_best = self.gbest
         final_loc = self.gbest_loc
         print('', end='\n')
