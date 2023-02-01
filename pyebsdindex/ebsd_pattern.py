@@ -839,10 +839,17 @@ class EBSDPFile(EBSDPatternFile):
       print("File Not Found:", str(Path(filepath)))
       return -1
 
-    version =  np.uint64(-self.version)
+    if self.version is None:
+      self.version = 1
+
+    version = np.uint64(-self.version)
     np.asarray(version, dtype=np.uint64).tofile(f)
 
     if self.version >= 0:
+      if self.filePos is None:
+        self.filePos = np.arange(
+          self.nPatterns, dtype=np.uint64)*(16+18+self.patternH*self.patternW*self.filedatatype(0).nbytes)+8+8*self.nPatterns
+
       np.asarray(self.filePos, dtype=np.uint64).tofile(f)
 
     if writeBlank == True:
