@@ -662,19 +662,32 @@ class EBSDPFile(EBSDPatternFile):
 
     if self.version >= 1:
 
+      #loc0 = int(np.fromfile(f, dtype=np.uint64, count=1))
+      #currentloc = f.tell()
+      #loc1 = loc0
+      #npat = 0
+
+      #while loc1 != currentloc:
+      #  loc11 = int(np.fromfile(f, dtype=np.uint64, count = 1))
+      #  loc1 = min([loc1, loc11])
+      #  currentloc = f.tell()
+
+      # do the same as above, but in memory ... so much faster
       loc0 = int(np.fromfile(f, dtype=np.uint64, count=1))
-      currentloc = f.tell()
-      loc1 = loc0
-      npat = 0
+      f.seek(8)
+      loc02N = np.fromfile(f, dtype=np.uint64, count=int((loc0-8)/8+0.001))
+      #loc02N -= int(8)
 
-      while loc1 != currentloc:
-        loc11 = int(np.fromfile(f, dtype=np.uint64, count = 1))
-        loc1 = min([loc1, loc11])
-        currentloc = f.tell()
-        #print(loc1, currentloc)
-        #return
 
-      self.nPatterns = int((currentloc-8)/int(8))
+      loc1 = (loc02N[0]-8)/8
+
+      counter = 0
+      while loc1 != counter:
+        loc_i = int((loc02N[counter]-8)/8)
+        loc1 = min([loc1, loc_i])
+        counter += 1
+
+      self.nPatterns = int((counter))
 
       f.seek(8)
       self.filePos = np.fromfile(f, dtype=np.uint64, count=self.nPatterns)
@@ -685,13 +698,18 @@ class EBSDPFile(EBSDPatternFile):
       #patdata0 = np.fromfile(f, dtype=np.uint8, count=1)
 
       patdata = np.fromfile(f, dtype=np.uint32, count=4)
+
+      if patdata[0] == 1:
+        print("Sorry, compressed EBSP files are not supported")
+        return None
+
       #print(loc0, patdata)
       #f.seek(self.filePos[2])
       #print(np.fromfile(f, dtype=np.uint32, count=4))
       #print(np.fromfile(f, dtype=np.uint32, count=8))
       #print(np.fromfile(f, dtype=np.uint32, count=1))
 
-      self.patternW = patdata[2]
+      self.patternW = np.uint32(patdata[2])
       self.patternH = np.uint32(patdata[1])
       nbytespat = patdata[3]
 
@@ -745,7 +763,7 @@ class EBSDPFile(EBSDPatternFile):
         nrow = np.round(nrow+1)
         self.nRows = int(nrow)
       else:
-        self.nRows = int(self.nPatterns/self.nCols)
+        self.nRows = int(self.nPatterns/self.nCols+0.001)
 
       if self.xStep is None:
         self.xStep = 0.0
