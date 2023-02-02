@@ -656,11 +656,16 @@ class EBSDPFile(EBSDPatternFile):
       return -1
 
     f.seek(0)
-    version = np.fromfile(f, dtype=np.uint64, count=1)
-
-    self.version = int(np.uint64(0)-version)
+    version = np.fromfile(f, dtype=np.int64, count=1)
+    version = int(-1*version)
+    if version <= 0:
+      self.version = 0
+    else:
+      self.version = version
 
     if self.version >= 1:
+      if self.version >= 4:
+        self.mysterybyte = np.fromfile(f, dtype=np.uint8, count=1)
 
       #loc0 = int(np.fromfile(f, dtype=np.uint64, count=1))
       #currentloc = f.tell()

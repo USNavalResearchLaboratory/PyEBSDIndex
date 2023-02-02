@@ -27,6 +27,7 @@ import multiprocessing
 import pyswarms as pso
 import scipy.optimize as opt
 from functools import partial
+from timeit import default_timer as timer
 
 
 
@@ -39,16 +40,17 @@ RADEG = 180.0 / np.pi
 
 
 def _optfunction(PC_i, indexer, banddat):
-
+    tic = timer()
     PC = np.atleast_2d(PC_i)
     result = np.zeros(PC.shape[0])
     # this loop is here because pyswarms expects a vectorized function
+    #print(PC.shape)
     for q in range(PC.shape[0]):
 
         bandnorm = indexer.bandDetectPlan.radonPlan.radon2pole(
             banddat, PC=PC[q,:], vendor=indexer.vendor
         )
-
+        #print(timer() - tic)
         npoints = banddat.shape[0]
         #n_averages = 0
         #average_fit = 0
@@ -76,6 +78,7 @@ def _optfunction(PC_i, indexer, banddat):
             #average_fit /= n_averages
             #average_fit *=  (n_averages*(nbands+1) - nbands_fit)/(n_averages*nbands)
         result[q] = average_fit
+    #print(timer()-tic)
     return result
 
 
@@ -394,14 +397,17 @@ class PSOOpt():
 
         val = np.zeros(self.n_particles)
 
-        #for part_i in range(self.n_particles):
-        #    val[part_i] = fun2opt(self.pos[part_i, :], **kwargs)
-
-        pos = self.pos.copy()
-        results = pool.map(partial(fun2opt, **kwargs),list(pos) )
+        #tic = timer()
+        for part_i in range(self.n_particles):
+            val[part_i] = fun2opt(self.pos[part_i, :], **kwargs)
+        #print(timer()-tic)
+        #pos = self.pos.copy()
+        #tic = timer()
+        #results = pool.map(partial(fun2opt, **kwargs),list(pos) )
+        #print(timer()-tic)
         #print(len(results[0]), type(results[0]))
         #print(len(results))
-        val = np.concatenate(results)
+        #val = np.concatenate(results)
 
         wh_newpbest = np.nonzero(val < self.pbest)[0]
 
