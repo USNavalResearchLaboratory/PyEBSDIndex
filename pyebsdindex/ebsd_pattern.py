@@ -635,15 +635,21 @@ class UPFile(EBSDPatternFile):
 
 
 class EBSDPFile(EBSDPatternFile):
-
+  """
+    Notes
+    -----
+    Information about the .ebsp file format was generously provided by
+    Oxford Instruments.
+    """
   def __init__(self, path=None):
     EBSDPatternFile.__init__(self, path)
     self.filetype = 'EBSP'
     self.vendor = 'OXFORD'
     self.filedatatype = None
-    # UP only attributes
+    # EBSP only attributes
     # self.bitdepth = None
     self.filePos = None  # file location in bytes where each pattern data starts
+    self.hasxypos = False
 
   def read_header(self, path=None, bitdepth=None):  # readInterval=[0, -1], arrayOnly=False,
     if path is not None:
@@ -678,23 +684,34 @@ class EBSDPFile(EBSDPatternFile):
       #  currentloc = f.tell()
 
       # do the same as above, but in memory ... so much faster
-      loc0 = int(np.fromfile(f, dtype=np.uint64, count=1))
-      f.seek(8)
+      loc0 = 0
+      counter = 0
+      while loc0 == 0: # check for non-stored points.
+        loc0 = int(np.fromfile(f, dtype=np.uint64, count=1))
+        counter += 1
+      f.seek(-8*counter, 1) # move back 8 bytes (or however far we needed to move into the file to find a legitamte offset.
       loc02N = np.fromfile(f, dtype=np.uint64, count=int((loc0-8)/8+0.001))
-      #loc02N -= int(8)
 
 
-      loc1 = (loc02N[0]-8)/8
+
+      loc1 = int((loc0-8)/8+0.001)
 
       counter = 0
       while loc1 != counter:
-        loc_i = int((loc02N[counter]-8)/8)
-        loc1 = min([loc1, loc_i])
+        if loc02N[counter] != 0:  # a non-stored pattern? Crazy.
+          loc_i = int((loc02N[counter]-8)/8)
+          loc1 = min([loc1, loc_i])
         counter += 1
 
       self.nPatterns = int((counter))
 
-      f.seek(8)
+      if self.version == 0:
+        f.seek(0)
+      if self.version >=1.0:
+        f.seek(8)
+      if self.version >= 4:
+        f.seek(1,1)
+
       self.filePos = np.fromfile(f, dtype=np.uint64, count=self.nPatterns)
 
       # going to assume that all patterns are the same as the first pattern the file.
@@ -743,37 +760,57 @@ class EBSDPFile(EBSDPatternFile):
 
       xall = np.zeros(self.nPatterns, dtype=np.float64)
       yall = np.zeros(self.nPatterns, dtype=np.float64)
-      for i in range(self.nPatterns):
-        f.seek(int(self.filePos[i] + 16 + nbytespat + 1))
-        xall[i] = np.fromfile(f, dtype=np.float64, count=1)
-        #print(x1, i)
-        f.seek(1, 1)
-        yall[i] = np.fromfile(f, dtype=np.float64, count=1)
+      self.hasxypos = False
+      if self.version != 0:
+        if self.version ==1:
+          footoffset = 0
+          self.hasxypos = True
+        else:
+          loc0 = np.min(self.filePos[self.filePos > 0])
+          f.seek(int(loc0 + 16 + nbytespat))
+          havepos = np.fromfile(f, dtype=np.uint8, count=1)
+          if havepos > 0:
+            footoffset = 1
+            self.hasxypos = True
 
-
-      self.xStep = xall[1] - xall[0]
-      if self.xStep > 1e-6:
-        ncol = (xall.max() - xall.min()) / self.xStep
-        ncol = np.round(ncol+1)
+      if self.hasxypos == False:
+        self.xStep = 1.0
+        self.yStep = 1.0
+        self.nCols = 1
+        self.nRows = self.nPatterns
       else:
-        ncol = 1
+        for i in range(self.nPatterns):
+          if self.filePos[i] > 0:
+            f.seek(int(self.filePos[i] + 16 + nbytespat + footoffset))
+            xall[i] = np.fromfile(f, dtype=np.float64, count=1)
+            #print(x1, i)
+            f.seek(footoffset, 1)
+            yall[i] = np.fromfile(f, dtype=np.float64, count=1)
 
-      self.nCols = np.uint64(ncol)
+
+        self.xStep = xall[1] - xall[0]
+        if self.xStep > 1e-6:
+          ncol = (xall.max() - xall.min()) / self.xStep
+          ncol = np.round(ncol+1)
+        else:
+          ncol = 1
+
+        self.nCols = np.uint64(ncol)
 
 
-      self.yStep = yall[0] - yall[self.nCols]
+        self.yStep = yall[0] - yall[self.nCols]
 
-      if self.yStep > 1e-6:
-        nrow = (yall.max() - yall.min()) / self.yStep
-        nrow = np.round(nrow+1)
-        self.nRows = int(nrow)
-      else:
-        self.nRows = int(self.nPatterns/self.nCols+0.001)
+        if self.yStep > 1e-6:
+          nrow = (yall.max() - yall.min()) / self.yStep
+          nrow = np.round(nrow+1)
+          self.nRows = int(nrow)
+        else:
+          self.nRows = int(self.nPatterns/self.nCols+0.001)
 
       if self.xStep is None:
-        self.xStep = 0.0
+        self.xStep = 1.0
       if self.yStep is None:
-        self.yStep = 0.0
+        self.yStep = 1.0
       if self.nCols is None:
         self.nCols = np.uint64(1)
       if self.nCols == 0:
@@ -797,14 +834,24 @@ class EBSDPFile(EBSDPatternFile):
     nPerPat = self.patternW * self.patternH
     typeread = self.filedatatype
     typebyte = self.filedatatype(0).nbytes
+
+    readxypos = self.hasxypos
+    if self.version == 1:
+      xyoffset = 0
+    else:
+      xyoffset = 1
+
     for i in range(int(patStart), int(patStart + nPatToRead)):
       ii = int(i - patStart)
-      f.seek(int(self.filePos[i] + 16))
-      readpats[ii, :] = np.fromfile(f, dtype=typeread, count=int(nPerPat))
-      f.seek(1, 1)
-      xyloc[ii, 0] = np.fromfile(f, dtype=np.float64, count=1)
-      f.seek(1, 1)
-      xyloc[ii, 1] = np.fromfile(f, dtype=np.float64, count=1)
+      if self.filePos[i] > 0:
+        f.seek(int(self.filePos[i] + 16))
+        readpats[ii, :] = np.fromfile(f, dtype=typeread, count=int(nPerPat))
+        if readxypos == True:
+          f.seek(xyoffset, 1)
+          xyloc[ii, 0] = np.fromfile(f, dtype=np.float64, count=1)
+          f.seek(xyoffset, 1)
+          xyloc[ii, 1] = np.fromfile(f, dtype=np.float64, count=1)
+
     readpats = readpats.reshape(nPatToRead, self.patternH, self.patternW)
     f.close()
 
@@ -845,15 +892,34 @@ class EBSDPFile(EBSDPatternFile):
       return -1
 
     if self.version is None:
-      self.version = 1
+      self.version = 2
 
-    version = np.uint64(-self.version)
-    np.asarray(version, dtype=np.uint64).tofile(f)
+    if self.version > 0:
+      version = np.uint64(-self.version)
+      np.asarray(version, dtype=np.uint64).tofile(f)
 
     if self.version >= 0:
       if self.filePos is None:
+        file_head_length = 0
+        pat_footer_length = 0
+        if self.version >= 1:
+          file_head_length = 8
+          pat_footer_length = 16
+        if self.version >= 2:
+          if self.hasxypos == True:
+            pat_footer_length = 18
+          else:
+            pat_footer_length = 1
+
+        if self.version >= 4:
+          file_head_length = 9
+
         self.filePos = np.arange(
-          self.nPatterns, dtype=np.uint64)*(16+18+self.patternH*self.patternW*self.filedatatype(0).nbytes)+8+8*self.nPatterns
+          self.nPatterns, dtype=np.uint64)*(16+pat_footer_length+self.patternH*self.patternW*self.filedatatype(0).nbytes)\
+                       +file_head_length+8*self.nPatterns
+
+      if self.version >= 4:
+        np.uint8(0).tofile(f)
 
       np.asarray(self.filePos, dtype=np.uint64).tofile(f)
 
@@ -872,11 +938,16 @@ class EBSDPFile(EBSDPatternFile):
         for i in range(self.nCols):
           pathead.tofile(f)
           blank.tofile(f)
-          np.uint8(1).tofile(f)
-          np.float64(i * self.xStep).tofile(f)
-          np.uint8(1).tofile(f)
-          np.float64(j * self.yStep).tofile(f)
-
+          if (self.version > 0) and self.hasxypos:
+            if self.version >= 2:
+              np.uint8(1).tofile(f)
+            np.float64(i * self.xStep).tofile(f)
+            if self.version >= 2:
+              np.uint8(1).tofile(f)
+            np.float64(j * self.yStep).tofile(f)
+          else: # no xy_pos info
+            if self.version >= 2:
+              np.uint8(0).tofile(f)
     f.close()
 
   def pat_writer(self, pat2write, patStart, nPatToWrite, typewrite=None):
@@ -892,21 +963,26 @@ class EBSDPFile(EBSDPatternFile):
     pathead = np.array([0, int(self.patternH), int(self.patternW),
                         int(self.patternH * self.patternW * self.filedatatype(0).nbytes)], dtype=np.uint32)
 
-    #
+    write_xypos = self.hasxypos
+
     for i in range(int(patStart), int(patStart + nPatToWrite)):
-      f.seek(int(self.filePos[i]), 0)
-      ii = int(i - patStart)
-      pathead.tofile(f)
-      pat2write[ii, :, :].tofile(f)
-      np.uint8(1).tofile(f)
-      yx = np.array(np.unravel_index(i, (self.nRows, self.nCols))).astype(np.float64)
-      yx[1] -= float(self.nCols * 0.5)
-      yx[1] *= self.xStep
-      yx[0] -= float(self.nRows * 0.5)
-      yx[0] *= self.yStep
-      np.float64(yx[1]).tofile(f)
-      np.uint8(1).tofile(f)
-      np.float64(yx[0]).tofile(f)
+      if int(self.filePos[i]) > 0:
+        f.seek(int(self.filePos[i]), 0)
+        ii = int(i - patStart)
+        pathead.tofile(f)
+        pat2write[ii, :, :].tofile(f)
+        if write_xypos:
+          if self.version >= 2:
+            np.uint8(1).tofile(f)
+          yx = np.array(np.unravel_index(i, (self.nRows, self.nCols))).astype(np.float64)
+          yx[1] -= float(self.nCols * 0.5)
+          yx[1] *= self.xStep
+          yx[0] -= float(self.nRows * 0.5)
+          yx[0] *= self.yStep
+          np.float64(yx[1]).tofile(f)
+          if self.version >= 2:
+            np.uint8(1).tofile(f)
+          np.float64(yx[0]).tofile(f)
     f.close()
 
 
