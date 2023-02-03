@@ -63,7 +63,7 @@ def _optfunction(PC_i, indexer, banddat):
 
         fit = indexdata[-1]['fit']
         nmatch = indexdata[-1]['nmatch']
-        average_fit = fit*(nbands+1 - nmatch)
+        average_fit = fit + 1.0*(nbands - nmatch)
         #average_fit = -1.0*(3.0-fit)*nmatch
         whgood = np.nonzero(fit < 90.0)
 
@@ -126,12 +126,15 @@ def optimize(pats, indexer, PC0=None, batch=False):
     if indexer.vendor == "EMSOFT":  # Convert to EDAX for optimization
         emsoftflag = True
         indexer.vendor = "EDAX"
+        patDim = np.array(indexer.bandDetectPlan.patDim)
         delta = indexer.PC
         PCtemp = PC0[0:3]
+        patdimnorm = (np.array([patDim[1], patDim[0], np.max(patDim[0:2])]))
         PCtemp[0] *= -1.0
         PCtemp[0] += 0.5 * indexer.bandDetectPlan.patDim[1]
         PCtemp[1] += 0.5 * indexer.bandDetectPlan.patDim[0]
-        PCtemp /= indexer.bandDetectPlan.patDim[1]
+        #PCtemp /= indexer.bandDetectPlan.patDim[1]
+        PCtemp /= patdimnorm
         PCtemp[2] /= delta[3]
         PC0 = PCtemp
 
@@ -158,11 +161,14 @@ def optimize(pats, indexer, PC0=None, batch=False):
     if emsoftflag:  # Return original state for indexer
         indexer.vendor = "EMSOFT"
         indexer.PC = delta
+        patDim = np.array(indexer.bandDetectPlan.patDim)
+        patdimnorm = (np.array([patDim[1], patDim[0], np.max(patDim[0:2])]))
         if PCoutRet.ndim == 2:
             newout = np.zeros((npoints, 4))
             PCoutRet[:, 0] -= 0.5
-            PCoutRet[:, :3] *= indexer.bandDetectPlan.patDim[1]
-            PCoutRet[:, 1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
+            #PCoutRet[:, :3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[:, :3] *= np.atleast_2d(patdimnorm)
+            PCoutRet[:, 1] -= 0.5 * patDim[0]
             PCoutRet[:, 0] *= -1.0
             PCoutRet[:, 2] *= delta[3]
             newout[:, :3] = PCoutRet
@@ -171,8 +177,9 @@ def optimize(pats, indexer, PC0=None, batch=False):
         else:
             newout = np.zeros(4)
             PCoutRet[0] -= 0.5
-            PCoutRet[:3] *= indexer.bandDetectPlan.patDim[1]
-            PCoutRet[1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
+            PCoutRet[:3] *= patdimnorm
+            #PCoutRet[:3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[1] -= 0.5 * patDim[0]
             PCoutRet[0] *= -1.0
             PCoutRet[2] *= delta[3]
             newout[:3] = PCoutRet
@@ -183,7 +190,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
 
 
 def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
-                 nswarmpoints=None, pswarmpar=None, niter=50):
+                 nswarmpoints=30, pswarmpar=None, niter=50):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
     of the :attr:`indexer.vendor` with particle swarms.
 

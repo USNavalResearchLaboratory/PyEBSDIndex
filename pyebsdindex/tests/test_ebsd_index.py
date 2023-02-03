@@ -47,7 +47,7 @@ class TestEBSDIndexer:
         """Test Hough indexing and setting/passing projection center
         values.
         """
-        pc = (0.4, 0.6, 0.5)
+        pc = (0.4, 0.72, 0.6)
 
         # Set PC upon initialization of indexer
         indexer = EBSDIndexer(PC=pc, patDim=pattern_al_sim_20kv.shape)
