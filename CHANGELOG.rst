@@ -22,6 +22,8 @@ Removed
 
 Fixed
 -----
+- Hough transform figure when ``verbose=2`` is passed to various indexing methods is now
+  plotted in its own figure.
 
 Security
 --------
