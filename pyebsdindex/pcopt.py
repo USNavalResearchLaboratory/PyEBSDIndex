@@ -168,8 +168,8 @@ def optimize(pats, indexer, PC0=None, batch=False):
             PCoutRet[:, 0] -= 0.5
             #PCoutRet[:, :3] *= indexer.bandDetectPlan.patDim[1]
             PCoutRet[:, :3] *= np.atleast_2d(patdimnorm)
-            PCoutRet[:, 1] -= 0.5 * patDim[0]
             PCoutRet[:, 0] *= -1.0
+            PCoutRet[:, 1] -= 0.5 * patDim[0]
             PCoutRet[:, 2] *= delta[3]
             newout[:, :3] = PCoutRet
             newout[:, 3] = delta[3]

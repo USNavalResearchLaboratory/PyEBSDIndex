@@ -223,11 +223,8 @@ class BandDetect():
       #pshape = pat1.shape
     # a bit of image processing.
     if back is not None:
-      #if sigma is None:
-       #sigma = 2.0 * float(pshape[-1]) / 80.0
-      #back[0,:,:] = gaussian_filter(back[0,:,:], sigma = sigma )
+      back = np.squeeze(back)
       back = self.backsub_fit(back)
-      #back -= np.mean(back)
     self.backgroundsub = back
 
   def backsub_fit(self, back, mask = None):
