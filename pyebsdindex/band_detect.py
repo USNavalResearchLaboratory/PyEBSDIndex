@@ -362,6 +362,8 @@ class BandDetect:
       im2show[0:rhoMaskTrim,:] = 0
       im2show[-rhoMaskTrim:,:] = 0
       im2show = np.fliplr(im2show)
+
+      plt.figure()
       plt.imshow(im2show, cmap='gray', extent=[self.radonPlan.theta.min(), self.radonPlan.theta.max(),
                                                self.radonPlan.rho.min(), self.radonPlan.rho.max()],
                  interpolation='none', zorder=1, aspect='auto')
@@ -379,7 +381,6 @@ class BandDetect:
         plt.annotate(str(pt + 1), np.squeeze([xplt[pt], yplt[pt]]), color='yellow')
       plt.xlim(0,180)
       plt.ylim(-self.rhoMax, self.rhoMax)
-      plt.show()
 
 
     return bandData
