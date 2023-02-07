@@ -190,7 +190,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
 
 
 def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
-                 nswarmpoints=30, pswarmpar=None, niter=50):
+                 nswarmparticles=30, pswarmpar=None, niter=50):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
     of the :attr:`indexer.vendor` with particle swarms.
 
@@ -231,11 +231,11 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
     if pswarmpar is None:
         #pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}
         pswarmpar = {"c1": 3.5, "c2": 3.5, "w": 0.8}
-    if nswarmpoints is None:
+    if nswarmparticles is None:
         #nswarmpoints = int(np.array(search_limit).max() * (10.0/0.2))
-        nswarmpoints = 30
+        nswarmparticles = 30
 
-    nswarmpoints = max(5, nswarmpoints)
+    nswarmparticles = max(5, nswarmparticles)
 
     if PC0 is None:
         PC0 = np.asarray(indexer.PC)
@@ -263,7 +263,7 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
     #     options=pswarmpar,
     #     bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
     # )
-    optimizer = PSOOpt(dimensions=3,n_particles=nswarmpoints,
+    optimizer = PSOOpt(dimensions=3, n_particles=nswarmparticles,
                        c1=pswarmpar['c1'],
                        c2 = pswarmpar['c2'], w = pswarmpar['w'], hyperparammethod='auto')
 
