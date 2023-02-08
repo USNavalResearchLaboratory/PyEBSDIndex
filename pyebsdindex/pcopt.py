@@ -190,7 +190,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
 
 
 def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
-                 nswarmparticles=30, pswarmpar=None, niter=50):
+                 nswarmparticles=30, pswarmpar=None, niter=50, verbose=1):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
     of the :attr:`indexer.vendor` with particle swarms.
 
@@ -227,7 +227,7 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
     and parameters c1 = 2.05, c2 = 2.05 and w = 0.8.
     """
     banddat = indexer.bandDetectPlan.find_bands(pats)
-    npoints = banddat.shape[0]
+    npoints, nbands = banddat.shape[:2]
     if pswarmpar is None:
         #pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}
         pswarmpar = {"c1": 3.5, "c2": 3.5, "w": 0.8}
@@ -273,20 +273,35 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
         # )
         cost, PCoutRet = optimizer.optimize(_optfunction, indexer=indexer, banddat=banddat,
                                             start=PC0, bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
-                                            niter=niter)
+                                            niter=niter, verbose=verbose)
 
         #print(cost)
     else:
         PCoutRet = np.zeros((npoints, 3))
+        if verbose >= 1:
+            print('', end='\n')
         for i in range(npoints):
             # cost, PCoutRet[i, :] = optimizer.optimize(
             #     _optfunction, niter, indexer=indexer, banddat=banddat[i, :, :]
             # )
 
-            cost, PCoutRet = optimizer.optimize(_optfunction, indexer=indexer, banddat=banddat[i, :, :],
-               start=PC0, bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
-               niter=niter)
 
+            cost, newPC = optimizer.optimize(_optfunction, indexer=indexer,
+                                    banddat=banddat[i, :].reshape(1, nbands),
+               start=PC0, bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
+               niter=niter, verbose=0)
+
+            PCoutRet[i, :] = newPC
+            progress = int(round(10 * float(i) / npoints))
+            if verbose >= 1:
+                print('', end='\r')
+                print('PC found: [',
+                      '*' * progress, ' ' * (10 - progress), '] ', i + 1, '/', npoints,
+                      '  global best:', "{0:.3g}".format(cost),
+                      '  PC opt:', np.array_str(PCoutRet[i,:], precision=4, suppress_small=True),
+                      sep='', end='')
+        if verbose >= 1:
+            print('', end='\n')
 
     if emsoftflag:  # Return original state for indexer
         indexer.vendor = "EMSOFT"
@@ -494,19 +509,20 @@ class PSOOpt():
               '  global best:', "{0:.3g}".format(self.gbest),
               '  best loc:', np.array_str(self.gbest_loc, precision=4, suppress_small=True),
               sep='', end='')
-    def optimize(self, function, start=None, bounds=None, niter=50, **kwargs):
+    def optimize(self, function, start=None, bounds=None, niter=50, verbose = 1, **kwargs):
 
         self.initializeswarm(start, bounds)
 
         with multiprocessing.Pool(min(multiprocessing.cpu_count(), self.n_particles)) as pool:
-
-            print('n_particle:', self.n_particles, 'c1:', self.c1, 'c2:', self.c2, 'w:', self.w )
+            if verbose >= 1:
+                print('n_particle:', self.n_particles, 'c1:', self.c1, 'c2:', self.c2, 'w:', self.w )
 
             self.niter = niter
             for iter in range(niter):
                 self.updatehyperparam(iter)
                 self.updateswarmbest(function, pool, **kwargs)
-                self.printprogress(iter)
+                if verbose >= 1:
+                    self.printprogress(iter)
                 self.updateswarmvelpos()
 
 
@@ -514,10 +530,11 @@ class PSOOpt():
         pool.terminate()
         final_best = self.gbest
         final_loc = self.gbest_loc
-        print('', end='\n')
-        print("Optimization finished | best cost: {}, best pos: {}".format(
-            final_best, final_loc))
-        print(' ')
+        if verbose >= 1:
+            print('', end='\n')
+            print("Optimization finished | best cost: {}, best pos: {}".format(
+                final_best, final_loc))
+            print(' ')
         return final_best, final_loc
 
 
