@@ -61,7 +61,7 @@ def get_pattern_file_obj(path,file_type=str('')):
   if (ftype.upper() == 'UP1') or (ftype.upper() == 'UP2'):
     ebsdfileobj = UPFile(path)
   if (ftype.upper() == 'EBSP'):
-    ebsdfileobj = EBSDPFile(path)
+    ebsdfileobj = EBSPFile(path)
   if (ftype.upper() == 'OH5'):
     ebsdfileobj = EDAXOH5(path)
     if hdf5path is None: #automatically chose the first data group
@@ -634,7 +634,7 @@ class UPFile(EBSDPatternFile):
         self.bitdepth = 8
 
 
-class EBSDPFile(EBSDPatternFile):
+class EBSPFile(EBSDPatternFile):
   """
     Notes
     -----
@@ -941,10 +941,10 @@ class EBSDPFile(EBSDPatternFile):
           if (self.version > 0) and self.hasxypos:
             if self.version >= 2:
               np.uint8(1).tofile(f)
-            np.float64(i * self.xStep).tofile(f)
+            np.float64(i * self.xStep - 0.5*(self.nCols*self.xStep)).tofile(f)
             if self.version >= 2:
               np.uint8(1).tofile(f)
-            np.float64(j * self.yStep).tofile(f)
+            np.float64(j * self.yStep - 0.5*(self.nRows*self.yStep)).tofile(f)
           else: # no xy_pos info
             if self.version >= 2:
               np.uint8(0).tofile(f)
