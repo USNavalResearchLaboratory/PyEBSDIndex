@@ -378,7 +378,7 @@ class EBSDPatternFile():
 
         for i in range(nrowwrite):
           pstart = ((rowstart+i)*self.nCols)+colstart
-          self.write_data(newpatterns = pats[i*ncolwrite:(i+1)*ncolwrite, :, :], patStartCount=[pstart,ncolwrite],writeHead=False,
+          self.write_data(newpatterns = pats[int(i*ncolwrite):int((i+1)*ncolwrite), :, :], patStartCount=[pstart,ncolwrite],writeHead=False,
                           flt2int=flt2int,scalevalue=0.98, maxScale = max)
   def pat_writer(self, pat2write, patStart, nPatToWrite, typewrite):
     pass

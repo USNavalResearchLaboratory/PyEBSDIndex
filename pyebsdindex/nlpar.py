@@ -137,21 +137,36 @@ class NLPAR():
   def getinfileobj(self):
     if self.filepath is not None:
       fID = ebsd_pattern.get_pattern_file_obj([self.filepath, self.hdfdatapath])
-      if fID.nRows is not None:
-        self.nrows = fID.nRows
-      else:
-        fID.nRows = self.nrows
-      if fID.nCols is not None:
-        self.ncols = fID.nCols
-      else:
-        fID.nCols = self.ncols
+      if (fID.nRows is not None):
+        if (self.nrows is None):
+          self.nrows = fID.nRows
+        else:
+          fID.nRows = self.nrows
+
+      if (fID.nCols is not None):
+        if (self.ncols is None):
+          self.ncols = fID.nCols
+        else:
+          fID.nCols = self.ncols
+
       return fID
+
     else:
       return None
 
   def getoutfileobj(self):
     if self.filepathout is not None:
-      return ebsd_pattern.get_pattern_file_obj([self.filepathout, self.hdfdatapathout])
+      fID = ebsd_pattern.get_pattern_file_obj([self.filepathout, self.hdfdatapathout])
+      if self.nrows is not None:
+        fID.nRows = self.nrows
+      else:
+        self.nrows = fID.nRows
+
+      if self.ncols is not None:
+        fID.nCols = self.ncols
+      else:
+        self.ncols = fID.nCols
+      return fID
     else:
       return None
 
