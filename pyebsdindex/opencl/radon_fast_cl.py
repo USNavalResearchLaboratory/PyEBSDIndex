@@ -112,7 +112,7 @@ class Radon(radon_fast.Radon):
       imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
       cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
 
-
+    cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(0.0), 0, radon_gpu.size)
     prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
                   imstep, indxstep,
                  shpRdn[0], shpRdn[1],
@@ -120,7 +120,7 @@ class Radon(radon_fast.Radon):
 
 
     if (fixArtifacts == True):
-       prg.radonFixArt(queue,(nImChunk,self.nRho),None,radon_gpu,
+       prg.radonFixArt(queue,(nImChunk,shpRdn[0]),None,radon_gpu,
                        shpRdn[0],shpRdn[1],padTheta)
 
 

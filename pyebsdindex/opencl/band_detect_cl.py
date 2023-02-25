@@ -91,7 +91,7 @@ class BandDetect(band_detect.BandDetect):
         tic1 = timer()
         nPatsChunk = chnk[1] - chnk[0]
         #rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns[chnk[0]:chnk[1],:,:], clparams, use_gpu=self.CLOps[0])
-        rdnNorm, clparams = self.radon_fasterCL(patterns[chnk[0]:chnk[1],:,:], self.padding,
+        rdnNorm, clparams = self.radon_fasterCL(patterns[chnk[0]:chnk[1],:,:], padding=self.padding,
                                                                        fixArtifacts=False, background=self.backgroundsub,
                                                                        returnBuff=True, clparams=clparams)
 
@@ -104,7 +104,7 @@ class BandDetect(band_detect.BandDetect):
 
         rdntime += timer() - tic1
         tic1 = timer()
-        rdnConv, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True)
+        rdnConv, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True, separableKernel=True)
         rdnNorm.release()
         convtime += timer()-tic1
         tic1 = timer()
@@ -256,7 +256,7 @@ class BandDetect(band_detect.BandDetect):
       imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
       cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
 
-
+    cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(-1.0), 0, radon_gpu.size)
     prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
                   imstep, indxstep,
                  shpRdn[0], shpRdn[1],
@@ -264,7 +264,7 @@ class BandDetect(band_detect.BandDetect):
 
 
     if (fixArtifacts == True):
-       prg.radonFixArt(queue,(nImChunk,self.nRho),None,radon_gpu,
+       prg.radonFixArt(queue,(nImChunk,shpRdn[0]),None,radon_gpu,
                        shpRdn[0],shpRdn[1],padTheta)
 
 
@@ -354,13 +354,13 @@ class BandDetect(band_detect.BandDetect):
     # pad out the radon buffers
     prg.radonPadTheta(queue,(shp[2],shp[0],1),None,rdn_gpu,
                     np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[1]))
-    prg.radonPadRho(queue,(shp[2],shp[1],1),None,rdn_gpu,
-                      np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[0]))
+    prg.radonPadRho2(queue,(shp[2],shp[1],1),None,rdn_gpu,
+                      np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[0]+1))
     kern_gpu = None
     if separableKernel == False:
       # for now I will assume that the kernel(s) can fit in local memory on the GPU
       # also going to assume that there is only one kernel -- this will be something to fix at some point.
-      k0 = self.kernel[0,:,:]
+      k0 = np.array(self.kernel[0,:,:], dtype=np.float32)
       kshp = np.asarray(k0.shape, dtype=np.int32)
       pad = kshp/2
       kern_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0)
@@ -376,7 +376,7 @@ class BandDetect(band_detect.BandDetect):
 
       kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
       pad = kshp
-      k0x = np.require(self.kernel[0, np.int64(kshp[0] / 2), :], requirements=['C', 'A', 'W', 'O'])
+      k0x = np.require(self.kernel[0, np.int64(kshp[0] / 2), :], requirements=['C', 'A', 'W', 'O'], dtype=np.float32)
       k0x *= 1.0 / k0x.sum()
       k0x = (k0x[...,:]).reshape(1,kshp[1])
 
@@ -390,7 +390,7 @@ class BandDetect(band_detect.BandDetect):
                           np.int32(kshp[1]),np.int32(kshp[0]),np.int32(pad[1]),np.int32(pad[0]),tempConvbuff)
 
       kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
-      k0y = np.require(self.kernel[0, :, np.int32(kshp[1] / 2)], requirements=['C', 'A', 'W', 'O'])
+      k0y = np.require(self.kernel[0, :, np.int32(kshp[1] / 2)], requirements=['C', 'A', 'W', 'O'], dtype=np.float32)
       k0y *= 1.0 / k0y.sum()
       k0y = (k0y[...,:]).reshape(kshp[0],1)
       kshp = np.asarray(k0y.shape,dtype=np.int32)

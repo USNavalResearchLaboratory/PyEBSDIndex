@@ -74,11 +74,15 @@ __kernel void radonSum(
 
 
     const unsigned long int rndIndx = (theta+thetaPad + (rho+rhoPad)*nThetaP)*nImChunk + gid_im;
-    radon[rndIndx] = sum/count;
-    //radon[rndIndx] = gid_im;
+    if (count > 1.0e-6){
+      radon[rndIndx] = sum/count;}
+    else{
+      radon[rndIndx] = -1.0;
+    }
+    
     }
 
-  __kernel void radonFixArt(
+__kernel void radonFixArt(
       __global float16 *radon,
       const unsigned long int nRho, const unsigned long int nTheta,
       const unsigned long int thetaPad)
@@ -88,11 +92,11 @@ __kernel void radonSum(
     const unsigned long int rho = get_global_id(1);
     const unsigned long int rhoIndx = nTheta * rho;
     //rndIndx = nTheta * nRho * gid_im + (nTheta * rho);
-
-    //radon[gid_rdn+thetaPad] = radon[gid_rdn+thetaPad+1];
+    
     radon[(thetaPad + rhoIndx)*nImChunk + gid_im] = radon[(thetaPad + 1 + rhoIndx)*nImChunk + gid_im];
-    //radon[gid_rdn+nTheta-1-thetaPad] = radon[gid_rdn+nTheta-2-thetaPad];
+   
     radon[(nTheta-1-thetaPad + rhoIndx)*nImChunk + gid_im] = radon[(+nTheta-2-thetaPad + rhoIndx)*nImChunk + gid_im];
+    //}
   }
 
 // Padding of the radon Theta -- 0 and 180* are symmetric with a vertical flip.
@@ -142,6 +146,44 @@ __kernel void radonPadTheta(
     }
 
   }
+
+// Padding of the radon Rho -- copy the previous line to the next row ...
+  __kernel void radonPadRho2(
+      __global float *radon,
+      const unsigned long int nRho, const unsigned long int nTheta,
+      const unsigned long int rhoPad)
+  {
+    const unsigned long int gid_im = get_global_id(0);
+    const unsigned long int nImChunk = get_global_size(0);
+    const unsigned long int gid_theta = get_global_id(1);
+    unsigned long int i, gid_rdn1, gid_rdn2;
+    //indxim = nTheta * nRho * gid_im;
+    //rd1p =  radon[indxim + (nTheta * rhoPad) + gid_theta] ;
+    //rd2p =  radon[ indxim + (nTheta * (nRho -1 - rhoPad)) + gid_theta] ;
+    float rd1p =  radon[((nTheta * rhoPad) + gid_theta)*nImChunk + gid_im] ;
+    float rd2p =  radon[((nTheta * (nRho -1 - rhoPad)) + gid_theta)*nImChunk+gid_im];
+
+    for (i = 0; i <= rhoPad; ++i){
+
+        //gid_rdn1 = indxim + (nTheta*i) + gid_theta;
+        //gid_rdn2 = indxim + (nTheta* (nRho-1-rhoPad+i)) + gid_theta;
+        
+        gid_rdn1 = ((nTheta*i) + gid_theta)*nImChunk + gid_im;
+        gid_rdn2 = ((nTheta* (nRho-1-rhoPad+i)) + gid_theta)*nImChunk + gid_im;
+        
+        if (radon[gid_rdn1] < 0){
+          radon[gid_rdn1] = rd1p;
+        }
+        if (radon[gid_rdn2] < 0){
+          radon[gid_rdn2] = rd2p;
+        }
+        rd1p =  radon[gid_rdn1] ;
+        rd2p =  radon[gid_rdn2] ;
+
+    }
+
+  }
+
 
 // Convolution of a stack of images by a 2D kernel
 // At somepoint we might want to consider the ability to chain together convolutions -- keeping the max at each pixel...
