@@ -461,6 +461,10 @@ class BandIndexer():
       self._assign_bands_nb(polesCart, bandRank_arg, bandFam, famIndx, nFam, angTable, bandnorms, angTol, n_band_early)
 
     if verbose > 3:
+      #print(rotlib.om2qu(R))
+      #print(polematch)
+      #print(whGood)
+      #print(fitb)
       print('___Assigned Band___')
       print(self.completelib['familyid'][polematch])
     acc_correct = np.sum( np.array(self.completelib['familyid'][polematch] == bandFam).astype(int)).astype(int)
@@ -976,6 +980,7 @@ class BandIndexer():
     fitout = np.float32(360.0)
     fitbout = np.zeros((nBnds))
     R = np.zeros((1, 3, 3), dtype=np.float32)
+
     #fit = np.float32(360.0)
     #whGood = np.zeros(nBnds, dtype=np.int64) - 1
     nMatch = np.int64(0)
@@ -1102,9 +1107,9 @@ class BandIndexer():
           fitout = fit
           fitbout = fitb
           nMatch = nGood
-          whGood_out = whGood
-          polematch_out = polematch
-          Rout = R
+          whGood_out = whGood[:]
+          polematch_out = polematch[:]
+          Rout[0,:,:] = R[0,:,:]
           ij  = (ii,jj,bnd1,bnd2)
           break
         else:
@@ -1115,9 +1120,9 @@ class BandIndexer():
             fitout = np.float32(fit)
             fitbout = fitb
             nMatch = nGood
-            whGood_out = whGood
-            polematch_out = polematch
-            Rout = R
+            whGood_out = whGood[:]
+            polematch_out = polematch[:]
+            Rout[0,:,:] = R[0,:,:]
 
             ij = (ii,jj,bnd1,bnd2)
 
@@ -1128,9 +1133,9 @@ class BandIndexer():
               fitout = np.float32(fit)
               fitbout = fitb
               nMatch = nGood
-              whGood_out = whGood
-              polematch_out = polematch
-              Rout = R
+              whGood_out = whGood[:]
+              polematch_out = polematch[:]
+              Rout[0,:,:] = R[0,:,:]
 
               ij = (ii, jj, bnd1,bnd2)
 
