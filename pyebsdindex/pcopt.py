@@ -467,6 +467,7 @@ class PSOOpt():
 
 
 
+
     def boundarycheck(self):
 
         if str.lower(self.boundmethod) == 'bounce':
@@ -479,11 +480,11 @@ class PSOOpt():
         for d in range(self.dimensions):
             wh_under = np.nonzero(self.pos[:,d] < lb[d])[0]
             self.pos[wh_under,d] = lb[d]
-            self.vel[wh_under,d] *= -1.0
+            self.vel[wh_under,d] = np.abs(self.vel[wh_under,d])
 
             wh_over = np.nonzero(self.pos[:, d] > ub[d])[0]
             self.pos[wh_over, d] = ub[d]
-            self.vel[wh_over, d] *= -1.0
+            self.vel[wh_over, d] = -1*np.abs(self.vel[wh_over, d])
 
     def updatehyperparam(self, iter):
         if str.lower(self.hyperparammethod) == 'auto':
