@@ -110,7 +110,7 @@ class Radon:
         indx_x = np.where(indx_x >= self.imDim[1], outofbounds, indx_x)
         indx1D = np.clip(indx_x+self.imDim[1]*n, 0, outofbounds)
         self.indexPlan[:, i, 0:self.imDim[0]] = indx1D
-      self.indexPlan.sort(axis = -1)
+    self.indexPlan.sort(axis = -1)
 
 
   def radon_fast(self, imageIn, padding = np.array([0,0]), fixArtifacts = False, background = None):
