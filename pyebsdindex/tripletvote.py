@@ -760,7 +760,7 @@ class BandIndexer():
     B = (wn * bndnorm).T @ pflt
     S = B + B.T
     z = np.asarray(np.sum(wn * np.cross(bndnorm, pflt), axis=0), dtype=np.float64)
-    S2 = S @ S
+    S2 = S @ S # numpy matrix multiplication
     det = np.linalg.det(S)
     k = (S[1, 1] * S[2, 2] - S[1, 2] * S[2, 1]) + (S[0, 0] * S[2, 2] - S[0, 2] * S[2, 0]) + (
           S[0, 0] * S[1, 1] - S[1, 0] * S[0, 1])
