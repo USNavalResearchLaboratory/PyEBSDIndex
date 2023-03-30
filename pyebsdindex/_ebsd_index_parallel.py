@@ -338,15 +338,21 @@ def index_pats_distributed(
             )
             nsubmit += 1
             timers.append(timer())
-            time.sleep(0.01)
+            #time.sleep(0.01)
             jobs_indx.append(job_pstart_end[:])
 
         while ndone < njobs:
             # toc = timer()
-            wrker, busy = ray.wait(jobs, num_returns=1, timeout=None)
+            wrker, busy = ray.wait(jobs, num_returns=1, timeout=60.0)
 
             # print("waittime: ",timer() - toc)
-            jid = jobs.index(wrker[0])
+            if len(wrker) > 0: # trying to catch a hung worker.  Rare, but it happens
+                jid = jobs.index(wrker[0])
+            else:
+                print('hang with ', ndone, 'out of ', njobs)
+                jid = jobs.index(busy[0])
+                wrker.append(busy[0])
+                ray.kill(busy[0])
             try:
                 wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
             except:
@@ -470,6 +476,13 @@ def index_pats_distributed(
             wrker, busy = ray.wait(jobs, num_returns=1, timeout=None)
             jid = jobs.index(wrker[0])
             # print("waittime: ",timer() - toc)
+            if len(wrker) > 0:
+                jid = jobs.index(wrker[0])
+            else:
+                print('hang with ', ndone, 'out of ', njobs)
+                jid = jobs.index(busy[0])
+                wrker.append(busy[0])
+                ray.kill(busy[0])
             try:
                 wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
             except:
