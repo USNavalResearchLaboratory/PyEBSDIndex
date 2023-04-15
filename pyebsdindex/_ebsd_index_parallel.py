@@ -160,7 +160,7 @@ def index_pats_distributed(
     Notes
     -----
     Requires :mod:`ray[default]`. See the :doc:`installation guide
-    </installation>` for details.
+    </user/installation>` for details.
     """
     pats = None
     if patsin is None:
