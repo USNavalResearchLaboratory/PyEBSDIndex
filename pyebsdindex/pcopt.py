@@ -490,8 +490,9 @@ class PSOOpt():
         if str.lower(self.hyperparammethod) == 'auto':
 
             N = float(self.niter)-1
-            self.c1i = (self.c1 - self.c1/7) * (N-iter)/N + self.c1 / 7.0
-            self.c2i = (self.c1 - self.c1 / 7) * (iter) / N + self.c1 / 7.0
+            self.c1i = (self.c1 - self.c1 / 7) * (N-iter)/N + self.c1 / 7.0
+            #self.c2i = (self.c1 - self.c1 / 7) * (iter) / N + self.c1 / 7.0
+            self.c2i = (self.c2 - self.c2 / 7) * (iter) / N + self.c2 / 7.0
             self.wi = self.w/2 * ((N - iter)/N)**2 + self.w/2
 
         else:
