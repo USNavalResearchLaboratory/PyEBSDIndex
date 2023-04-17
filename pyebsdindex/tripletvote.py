@@ -772,7 +772,7 @@ class BandIndexer():
     a = sig2 - k
 
     lam = 1.0
-    tol = 1.0e-6
+    tol = 1.0e-12
     iter = 0
     dlam = 1e6
     # for i in range(10):

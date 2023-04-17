@@ -29,9 +29,10 @@ from timeit import default_timer as timer
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
-from scipy.ndimage import gaussian_filter
-from scipy.ndimage import grey_dilation as scipy_grey_dilation
-import scipy.optimize as opt
+import scipy.ndimage as scipyndim #import gaussian_filter
+#from scipy.ndimage #import grey_dilation as scipy_grey_dilation
+#from scipy.ndimage #import median_filter
+import scipy.optimize as scipyopt
 
 from pyebsdindex import radon_fast
 
@@ -163,7 +164,7 @@ class BandDetect():
       ksz = ksz + ((ksz % 2) == 0)
       kernel = np.zeros(ksz, dtype=np.float32)
       kernel[(ksz[0]/2).astype(int),(ksz[1]/2).astype(int) ] = 1
-      kernel = -1.0*gaussian_filter(kernel, [self.rSigma, self.tSigma], order=[2,0])
+      kernel = -1.0*scipyndim.gaussian_filter(kernel, [self.rSigma, self.tSigma], order=[2,0])
       self.kernel = kernel.reshape((1,ksz[0], ksz[1]))
       #self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int64)
       self.peakPad = np.array(np.around([2 * ksz[0], 2 * ksz[1]]), dtype=np.int64)
@@ -263,14 +264,14 @@ class BandDetect():
     xwh = x[wh]
     ywh = y[wh]
     xywh = np.vstack((xwh, ywh))
-    zwh = (back.ravel())[wh]
+    zwh = (scipyndim.median_filter(np.squeeze(back),3).ravel())[wh]
     whmx = np.unravel_index(back.argmax(), back.shape)
     minz = zwh.min()
     # initialize a guess for the parameters.
     # [gauss amplitude, max loc x, max loc y, sigx, sigy, const offset, slope x, slope y]
     p0 = [(zwh.max() - zwh.min())*0.1, whmx[1], whmx[0], nx/2.355, ny/2.355, minz, 0, 0]
     try:
-      popt, pcov = opt.curve_fit(fit_gauss, xywh, zwh, p0)
+      popt, pcov = scipyopt.curve_fit(fit_gauss, xywh, zwh, p0)
       backfit = (gaussian_surf(x, y, *popt)).reshape(ny, nx)
       #print(p0, popt)
     except RuntimeError:
@@ -441,7 +442,7 @@ class BandDetect():
     rdnConv = np.zeros_like(radon)
 
     for i in range(shp[2]):
-      rdnConv[:,:,i] = -1.0 * gaussian_filter(np.squeeze(radon[:,:,i]),[self.rSigma,self.tSigma],order=[2,0])
+      rdnConv[:,:,i] = -1.0 * scipyndim.gaussian_filter(np.squeeze(radon[:,:,i]),[self.rSigma,self.tSigma],order=[2,0])
 
     #print(rdnConv.min(),rdnConv.max())
     mns = (rdnConv[self.padding[0]:shprdn[1]-self.padding[0],self.padding[1]:shprdn[1]-self.padding[1],:]).min(axis=0).min(axis=0)
@@ -457,7 +458,7 @@ class BandDetect():
     # find the local max
     lMaxK = (self.peakPad[0],self.peakPad[1],1)
 
-    lMaxRdn = scipy_grey_dilation(rdn,size=lMaxK)
+    lMaxRdn = scipyndim.grey_dilation(rdn,size=lMaxK)
     #lMaxRdn[:,:,0:self.peakPad[1]] = 0
     #lMaxRdn[:,:,-self.peakPad[1]:] = 0
     #location of the max is where the local max is equal to the original.

@@ -49,7 +49,9 @@ class Radon(radon_fast.Radon):
       self.clparams = clparams
 
 
-  def radon_fasterCL(self,image,padding = np.array([0,0]), fixArtifacts = False, background = None, returnBuff = True, clparams=None ):
+  def radon_fasterCL(self,image,padding = np.array([0,0]), fixArtifacts = False,
+                     background = None, background_method = 'SUBTRACT',
+                     returnBuff = True, clparams=None ):
 
     tic = timer()
     # make sure we have an OpenCL environment
@@ -108,9 +110,12 @@ class Radon(radon_fast.Radon):
 
     if background is not None:
       back_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=background.astype(np.float32))
-      prg.backSub(queue,(imstep, 1, 1),None,image_gpu,back_gpu,nImChunk)
-      imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
-      cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
+      if str.upper(background_method) == 'DIVIDE':
+        prg.backDiv(queue,(imstep, 1, 1),None,image_gpu,back_gpu,nImChunk)
+      else:
+        prg.backSub(queue,(imstep, 1, 1),None,image_gpu,back_gpu,nImChunk)
+        #imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
+        #cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
 
     cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(0.0), 0, radon_gpu.size)
     prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,

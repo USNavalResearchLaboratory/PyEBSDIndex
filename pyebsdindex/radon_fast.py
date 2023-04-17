@@ -113,7 +113,8 @@ class Radon:
     self.indexPlan.sort(axis = -1)
 
 
-  def radon_fast(self, imageIn, padding = np.array([0,0]), fixArtifacts = False, background = None):
+  def radon_fast(self, imageIn, padding = np.array([0,0]), fixArtifacts = False,
+                 background = None, background_method = 'SUBTRACT'):
     tic = timer()
     shapeIm = np.shape(imageIn)
     if imageIn.ndim == 2:
@@ -127,7 +128,10 @@ class Radon:
     if background is None:
       image = imageIn.reshape(-1)
     else:
-      image = imageIn - background
+      if str.upper(background_method) == 'DIVIDE':
+        image = imageIn / background
+      else:
+        image = imageIn - background
       image = image.reshape(-1)
 
     nPx = shapeIm[-1]*shapeIm[-2]
