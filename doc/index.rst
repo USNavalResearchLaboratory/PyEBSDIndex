@@ -1,14 +1,14 @@
-===========
-PyEBSDIndex
-===========
+===================================
+PyEBSDIndex |release| documentation
+===================================
 
 Python based tool for Hough/Radon based EBSD orientation indexing.
 
 The pattern processing is based on a GPU pipeline, and is based on the work of S. I.
 Wright and B. L. Adams. Metallurgical Transactions A-Physical Metallurgy and Materials
-Science, 23(3):759–767, 1992, and N. Krieger Lassen. Automated Determination of Crystal
-Orientations from Electron Backscattering Patterns. PhD thesis, The Technical University
-of Denmark, 1994.
+Science, 23(3):759–767, 1992, and N. C. Krieger Lassen. Automated Determination of
+Crystal Orientations from Electron Backscattering Patterns. PhD thesis, The Technical
+University of Denmark, 1994.
 
 The band indexing is achieved through triplet voting using the methods outlined by A.
 Morawiec. Acta Crystallographica Section A Foundations and Advances, 76(6):719–734,
@@ -19,20 +19,13 @@ Additionally NLPAR pattern processing is included (original distribution
 Wright, and D. J. Rowenhorst. Ultramicroscopy, 200:50–61, May 2019.).
 
 .. toctree::
-    :caption: Learning resources
     :hidden:
+    :titlesonly:
 
-    tutorials/index.rst
-    Reference <reference/index.rst>
-
-.. toctree::
-    :caption: Help & development
-    :hidden:
-
-    installation.rst
+    user/index.rst
+    reference/index.rst
+    dev/index.rst
     changelog.rst
-    contributing.rst
-    License <https://github.com/USNavalResearchLaboratory/PyEBSDIndex/blob/main/License>
 
 Installation
 ============
@@ -54,7 +47,7 @@ PyEBSDIndex can be installed with `pip <https://pypi.org/project/pyebsdindex>`__
 
             conda install pyebsdindex -c conda-forge
 
-Further details are available in the :doc:`installation guide <installation>`.
+Further details are available in the :doc:`installation guide <user/installation>`.
 
 Learning resources
 ==================
@@ -63,17 +56,21 @@ Learning resources
 .. grid:: 2
     :gutter: 2
 
-    .. grid-item-card:: Tutorials
-        :img-top: _static/colormap_banners/banner0.png
+    .. grid-item-card::
         :link: tutorials/index
         :link-type: doc
 
+        :octicon:`book;2em;sd-text-info` Tutorials
+        ^^^
+
         In-depth guides for using PyEBSDIndex.
 
-    .. grid-item-card:: Reference
-        :img-top: _static/colormap_banners/banner1.png
+    .. grid-item-card::
         :link: reference/index
         :link-type: doc
+
+        :octicon:`code;2em;sd-text-info` API reference
+        ^^^
 
         Descriptions of functions, modules, and objects in PyEBSDIndex.
 
@@ -85,4 +82,4 @@ you can help!
 
 - Report a bug or request a feature `on GitHub
   <https://github.com/USNavalResearchLaboratory/PyEBSDIndex>`__
-- or improve the :doc:`documentation or code <contributing>`
+- or improve the :doc:`documentation or code <dev/index>`

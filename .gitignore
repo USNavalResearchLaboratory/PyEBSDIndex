@@ -23,5 +23,5 @@ dist/
 .coverage
 
 # Sphinx
-doc/_build
+doc/build
 doc/reference/generated/

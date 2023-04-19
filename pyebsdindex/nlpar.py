@@ -1,25 +1,26 @@
-'''This software was developed by employees of the US Naval Research Laboratory (NRL), an
-agency of the Federal Government. Pursuant to title 17 section 105 of the United States
-Code, works of NRL employees are not subject to copyright protection, and this software
-is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
-responsibility whatsoever for its use by other parties, and makes no guarantees,
-expressed or implied, about its quality, reliability, or any other characteristic. We
-would appreciate acknowledgment if the software is used. To the extent that NRL may hold
-copyright in countries other than the United States, you are hereby granted the
-non-exclusive irrevocable and unconditional right to print, publish, prepare derivative
-works and distribute this software, in any medium, or authorize others to do so on your
-behalf, on a royalty-free basis throughout the world. You may improve, modify, and
-create derivative works of the software or any portion of the software, and you may copy
-and distribute such modifications or works. Modified works should carry a notice stating
-that you changed the software and should note the date and nature of any such change.
-Please explicitly acknowledge the US Naval Research Laboratory as the original source.
-This software can be redistributed and/or modified freely provided that any derivative
-works bear some notice that they are derived from it, and any modified versions bear
-some notice that they have been modified.
+# This software was developed by employees of the US Naval Research Laboratory (NRL), an
+# agency of the Federal Government. Pursuant to title 17 section 105 of the United States
+# Code, works of NRL employees are not subject to copyright protection, and this software
+# is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
+# responsibility whatsoever for its use by other parties, and makes no guarantees,
+# expressed or implied, about its quality, reliability, or any other characteristic. We
+# would appreciate acknowledgment if the software is used. To the extent that NRL may hold
+# copyright in countries other than the United States, you are hereby granted the
+# non-exclusive irrevocable and unconditional right to print, publish, prepare derivative
+# works and distribute this software, in any medium, or authorize others to do so on your
+# behalf, on a royalty-free basis throughout the world. You may improve, modify, and
+# create derivative works of the software or any portion of the software, and you may copy
+# and distribute such modifications or works. Modified works should carry a notice stating
+# that you changed the software and should note the date and nature of any such change.
+# Please explicitly acknowledge the US Naval Research Laboratory as the original source.
+# This software can be redistributed and/or modified freely provided that any derivative
+# works bear some notice that they are derived from it, and any modified versions bear
+# some notice that they have been modified.
+#
+# Author: David Rowenhorst;
+# The US Naval Research Laboratory Date: 21 Aug 2020
 
-Author: David Rowenhorst;
-The US Naval Research Laboratory Date: 21 Aug 2020'''
-
+"""Non-local pattern averaging and re-indexing (NLPAR)."""
 
 from pathlib import Path
 from timeit import default_timer as timer
@@ -27,7 +28,6 @@ from timeit import default_timer as timer
 import numba
 import numpy as np
 import scipy.optimize as opt
-import matplotlib.pyplot as plt
 
 from pyebsdindex import ebsd_pattern
 
@@ -35,7 +35,12 @@ from pyebsdindex import ebsd_pattern
 #environ["NUMBA_CACHE_DIR"] = str(tempdir)
 
 
-class NLPAR():
+__all__ = [
+    "NLPAR",
+]
+
+
+class NLPAR:
   def __init__(self, filename=None,  lam=0.7, searchradius=3,dthresh=0.0, nrows = None, ncols = None):
     self.lam = lam
     self.searchradius = searchradius

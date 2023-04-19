@@ -5,7 +5,10 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 from datetime import datetime
+import inspect
 import os
+from os.path import relpath, dirname
+import re
 import sys
 
 from pyebsdindex import __author__, __file__, __version__
@@ -54,17 +57,28 @@ templates_path = ['_templates']
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ["build", "Thumbs.db", ".DS_Store"]
 
-# HTML theme: furo
-# https://pradyunsg.me/furo/
-html_theme = "furo"
-
-# Add any paths that contain custom static files (such as style sheets
-# here, relative to this directory. They are copied after the builtin
-# static files, so a file named "default.css" will overwrite the builtin
-# "default.css".
-html_static_path = ['_static']
+# HTML theming: pydata-sphinx-theme
+# https://pydata-sphinx-theme.readthedocs.io
+html_theme = "pydata_sphinx_theme"
+html_theme_options = {
+    "logo": {
+        "alt_text": project,
+    },
+    "github_url": "https://github.com/USNavalResearchLaboratory/PyEBSDIndex",
+    "header_links_before_dropdown": 6,
+    "navigation_with_keys": False,
+    "show_toc_level": 2,
+    "use_edit_page_button": True,
+}
+html_context = {
+    "github_user": "USNavalResearchLaboratory",
+    "github_repo": "PyEBSDIndex",
+    "github_version": "main",
+    "doc_path": "doc",
+}
+html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 
 # Syntax highlighting
@@ -126,11 +140,11 @@ def linkcode_resolve(domain, info):
     fn = relpath(fn, start=startdir).replace(os.path.sep, "/")
 
     if fn.startswith("pyebsdindex/"):
-        m = re.match(r"^.*dev0\+([a-f\d]+)$", orix.__version__)
+        m = re.match(r"^.*dev0\+([a-f\d]+)$", __version__)
         pre_link = "https://github.com/USNavalResearchLaboratory/PyEBSDIndex/blob/"
         if m:
             return pre_link + "%s/%s%s" % (m.group(1), fn, linespec)
-        elif "dev" in orix.__version__:
+        elif "dev" in __version__:
             return pre_link + "main/%s%s" % (fn, linespec)
         else:
             return pre_link + "v%s/%s%s" % (__version__, fn, linespec)

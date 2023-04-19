@@ -30,4 +30,5 @@ Functionality is inteded to be imported like this:
     :template: custom-module-template.rst
 
     ebsd_index
+    nlpar
     pcopt
