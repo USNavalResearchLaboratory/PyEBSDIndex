@@ -44,7 +44,7 @@ __kernel void backSub( __global float16 *im1, __global const float *back,
 }
 
 //Do a background division on the pattern
-__kernel void backSub( __global float16 *im1, __global const float *back,
+__kernel void backDiv( __global float16 *im1, __global const float *back,
                         const unsigned long int nImChunk)
   {
   const unsigned long int xy = get_global_id(0);
@@ -52,8 +52,11 @@ __kernel void backSub( __global float16 *im1, __global const float *back,
   unsigned long i;
   float16 imVal;
 
-  const float b1 = back[xy];
-
+  float b1 = back[xy];
+  if (b1 < 1.0){
+    b1 = 1.0;
+  }
+  
   const unsigned long indx = nImChunk * xy;
   for(i = 0; i< nImChunk; ++i){
     imVal =  im1[indx+i];
