@@ -36,12 +36,11 @@ required for specific functionality:
 With conda
 ==========
 
-Installing from Anaconda on Linux or Windows (with ``jupyterlab`` and GPU support
-included)::
+GPU support is included when installing from Anaconda. On Linux or Windows::
 
     conda install pyebsdindex -c conda-forge
 
-Installing on macOS (without ``ray[default]``, which has to be installed separately)::
+On macOS (without ``ray[default]``, which has to be installed separately)::
 
     conda install pyebsdindex-base -c conda-forge
 

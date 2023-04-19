@@ -11,25 +11,25 @@ from pyebsdindex import (
 # https://setuptools.readthedocs.io/en/latest/setuptools.html#declaring-extras-optional-features-with-their-own-dependencies
 extra_feature_requirements = {
     "doc": [
-        "furo",
-        "nbsphinx           >= 0.7",
+        "nbsphinx                       >= 0.7",
         "numpydoc",
-        "sphinx             >= 3.0.2",
+        "pydata-sphinx-theme",
+        "sphinx                         >= 3.0.2",
         "sphinx-codeautolink[ipython]",
-        "sphinx-copybutton  >= 0.2.5",
+        "sphinx-copybutton              >= 0.2.5",
         "sphinx-design",
-        "sphinx-gallery     < 0.11",
+        "sphinx-gallery",
     ],
     "tests": [
-        "coverage           >= 5.0",
-        "pytest             >= 5.4",
-        "pytest-cov         >= 2.8.1"
+        "coverage                       >= 5.0",
+        "pytest                         >= 5.4",
+        "pytest-cov                     >= 2.8.1"
     ],
     "gpu": [
         "pyopencl",
     ],
     "parallel": [
-        "ray[default]       >= 1.13",
+        "ray[default]                   >= 1.13",
     ]
 }
 # Create a development installation "dev" including "doc" and "tests"
@@ -73,6 +73,7 @@ setup(
         "electron backscatter diffraction",
         "HI",
         "Hough indexing",
+        "NLPAR",
     ],
     zip_safe=True,
     # Contact
