@@ -101,15 +101,15 @@ class NLPAR:
             raise ValueError('Error: File input and output are exactly the same.')
             return
 
-        patternfile.copy_file([self.filepathout,self.hdfdatapathout] )
+        patternfile.copy_file([self.filepathout,self.hdfdatapathout], empty_data=True)
         return  # fpath and (maybe) hdf5 path were set manually.
       else: # this is a hdf5 file
         if self.hdfdatapathout is None:
-          patternfile.copy_file(self.filepathout)
+          patternfile.copy_file(self.filepathout, empty_data=True)
           self.hdfdatapathout = patternfile.h5patdatpth
           return
         else:
-          patternfile.copy_file([self.filepathout, self.hdfdatapathout])
+          patternfile.copy_file([self.filepathout, self.hdfdatapathout], empty_data=True)
           return
 
     if patternfile is not None: # the user has set no path.
@@ -119,7 +119,7 @@ class NLPAR:
         p = Path(patternfile.filepath)
         appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
         newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
-        patternfile.copy_file(newfilepath)
+        patternfile.copy_file(newfilepath,empty_data=True)
 
       if patternfile.filetype == 'HDF5':
         hdf5path_tmp = str(patternfile.h5patdatpth).split('/')
@@ -132,7 +132,7 @@ class NLPAR:
         hdf5path = hdf5path_org+appnd
         newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
         #patternfile.copy_file([newfilepath, hdf5path_org], newh5path=hdf5path)
-        patternfile.copy_file([newfilepath])
+        patternfile.copy_file([newfilepath], empty_data=True)
         hdf5path = patternfile.h5patdatpth
 
       self.filepathout = newfilepath
