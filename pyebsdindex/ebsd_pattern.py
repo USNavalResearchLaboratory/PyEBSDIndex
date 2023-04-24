@@ -1007,30 +1007,6 @@ class EBSPFile(EBSDPatternFile):
             np.uint8(1).tofile(f)
           np.float64(yx[0]).tofile(f)
     f.close()
-  def copy_file(self, newpath, **kwargs):
-    src = Path(self.filepath).expanduser().resolve()
-    if newpath is not None:
-      path = np.atleast_1d(newpath)
-      dst = Path(path[0]).expanduser().resolve()
-    else:
-      dst = Path(str(src.expanduser().resolve())+'.copy')
-    try:
-      if 'empty_data' in kwargs:
-        if kwargs['empty_data'] == True:
-          with open(src, 'rb') as srcf:
-            head = srcf.read(self.filePos[0])
-            size = srcf.seek(0, 2)
-            #print('checkpoint' ,size)
-          with open(dst, 'wb') as dstf:
-            head = dstf.write(head)
-            #print('write head')
-            dstf.seek(size-1,0)
-            #print('seek done')
-            dstf.write(b"\0")
-          return
-    except:
-      pass
-    shutil.copyfile(src,dst)
 
 
 class HDF5PatFile(EBSDPatternFile):
