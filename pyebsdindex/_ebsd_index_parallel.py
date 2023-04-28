@@ -26,6 +26,7 @@ parallel.
 
 
 import os
+import platform
 import logging
 import sys
 import time
@@ -43,6 +44,10 @@ if _pyopencl_installed:
 else:
     from pyebsdindex import band_detect as band_detect
 
+RAYIPADDRESS = '127.0.0.1'
+osplatform = platform.system()
+if osplatform == 'Darwin':
+    RAYIPADDRESS = '0.0.0.0' # the localhost address does not work on macOS when on a VPN
 
 def index_pats_distributed(
     patsin=None,
@@ -273,7 +278,7 @@ def index_pats_distributed(
     ray.init(
         num_cpus=n_cpu_nodes,
         num_gpus=ngpu,
-        _node_ip_address="0.0.0.0",
+        _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars": {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__))}},
         logging_level=logging.WARNING,
     )  # Supress INFO messages from ray.
