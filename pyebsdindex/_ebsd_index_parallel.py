@@ -357,7 +357,7 @@ def index_pats_distributed(
                 print('hang with ', ndone, 'out of ', njobs)
                 jid = jobs.index(busy[0])
                 wrker.append(busy[0])
-                ray.kill(busy[0])
+                ray.kill(workers[jid])
             try:
                 wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
             except:
@@ -487,7 +487,7 @@ def index_pats_distributed(
                 print('hang with ', ndone, 'out of ', njobs)
                 jid = jobs.index(busy[0])
                 wrker.append(busy[0])
-                ray.kill(busy[0])
+                ray.kill(workers[jid])
             try:
                 wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
             except:
