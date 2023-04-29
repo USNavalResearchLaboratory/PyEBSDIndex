@@ -642,12 +642,13 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     chunkguess = (float(gmem)/ncpu_per_gpu) / memperpat
 
     #print('chunkguess:', chunkguess)
-    cheatval = 1.0
-    if clparam.gpu[0].vendor == 'AMD':
+    cheatval = 0.9
+    if clparam.gpu[0].vendor == 'AMD': # 'AMD implmentation of opencl does better with clearing memory'
+        # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
         cheatval = 1.75
 
     if ncpu_per_gpu > 1:
-        chunkguess *= cheatval # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
+        chunkguess *= cheatval
     #print('cheatguess:', chunkguess)
     chunk = int(max(2, np.floor(chunkguess/16))*16) # ideally should be a multiple of 16
     #print('chunk:', chunk)
