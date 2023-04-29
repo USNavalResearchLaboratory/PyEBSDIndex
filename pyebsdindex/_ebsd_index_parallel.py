@@ -66,7 +66,7 @@ def index_pats_distributed(
     nBands=9,
     patstart=0,
     npats=-1,
-    chunksize=528,
+    chunksize=0,
     ncpu=-1,
     return_indexer_obj=False,
     ebsd_indexer_obj=None,
@@ -269,9 +269,14 @@ def index_pats_distributed(
         ngpu = 0
         ngpupnode = 0
 
+    if chunksize <= 0:
+        chunksize = __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam)
+
+
+
     ray.shutdown()
 
-    print("num cpu/gpu:", n_cpu_nodes, ngpu)
+    print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize)
     # ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
     # Need to append path for installs from source ... otherwise the ray
     # workers do not know where to find the PyEBSDIndex module.
@@ -598,6 +603,55 @@ def index_pats_distributed(
         return dataout, banddataout, indexer
     else:
         return dataout, banddataout
+
+def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
+    gpulist = []
+    if clparam is None:
+        return 1000
+
+    if gpu_id is None:
+        gpulist.append(clparam.gpu)
+    else:
+        gpulist.append(clparam.gpu[gpu_id])
+    ngpu = len(gpulist)
+
+    if ngpu == 0:
+        return 1000
+
+    gmem = 1e99
+    for g in gpulist:
+        if g.global_mem_size < gmem:
+            gmem = g.global_mem_size
+    print('Global Mem:', gmem)
+    ncpu_per_gpu = max(1, np.ceil(n_cpu_nodes/ngpu))
+    print('Ncpu/gpu:', ncpu_per_gpu)
+    patdim = indexer.bandDetectPlan.patDim
+    rdndim = np.array([indexer.bandDetectPlan.nTheta ,indexer.bandDetectPlan.nRho] )
+    memperpat = 4*float(patdim[0] * patdim[1] + 8 * rdndim[0] * rdndim[1])# rough estimate
+
+    print('Mem/pat:', memperpat)
+    chunkguess = (float(gmem)/ncpu_per_gpu) / memperpat
+
+    print('chunkguess:', chunkguess)
+    if ncpu_per_gpu > 1:
+        chunkguess *= 1.75 # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
+    print('cheatguess:', chunkguess)
+    chunk = int(max(2, np.floor(chunkguess/16))*16) # ideally should be a multiple of 16
+    print('chunk:', chunk)
+    #check for powers of two - for some reason it runs very slow with powers of two.
+    twocheck = np.log2(float(chunk))
+    if np.abs((twocheck) - np.round(twocheck)) < 1e-6:
+        chunk += 16
+
+    return chunk
+
+
+
+
+
+
+
+
 
 
 @ray.remote(num_cpus=1, num_gpus=1)
