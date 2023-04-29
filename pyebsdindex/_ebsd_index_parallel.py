@@ -605,6 +605,8 @@ def index_pats_distributed(
         return dataout, banddataout
 
 def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
+
+
     gpulist = []
     # test for GPU presence
     if clparam is None:
@@ -640,8 +642,12 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     chunkguess = (float(gmem)/ncpu_per_gpu) / memperpat
 
     #print('chunkguess:', chunkguess)
+    cheatval = 1.0
+    if clparam.gpu[0].vendor == 'AMD':
+        cheatval = 1.75
+
     if ncpu_per_gpu > 1:
-        chunkguess *= 1.75 # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
+        chunkguess *= cheatval # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
     #print('cheatguess:', chunkguess)
     chunk = int(max(2, np.floor(chunkguess/16))*16) # ideally should be a multiple of 16
     #print('chunk:', chunk)
