@@ -129,7 +129,7 @@ def index_pats_distributed(
         Number of patterns to index. Default is ``-1``, which will
         index up to the final pattern in ``patsin``.
     chunksize : int, optional
-        Default is 528.
+        If not set. we will make a guess based on the resources available.
     ncpu : int, optional
         Number of CPUs to use. Default value is ``-1``, meaning all
         available CPUs will be used.
@@ -606,13 +606,20 @@ def index_pats_distributed(
 
 def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     gpulist = []
+    # test for GPU presence
     if clparam is None:
         return 1000
 
+    if clparam.ngpu == 0:
+        return 1000
+
     if gpu_id is None:
-        gpulist.append(clparam.gpu)
+        for g in clparam.gpu:
+            gpulist.append(g)
     else:
-        gpulist.append(clparam.gpu[gpu_id])
+        temp = np.atleast_1d(gpu_id)
+        for g in temp:
+            gpulist.append(clparam.gpu[g])
     ngpu = len(gpulist)
 
     if ngpu == 0:
@@ -622,26 +629,30 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     for g in gpulist:
         if g.global_mem_size < gmem:
             gmem = g.global_mem_size
-    print('Global Mem:', gmem)
+    #print('Global Mem:', gmem)
     ncpu_per_gpu = max(1, np.ceil(n_cpu_nodes/ngpu))
-    print('Ncpu/gpu:', ncpu_per_gpu)
+    #print('Ncpu/gpu:', ncpu_per_gpu)
     patdim = indexer.bandDetectPlan.patDim
     rdndim = np.array([indexer.bandDetectPlan.nTheta ,indexer.bandDetectPlan.nRho] )
     memperpat = 4*float(patdim[0] * patdim[1] + 8 * rdndim[0] * rdndim[1])# rough estimate
 
-    print('Mem/pat:', memperpat)
+    #print('Mem/pat:', memperpat)
     chunkguess = (float(gmem)/ncpu_per_gpu) / memperpat
 
-    print('chunkguess:', chunkguess)
+    #print('chunkguess:', chunkguess)
     if ncpu_per_gpu > 1:
         chunkguess *= 1.75 # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
-    print('cheatguess:', chunkguess)
+    #print('cheatguess:', chunkguess)
     chunk = int(max(2, np.floor(chunkguess/16))*16) # ideally should be a multiple of 16
-    print('chunk:', chunk)
+    #print('chunk:', chunk)
     #check for powers of two - for some reason it runs very slow with powers of two.
     twocheck = np.log2(float(chunk))
     if np.abs((twocheck) - np.round(twocheck)) < 1e-6:
         chunk += 16
+
+    # finally - I am unsure how to check for integrated graphics that report system memory, so I am going
+    # throw an arbitrary cap on this:
+    chunk = min(2016, chunk)
 
     return chunk
 
