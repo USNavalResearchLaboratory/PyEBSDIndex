@@ -635,20 +635,22 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     ncpu_per_gpu = max(1, np.ceil(n_cpu_nodes/ngpu))
     #print('Ncpu/gpu:', ncpu_per_gpu)
     patdim = indexer.bandDetectPlan.patDim
-    rdndim = np.array([indexer.bandDetectPlan.nTheta ,indexer.bandDetectPlan.nRho] )
-    memperpat = 4*float(patdim[0] * patdim[1] + 8 * rdndim[0] * rdndim[1])# rough estimate
+    rdndim = np.array([indexer.bandDetectPlan.nTheta+2*indexer.bandDetectPlan.padding[1],
+                       indexer.bandDetectPlan.nRho+2*indexer.bandDetectPlan.padding[0]])
+    memperpat = 4*float(patdim[0] * patdim[1] + 9 * rdndim[0] * rdndim[1])# rough estimate
 
     #print('Mem/pat:', memperpat)
     chunkguess = (float(gmem)/ncpu_per_gpu) / memperpat
 
     #print('chunkguess:', chunkguess)
-    cheatval = 0.9
+    safetyval = 0.8
+    chunkguess *= safetyval
     if clparam.gpu[0].vendor == 'AMD': # 'AMD implmentation of opencl does better with clearing memory'
-        # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
-        cheatval = 1.75
+    #    # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
+        chunkguess *= 1.75
 
-    if ncpu_per_gpu > 1:
-        chunkguess *= cheatval
+
+
     #print('cheatguess:', chunkguess)
     chunk = int(max(2, np.floor(chunkguess/16))*16) # ideally should be a multiple of 16
     #print('chunk:', chunk)
