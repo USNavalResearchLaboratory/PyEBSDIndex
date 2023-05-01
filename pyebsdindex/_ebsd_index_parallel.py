@@ -705,7 +705,8 @@ class IndexerRay:
                 gpu_list = np.atleast_1d(gpu_id)
                 ngpu = gpu_list.shape[0]
                 self.openCLParams.gpu_id = gpu_list[self.actorID % ngpu]
-                self.openCLParams.get_queue()
+                self.openCLParams.get_context()
+                #self.openCLParams.get_queue()
                 self.useGPU = True
             except:
                 self.openCLParams = None
@@ -713,7 +714,10 @@ class IndexerRay:
     def index_chunk_ray(self, pats=None, indexer=None, patstart=0, npats=-1):
         try:
             # print(type(self.openCLParams.ctx))
+
             tic = timer()
+            if self.openCLParams is not None:
+                self.openCLParams.get_queue()
             dataout, banddata, indxstart, npatsout = indexer.index_pats(
                 patsin=pats,
                 patstart=patstart,
@@ -721,6 +725,9 @@ class IndexerRay:
                 clparams=self.openCLParams,
                 chunksize=-1,
             )
+            if self.openCLParams is not None:
+                self.openCLParams.queue.finish()
+                self.openCLParams.queue = None
             rate = np.array([timer() - tic, npatsout])
             return dataout, banddata, indxstart, indxstart + npatsout, rate
         except:
