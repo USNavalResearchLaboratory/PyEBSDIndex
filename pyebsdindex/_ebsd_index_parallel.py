@@ -637,10 +637,10 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     patdim = indexer.bandDetectPlan.patDim
     rdndim = np.array([indexer.bandDetectPlan.nTheta+2*indexer.bandDetectPlan.padding[1],
                        indexer.bandDetectPlan.nRho+2*indexer.bandDetectPlan.padding[0]])
-    memperpat = 4*float(patdim[0] * patdim[1] + 9 * rdndim[0] * rdndim[1])# rough estimate
+    memperpat = 4.0*float(patdim[0] * patdim[1] + 9.0 * rdndim[0] * rdndim[1])# rough estimate
 
-    #print('Mem/pat:', memperpat)
-    chunkguess = (float(gmem)/ncpu_per_gpu) / memperpat
+    print('Mem/pat:', memperpat)
+    chunkguess = (float(gmem)/float(ncpu_per_gpu)) / memperpat
 
     #print('chunkguess:', chunkguess)
     safetyval = 0.8
