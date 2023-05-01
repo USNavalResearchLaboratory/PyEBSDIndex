@@ -135,13 +135,14 @@ class BandDetect(band_detect.BandDetect):
           rdnConvarray = rdnConvarray[:,:,0:chnk[1]-chnk[0] ]
 
         rdnConv.release()
+        rdnConv = None
         blabeltime += timer() - tic1
 
       tottime = timer() - tic0
       # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
 
-      #if clparams is not None:
-        #clparams.queue.finish()
+      if clparams is not None:
+        clparams.queue.finish()
         #clparams.queue = None
 
       if verbose > 0:
