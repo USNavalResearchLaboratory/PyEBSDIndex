@@ -643,11 +643,11 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     chunkguess = (float(gmem)/float(ncpu_per_gpu)) / memperpat
 
     #print('chunkguess:', chunkguess)
-    safetyval = 0.8
+    safetyval = 0.5
     chunkguess *= safetyval
     if clparam.gpu[0].vendor == 'AMD': # 'AMD implmentation of opencl does better with clearing memory'
     #    # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
-        chunkguess *= 1.75
+        chunkguess *= 3.0
 
 
 
