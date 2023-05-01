@@ -141,9 +141,9 @@ class BandDetect(band_detect.BandDetect):
       tottime = timer() - tic0
       # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
 
-      if clparams is not None:
-        clparams.queue.finish()
-        #clparams.queue = None
+      #if clparams is not None:
+      #  clparams.queue.finish()
+      #  clparams.queue = None
 
       if verbose > 0:
         print('Radon Time:',rdntime)
