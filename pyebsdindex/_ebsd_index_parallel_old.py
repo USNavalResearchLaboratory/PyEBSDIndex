@@ -218,14 +218,14 @@ def index_pats_distributed(
     # Differentiate between getting a file to index or an array.
     # Need to index one pattern to make sure the indexer object is fully
     # initiated before placing in shared memory store.
-    inputmode = "memorymode"
+    mode = "memorymode"
     if pats is None:
-        inputmode = "filemode"
+        mode = "filemode"
         temp, temp2, indexer = index_pats(
             npats=1, return_indexer_obj=True, ebsd_indexer_obj=indexer
         )
 
-    if inputmode == "filemode":
+    if mode == "filemode":
         npatsTotal = indexer.fID.nPatterns
     else:
         pshape = pats.shape
@@ -252,7 +252,6 @@ def index_pats_distributed(
     if ncpu != -1:
         n_cpu_nodes = int(ncpu)
 
-
     ngpu = None
     if gpu_id is not None:
         ngpu = np.atleast_1d(gpu_id).shape[0]
@@ -265,39 +264,24 @@ def index_pats_distributed(
         else:
             if ngpu is None:
                 ngpu = len(clparam.gpu)
-            #ngpupnode = ngpu / n_cpu_nodes
+            ngpupnode = ngpu / n_cpu_nodes
     except:
         ngpu = 0
         ngpupnode = 0
 
-    n_gpu_nodes = 1.0
-    usegpu = True
-    if usegpu:
-        if (n_cpu_nodes + n_gpu_nodes) > int(os.cpu_count()):
-            n_cpu_nodes -= 1
-        if n_cpu_nodes < 1:
-            n_cpu_nodes = 0.5 - 1e-6
-            n_gpu_nodes = 0.5 - 1e-6
-        ngpuwrker = 8 * ngpu
-        ngpu_per_wrker =  n_gpu_nodes/ngpuwrker - 1e-6
-        ncpu_per_wrker = n_gpu_nodes/ngpuwrker - 1e-6
-        if chunksize <= 0:
-            chunksize = __optimizegpuchunk__(indexer, ngpuwrker, gpu_id, clparam)
-    else: # no gpus detected.
-        ngpuwrker = 0
-        usegpu = False
-        n_gpu_nodes = 0
-        if chunksize <= 0:
-            chunksize = 1000
+    if chunksize <= 0:
+        chunksize = __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam)
+
+
 
     ray.shutdown()
 
-    print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes+n_gpu_nodes, ngpu, chunksize)
+    print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize)
     # ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
     # Need to append path for installs from source ... otherwise the ray
     # workers do not know where to find the PyEBSDIndex module.
     ray.init(
-        num_cpus=int(np.round(n_cpu_nodes+n_gpu_nodes)),
+        num_cpus=n_cpu_nodes,
         num_gpus=ngpu,
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars": {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__))}},
@@ -312,7 +296,9 @@ def index_pats_distributed(
     clparamfunction = band_detect.getopenclparam
     # Set up the jobs
     njobs = (np.ceil(npats / chunksize)).astype(np.compat.long)
-
+    # p_indx_start = [i*chunksize+patStart for i in range(njobs)]
+    # p_indx_end = [(i+1)*chunksize+patStart for i in range(njobs)]
+    # p_indx_end[-1] = npats+patStart
     p_indx_start_end = [
         [i * chunksize + patstart, (i + 1) * chunksize + patstart, chunksize]
         for i in range(njobs)
@@ -320,196 +306,297 @@ def index_pats_distributed(
     p_indx_start_end[-1][1] = npats + patstart
     p_indx_start_end[-1][2] = p_indx_start_end[-1][1] - p_indx_start_end[-1][0]
 
-    gpujobs = []
-    cpujobs = []
-    jid = 1
-    for jb in p_indx_start_end:
-        gpujobs.append(CPUGPUJob(jid, jb[0], jb[1]))
-        jid += 1
-
-    ncpuwrker =  n_cpu_nodes
-    if njobs < ncpuwrker:
-        ncpuwrker = njobs
-    if njobs < ngpuwrker:
-        ngpuwrker = njobs
+    if njobs < n_cpu_nodes:
+        n_cpu_nodes = njobs
 
     nPhases = len(indexer.phaseLib)
     dataout = np.zeros((nPhases + 1, npats), dtype=indexer.dataTemplate)
     banddataout = np.zeros(
         (npats, indexer.bandDetectPlan.nBands), dtype=indexer.bandDetectPlan.dataType
     )
-    bandnormsout = np.zeros((npats, indexer.bandDetectPlan.nBands, 3), dtype=np.float32)
-
-
-    ncpudone = 0
-    ngpudone = 0
-    ncpusubmit = 0
-    ngpusubmit = 0
+    ndone = 0
+    nsubmit = 0
     tic0 = timer()
-    ncpupatsdone = 0.0
+    npatsdone = 0.0
 
     if keep_log is True:
         newline = "\n"
     else:
         newline = "\r"
-
-    # Send out the first batch
-    gpuworkers = []
-    gputask = []
-    gtaskindex = []
-    cpuworkers = []
-    cputask = []
-    ctaskindex = []
-    chunkave = 0.0
-
-    for i in range(ngpuwrker):
-
-        gpuworkers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
-            # These actors are read/write, thus can initialize the GPU queues
-            GPUWorker.options(num_cpus=1, num_gpus=ngpu_per_wrker).remote(
-                i, clparamfunction, gpu_id=gpu_id
+    if mode == "filemode":
+        # Send out the first batch
+        workers = []
+        jobs = []
+        timers = []
+        jobs_indx = []
+        chunkave = 0.0
+        for i in range(n_cpu_nodes):
+            job_pstart_end = p_indx_start_end.pop(0)
+            workers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
+                # These actors are read/write, thus can initialize the GPU queues
+                IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote(
+                    i, clparamfunction, gpu_id=gpu_id
+                )
             )
-        )
-        gjob = gpujobs.pop(0)
-        if inputmode == "filemode":
-            gputask.append(
-                gpuworkers[i].findbands.remote(gjob,
+            jobs.append(
+                workers[i].index_chunk_ray.remote(
                     pats=None,
-                    indexer=remote_indexer
-                )
-            )
-        else:
-            gputask.append(
-                gpuworkers[i].findbands.remote(gjob,
-                    pats = pats[gjob.pstart:gjob.pend, :, :],
                     indexer=remote_indexer,
+                    patstart=job_pstart_end[0],
+                    npats=job_pstart_end[2],
                 )
             )
-        gtaskindex.append(gjob)
-        ngpusubmit += 1
-        time.sleep(0.1)
-    # initiate the the CPU workers.
-    print(len(gpuworkers),len(gputask))
-    for i in range(ncpuwrker):
-        cpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
-            # These actors are read/write, thus can initialize the GPU queues
-            CPUWorker.options(num_cpus=1, num_gpus=0).remote(i))
-        cputask.append(cpuworkers[i].indexpoles.remote(None, None, None,indexer=remote_indexer))
-        ctaskindex.append(None)
-    print(len(cpuworkers))
+            nsubmit += 1
+            timers.append(timer())
+            #time.sleep(0.01)
+            jobs_indx.append(job_pstart_end[:])
 
-    while ncpudone < njobs:
-
-        if ngpudone < njobs: # check if gpu is done
-            donewrker, busy = ray.wait(gputask,num_returns = len(gputask),  timeout=0.1)
-            #if len(wrker) > 0:  # trying to catch a hung worker.  Rare, but it happens
-            print(len(donewrker))
-            #else:
-                #print('hung gpu process')
-                #jid = gputask.index(busy[0])
-                #wrker.append(busy[0])
-                #ray.kill(gputask[jid])
-            for wrker in donewrker:
-                jid = gputask.index(wrker)
-                #try:
-                message, (banddata, bandnorm, gjob) = ray.get(wrker)
-
-                if message == 'Done':
-                    banddataout[gjob.pstart - patstart: gjob.pend - patstart, :] = banddata
-                    bandnormsout[gjob.pstart - patstart: gjob.pend - patstart, :,:] = bandnorm
-
-                    cpujobs.append(CPUGPUJob(gjob.jobid, gjob.pstart, gjob.pend, extime=gjob.extime))
-                    ngpudone += 1
-
-                    if len(gpujobs) > 0: # still more gpu work to do
-                        gjob = gpujobs.pop(0)
-                        if inputmode == "filemode":
-                            gputask[jid] = gpuworkers[jid].findbands.remote(gjob,
-                                    pats=None,
-                                    indexer=remote_indexer
-                            )
-                        else:
-                            gputask[jid] = gpuworkers[jid].findbands.remote(gjob,
-                                pats=pats[gjob.pstart:gjob.pend, :, :],
-                                indexer=remote_indexer,
-                           )
-                        gtaskindex[jid] = gjob
-                        ngpusubmit += 1
-                    else: # no more gpu tasks to submit
-                        del gpuworkers[jid]
-                        del gputask[jid]
-                        del gtaskindex[jid]
-                else:
-                    raise Exception("Error in GPU processing patterns: ", gtaskindex[jid].pstart, gtaskindex[jid].pend)
-
-
-                # except:
-                #     gjob = gtaskindex[jid]
-                #     print('A GPU death has occured', gjob.pstart, gjob.pend)
-                #     del gpuworkers[jid]
-                #     del gputask[jid]
-                #     del gtaskindex[jid]
-                #     gpujobs.append(gjob)
-                #     if len(gpuworkers) == 0:
-                #         if inputmode == "filemode":
-                #             gputask.append(
-                #                 gpuworkers[0].findbands.remote(gjob,
-                #                    pats=None,
-                #                    indexer=remote_indexer
-                #                 )
-                #             )
-                #         else:
-                #             gputask.append(
-                #                 gpuworkers[0].findbands.remote(gjob,
-                #                    pats=pats[gjob.pstart:gjob.pend, :, :],
-                #                    indexer=remote_indexer,
-                #                 )
-                #             )
-                #         gtaskindex.append(gjob)
+        while ndone < njobs:
             # toc = timer()
-        if ncpudone < njobs:
-            donewrker, busy = ray.wait(cputask, num_returns = len(cputask),  timeout=0.1)
-            for wrker in donewrker:
-                jid = cputask.index(wrker)
-                try:
-                    message, (indexdata, cjob) = ray.get(wrker)
-                    if message == 'Done':
-                        dataout[:, cjob.pstart - patstart: cjob.pend - patstart] = indexdata
-                        ncpudone += 1
-                        print(cjob.rate * n_cpu_nodes)
+            wrker, busy = ray.wait(jobs, num_returns=1, timeout=60.0)
 
-                    if message != 'Error':
-                        if ncpudone == njobs:
-                            del cpuworkers[jid]
-                            del cputask[jid]
-                            del ctaskindex[jid]
-                        elif len(cpujobs) > 0:
-                            cjob = cpujobs.pop(0)
-                            banddata = banddataout[cjob.pstart - patstart: cjob.pend - patstart, :]
-                            bandnorm = bandnormsout[cjob.pstart - patstart: cjob.pend - patstart, :, :]
-                            cputask[jid] = cpuworkers[jid].indexpoles.remote(cjob,banddata, bandnorm, indexer=remote_indexer)
-                            ctaskindex[jid] = cjob
-                        else: # there should be more to do, but waiting for work.
-                            cputask[jid] = cpuworkers[jid].indexpoles.remote(None, None, None)
-                            ctaskindex[jid] = None
+            # print("waittime: ",timer() - toc)
+            if len(wrker) > 0: # trying to catch a hung worker.  Rare, but it happens
+                jid = jobs.index(wrker[0])
+            else:
+                print('hang with ', ndone, 'out of ', njobs)
+                jid = jobs.index(busy[0])
+                wrker.append(busy[0])
+                ray.kill(workers[jid])
+            try:
+                wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
+            except:
+                # print('a death has occured')
+                indxstr = jobs_indx[jid][0]
+                indxend = jobs_indx[jid][1]
+                rate = [-1, -1]
+            if rate[0] >= 0:  # Job finished as expected
 
-                    else:
-                        raise Exception("Error in processing patterns: ", ctaskindex[jid].pstart,ctaskindex[jid].pend)
+                ticp = timers[jid]
+                dataout[:, indxstr - patstart : indxend - patstart] = wrkdataout
+                banddataout[indxstr - patstart : indxend - patstart, :] = wrkbanddata
+                npatsdone += rate[1]
+                ndone += 1
 
-                except:
+                ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
+                chunkave += ratetemp
+                totalave = npatsdone / (timer() - tic0)
+                # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
 
-                    cjob = ctaskindex[jid]
-                    print('A CPU death has occured', cjob.pstart,cjob.pend)
-                    del cpuworkers[jid]
-                    del cputask[jid]
-                    del ctaskindex[jid]
-                    cpujobs.append(cjob)
-                    if len(cpuworkers) == 0:
-                        cpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
-                            # These actors are read/write, thus can initialize the GPU queues
-                            CPUWorker.options(num_cpus=1, num_gpus=0).remote(i))
-                        cputask.append(cpuworkers[0].indexpoles.remote(None, None, None))
-                        ctaskindex.append(None)
+                toc0 = timer() - tic0
+                if keep_log is False:
+                    print("", end="\r")
+                    time.sleep(0.00001)
+                print(
+                    "Completed: ",
+                    str(indxstr),
+                    " -- ",
+                    str(indxend),
+                    "  PPS:",
+                    "{:.0f}".format(ratetemp)
+                    + ";"
+                    + "{:.0f}".format(chunkave / ndone)
+                    + ";"
+                    + "{:.0f}".format(totalave),
+                    "  ",
+                    "{:.0f}".format((ndone / njobs) * 100) + "%",
+                    "{:.0f};".format(toc0)
+                    + "{:.0f}".format((njobs - ndone) / ndone * toc0)
+                    + " running;remaining(s)",
+                    end=newline,
+                )
+
+                if len(p_indx_start_end) > 0:
+                    job_pstart_end = p_indx_start_end.pop(0)
+                    jobs[jid] = workers[jid].index_chunk_ray.remote(
+                        pats=None,
+                        indexer=remote_indexer,
+                        patstart=job_pstart_end[0],
+                        npats=job_pstart_end[2],
+                    )
+                    nsubmit += 1
+                    timers[jid] = timer()
+                    jobs_indx[jid] = job_pstart_end[:]
+                else:
+                    del jobs[jid]
+                    del workers[jid]
+                    del timers[jid]
+                    del jobs_indx[jid]
+            else:
+                # Something bad happened. Put the job back on the queue
+                # and kill this worker.
+                p_indx_start_end.append([indxstr, indxend, indxend - indxstr])
+                del jobs[jid]
+                del workers[jid]
+                del timers[jid]
+                del jobs_indx[jid]
+                n_cpu_nodes -= 1
+                if len(workers) < 1:  # Rare case that we have killed all workers...
+                    job_pstart_end = p_indx_start_end.pop(0)
+                    workers.append(
+                        IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote(
+                            jid, clparamfunction, gpu_id
+                        )
+                    )
+                    jobs.append(
+                        workers[0].index_chunk_ray.remote(
+                            pats=None,
+                            indexer=remote_indexer,
+                            patstart=job_pstart_end[0],
+                            npats=job_pstart_end[2],
+                        )
+                    )
+                    nsubmit += 1
+                    timers.append(timer())
+                    time.sleep(0.01)
+                    jobs_indx.append(job_pstart_end[:])
+                    n_cpu_nodes += 1
+
+    if mode == "memorymode":
+        workers = []
+        jobs = []
+        timers = []
+        jobs_indx = []
+        chunkave = 0.0
+        for i in range(n_cpu_nodes):
+            job_pstart_end = p_indx_start_end.pop(0)
+            workers.append(
+                IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote(
+                    i, clparamfunction, gpu_id
+                )
+            )
+            jobs.append(
+                workers[i].index_chunk_ray.remote(
+                    pats=pats[job_pstart_end[0] : job_pstart_end[1], :, :],
+                    indexer=remote_indexer,
+                    patstart=job_pstart_end[0],
+                    npats=job_pstart_end[2],
+                )
+            )
+            nsubmit += 1
+            timers.append(timer())
+            jobs_indx.append(job_pstart_end)
+            time.sleep(0.01)
+
+        # workers = [index_chunk.remote(pats = None, indexer = remote_indexer, patStart = p_indx_start[i], patEnd = p_indx_end[i]) for i in range(n_cpu_nodes)]
+        # nsubmit += n_cpu_nodes
+
+        while ndone < njobs:
+            # toc = timer()
+            wrker, busy = ray.wait(jobs, num_returns=1, timeout=None)
+            jid = jobs.index(wrker[0])
+            # print("waittime: ",timer() - toc)
+            if len(wrker) > 0:
+                jid = jobs.index(wrker[0])
+            else:
+                print('hang with ', ndone, 'out of ', njobs)
+                jid = jobs.index(busy[0])
+                wrker.append(busy[0])
+                ray.kill(workers[jid])
+            try:
+                wrkdataout, wrkbanddata, indxstr, indxend, rate = ray.get(wrker[0])
+            except:
+                indxstr = jobs_indx[jid][0]
+                indxend = jobs_indx[jid][1]
+                rate = [-1, -1]
+            if rate[0] >= 0:
+                ticp = timers[jid]
+                dataout[:, indxstr - patstart : indxend - patstart] = wrkdataout
+                banddataout[indxstr - patstart : indxend - patstart, :] = wrkbanddata
+                npatsdone += rate[1]
+                ratetemp = n_cpu_nodes * (rate[1]) / (timer() - ticp)
+                chunkave += ratetemp
+                totalave = npatsdone / (timer() - tic0)
+                # print('Completed: ',str(indxstr),' -- ',str(indxend), '  ', npatsdone/(timer()-tic) )
+                ndone += 1
+                toc0 = timer() - tic0
+                if keep_log is False:
+                    print("", end="\r")
+                    time.sleep(0.0001)
+                print(
+                    "Completed: ",
+                    str(indxstr),
+                    " -- ",
+                    str(indxend),
+                    "  PPS:",
+                    "{:.0f}".format(ratetemp)
+                    + ";"
+                    + "{:.0f}".format(chunkave / ndone)
+                    + ";"
+                    + "{:.0f}".format(totalave),
+                    "  ",
+                    "{:.0f}".format((ndone / njobs) * 100) + "%",
+                    "{:.0f};".format(toc0)
+                    + "{:.0f}".format((njobs - ndone) / ndone * toc0)
+                    + " running;remaining(s)",
+                    end=newline,
+                )
+
+                if len(p_indx_start_end) > 0:
+                    job_pstart_end = p_indx_start_end.pop(0)
+                    jobs[jid] = workers[jid].index_chunk_ray.remote(
+                        pats=pats[job_pstart_end[0] : job_pstart_end[1], :, :],
+                        indexer=remote_indexer,
+                        patstart=job_pstart_end[0],
+                        npats=job_pstart_end[2],
+                    )
+                    nsubmit += 1
+                    timers[jid] = timer()
+                    jobs_indx[jid] = job_pstart_end
+                else:
+                    del jobs[jid]
+                    del workers[jid]
+                    del timers[jid]
+                    del jobs_indx[jid]
+            else:
+                # Something bad happened.  Put the job back on the queue
+                # and kill this worker.
+                p_indx_start_end.append([indxstr, indxend, indxend - indxstr])
+                del jobs[jid]
+                del workers[jid]
+                del timers[jid]
+                del jobs_indx[jid]
+                n_cpu_nodes -= 1
+                if len(workers) < 1:  # Rare case that we have killed all workers...
+                    job_pstart_end = p_indx_start_end.pop(0)
+                    workers.append(
+                        IndexerRay.options(num_cpus=1, num_gpus=ngpupnode).remote(
+                            jid, clparamfunction, gpu_id
+                        )
+                    )
+                    jobs.append(
+                        workers[0].index_chunk_ray.remote(
+                            pats=pats[job_pstart_end[0] : job_pstart_end[1], :, :],
+                            indexer=remote_indexer,
+                            patstart=job_pstart_end[0],
+                            npats=job_pstart_end[2],
+                        )
+                    )
+                    nsubmit += 1
+                    timers.append(timer())
+                    jobs_indx.append(job_pstart_end)
+                    n_cpu_nodes += 1
+
+        del jobs
+        del workers
+        del timers
+        # # send out the first batch
+        # workers = [index_chunk_ray.remote(pats=pats[p_indx_start[i]:p_indx_end[i],:,:],indexer=remote_indexer,patStart=p_indx_start[i],patEnd=p_indx_end[i]) for i
+        #            in range(n_cpu_nodes)]
+        # nsubmit += n_cpu_nodes
+        #
+        # while ndone < njobs:
+        #   wrker,busy = ray.wait(workers,num_returns=1,timeout=None)
+        #   wrkdataout,indxstr,indxend, rate = ray.get(wrker[0])
+        #   dataout[indxstr:indxend] = wrkdataout
+        #   print('Completed: ',str(indxstr),' -- ',str(indxend))
+        #   workers.remove(wrker[0])
+        #   ndone += 1
+        #
+        #   if nsubmit < njobs:
+        #     workers.append(index_chunk_ray.remote(pats=pats[p_indx_start[nsubmit]:p_indx_end[nsubmit],:,:],indexer=remote_indexer,patStart=p_indx_start[nsubmit],
+        #                                       patEnd=p_indx_end[nsubmit]))
+        #     nsubmit += 1
 
     ray.shutdown()
     if return_indexer_obj:
@@ -579,8 +666,16 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     return chunk
 
 
+
+
+
+
+
+
+
+
 @ray.remote(num_cpus=1, num_gpus=1)
-class GPUWorker:
+class IndexerRay:
     def __init__(self, actorid=0, clparammodule=None, gpu_id=None):
         # sys.path.append(path.dirname(path.dirname(__file__)))  # do this to help Ray find the program files
         # import openclparam # do this to help Ray find the program files
@@ -616,72 +711,26 @@ class GPUWorker:
             except:
                 self.openCLParams = None
 
-    def findbands(self, gpujob, pats=None, xyloc=None, PC = None, indexer=None):
-        if gpujob is None:
-            return 'Bored', (None, None, None)
+    def index_chunk_ray(self, pats=None, indexer=None, patstart=0, npats=-1):
         try:
             # print(type(self.openCLParams.ctx))
-            gpujob._starttime()
-            if PC is None:
-                PC = indexer.PC
 
-
+            tic = timer()
             if self.openCLParams is not None:
                 self.openCLParams.get_queue()
-            pats, xyloc = indexer._getpats(
+            dataout, banddata, indxstart, npatsout = indexer.index_pats(
                 patsin=pats,
-                patstart=gpujob.pstart,
-                npats=gpujob.npat,
-                xyloc=xyloc)
-
-            npoints = pats.shape[0]
-
-            banddata, bandnorm = indexer._detectbands(pats, PC,
-                                                   xyloc=xyloc,
-                                                   clparams=self.openCLParams,
-                                                   chunksize=-1)
+                patstart=patstart,
+                npats=npats,
+                clparams=self.openCLParams,
+                chunksize=-1,
+            )
             if self.openCLParams is not None:
                 self.openCLParams.queue.finish()
                 self.openCLParams.queue = None
-            gpujob._endtime()
-            return 'Done', (banddata, bandnorm, gpujob)
+            rate = np.array([timer() - tic, npatsout])
+            return dataout, banddata, indxstart, indxstart + npatsout, rate
         except:
-            gpujob.rate = None
-            return "Error", (None, None, gpujob)
-@ray.remote(num_cpus=1, num_gpus=0)
-class CPUWorker:
-    def __init__(self, actorid=0):
-        self.actorID = actorid
-
-    def indexpoles(self, cpujob, banddata, bandnorm, indexer=None):
-        if cpujob is None:
-            return 'Bored', (None, None)
-        try:
-            # print(type(self.openCLParams.ctx))
-
-            cpujob._starttime()
-
-            indxData = indexer._indexbandsphase(banddata, bandnorm, verbose=0)
-
-            cpujob._endtime()
-            return "Done", (indxData, cpujob)
-        except:
-            cpujob.rate = None
-            return "Error", (None, cpujob)
-class CPUGPUJob:
-    def __init__(self,jobid, pstart, pend, extime=0.0):
-        self.jobid = jobid
-        self.pstart = pstart
-        self.pend = pend
-        self.npat = pend - pstart
-        self.starttime = 0.0
-        self.endtime = 0.0
-        self.extime = extime
-        self.rate = 0.0
-    def _starttime(self):
-        self.starttime = timer()
-    def _endtime(self):
-        self.endtime = timer()
-        self.extime += self.endtime - self.starttime
-        self.rate = self.npat/(self.extime + 1e-12)
-
+            indxstart = patstart
+            indxend = patstart + npats
+            return None, None, indxstart, indxend, [-1, -1]

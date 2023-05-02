@@ -395,7 +395,7 @@ class EBSDIndexer:
         patsin=None,
         patstart=0,
         npats=-1,
-        xyloc = None,
+        xyloc=None,
         clparams=None,
         PC=None,
         verbose=0,
@@ -452,6 +452,27 @@ class EBSDIndexer:
             Number of patterns indexed. This and `patstart` are useful
             for the distributed indexing procedures.
         """
+
+        pats, xyloc = self._getpats(patsin=patsin, patstart=patstart, npats=npats, xyloc=xyloc)
+        # just a check that the band_detect is ready for this size pattern.
+        if self.bandDetectPlan.patDim is None:
+            self.bandDetectPlan.band_detect_setup(patterns=pats)
+
+        npoints = pats.shape[0]
+        if npats == -1:
+            npats = npoints
+
+        banddata, bandnorm = self._detectbands(pats, PC, xyloc=xyloc, clparams=clparams, verbose=verbose, chunksize=chunksize)
+        tic = timer()
+
+        indxData = self._indexbandsphase(banddata, bandnorm, verbose=verbose)
+
+        if verbose > 0:
+            print("Band Vote Time: ", timer() - tic)
+
+        return indxData, banddata, patstart, npats
+
+    def _getpats(self, patsin=None, patstart=0, npats=-1, xyloc=None):
         if patsin is None:
             pats, xylocin = self.fID.read_data(
                 returnArrayOnly=True,
@@ -473,14 +494,8 @@ class EBSDIndexer:
             else:
                 if np.all((np.array(pshape[1:3]) - self.bandDetectPlan.patDim) == 0):
                     self.bandDetectPlan.band_detect_setup(patDim=pshape[1:3])
-
-        if self.bandDetectPlan.patDim is None:
-            self.bandDetectPlan.band_detect_setup(patterns=pats)
-
-        npoints = pats.shape[0]
-        if npats == -1:
-            npats = npoints
-
+        return pats, xyloc
+    def _detectbands(self, pats, PC, xyloc=None, clparams=None, verbose=0, chunksize=528 ):
         banddata = self.bandDetectPlan.find_bands(
             pats, clparams=clparams, verbose=verbose, chunksize=chunksize
         )
@@ -492,31 +507,8 @@ class EBSDIndexer:
         bandnorm = self.bandDetectPlan.radonPlan.radon2pole(
             banddata, PC=PC_0, vendor=self.vendor
         )
+        return banddata, bandnorm
 
-        tic = timer()
-
-        indxData = self._indexbandsphase(banddata, bandnorm, verbose=verbose)
-
-        if verbose > 0:
-            print("Band Vote Time: ", timer() - tic)
-
-        return indxData, banddata, patstart, npats
-
-    def _detector2refframe(self):
-        ven = str.upper(self.vendor)
-        if ven in ["EDAX", "EMSOFT", "KIKUCHIPY"]:
-            q0 = np.array([np.sqrt(2.0) * 0.5, 0.0, 0.0, -1.0 * np.sqrt(2.0) * 0.5])
-            tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
-            q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
-            quatref2detect = rotlib.quat_multiply(q1, q0)
-        elif ven in ["OXFORD", "BRUKER"]:
-            tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
-            q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
-            quatref2detect = q1
-        else:
-            raise ValueError("`self.vendor` unknown")
-
-        return quatref2detect
     def _indexbandsphase(self, banddata, bandnorm, verbose = 0):
 
         shpBandDat = banddata.shape
@@ -594,6 +586,21 @@ class EBSDIndexer:
                 )
 
         return indxData
+    def _detector2refframe(self):
+        ven = str.upper(self.vendor)
+        if ven in ["EDAX", "EMSOFT", "KIKUCHIPY"]:
+            q0 = np.array([np.sqrt(2.0) * 0.5, 0.0, 0.0, -1.0 * np.sqrt(2.0) * 0.5])
+            tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
+            q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
+            quatref2detect = rotlib.quat_multiply(q1, q0)
+        elif ven in ["OXFORD", "BRUKER"]:
+            tiltang = -1.0 * (90.0 - self.sampleTilt + self.camElev) / RADEG
+            q1 = np.array([np.cos(tiltang * 0.5), np.sin(tiltang * 0.5), 0.0, 0.0])
+            quatref2detect = q1
+        else:
+            raise ValueError("`self.vendor` unknown")
+
+        return quatref2detect
 #    def pcCorrect(self, xy=[[0.0, 0.0]]):
 #        # TODO: At somepoint we will put some methods here for
 #        #  correcting the PC depending on the location within the scan.
