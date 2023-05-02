@@ -403,7 +403,7 @@ def index_pats_distributed(
         if ngpudone < njobs: # check if gpu is done
             donewrker, busy = ray.wait(gputask,num_returns = len(gputask),  timeout=0.1)
             #if len(wrker) > 0:  # trying to catch a hung worker.  Rare, but it happens
-            print(len(donewrker))
+            #print(len(donewrker))
             #else:
                 #print('hung gpu process')
                 #jid = gputask.index(busy[0])
@@ -476,7 +476,7 @@ def index_pats_distributed(
                     if message == 'Done':
                         dataout[:, cjob.pstart - patstart: cjob.pend - patstart] = indexdata
                         ncpudone += 1
-                        print(cjob.rate * n_cpu_nodes)
+                        #print(cjob.rate * n_cpu_nodes)
 
                     if message != 'Error':
                         if ncpudone == njobs:
