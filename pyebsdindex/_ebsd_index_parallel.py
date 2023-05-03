@@ -72,7 +72,7 @@ def index_pats_distributed(
     ebsd_indexer_obj=None,
     keep_log=False,
     gpu_id=None,
-    verbose = 0
+    verbose = 1
 ):
     """Index EBSD patterns in parallel.
 
@@ -275,7 +275,7 @@ def index_pats_distributed(
 
     usegpu = True
     if usegpu:
-        gpupro = 12 # number of processes per gpu that will serve data to the gpu
+        ngpupro = 12  # number of processes per gpu that will serve data to the gpu
         if n_cpu_nodes - ngpu < 8:
             ngpupro = 8
         if n_cpu_nodes - ngpu < 2:
@@ -283,7 +283,7 @@ def index_pats_distributed(
 
         n_cpu_per_gpu = max(min(1.0, n_cpu_nodes-ngpu), 0.5/ngpu)
 
-        ngpuwrker = gpupro * ngpu
+        ngpuwrker = ngpupro * ngpu
 
         ngpu_per_wrker =  1.0/ngpuwrker - 1.0e-6 # fraction of a GPU to give to each worker (band finding worker)
         ncpugpu_per_wrker = n_cpu_per_gpu/ngpuwrker - 1.0e-6 # fraction of a cpu to allocate to each gpu worker
@@ -294,7 +294,7 @@ def index_pats_distributed(
 
         if chunksize <= 0:
             chunksize = __optimizegpuchunk__(indexer, ngpuwrker, gpu_id, clparam)
-    else: # no gpus detected.
+    else:  # no gpus detected.
         ngpu_per_wrker = 0
         usegpu = False
         ngpupros = n_cpu_nodes
@@ -413,8 +413,8 @@ def index_pats_distributed(
     for i in range(ncpuwrker):
         cpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
             # These actors are read/write, thus can initialize the GPU queues
-            CPUWorker.options(num_cpus=ncpucpu_per_worker, num_gpus=0).remote(i))
-            #CPUWorker.options(num_cpus=ncpucpu_per_worker, num_gpus=0).remote(i))
+            CPUWorker.options(num_cpus=ncpucpu_per_worker).remote(i))
+            #CPUWorker.options(num_cpus=1.0, num_gpus=0).remote(i))
         cputask.append(cpuworkers[i].indexpoles.remote(None, None, None,indexer=remote_indexer))
         ctaskindex.append(None)
     #print(len(cpuworkers))
@@ -488,6 +488,8 @@ def index_pats_distributed(
                             )
                         gtaskindex.append(gjob)
             # toc = timer()
+            if ngpudone >= njobs:
+                print('\n \n GPU Done')
         if ncpudone < njobs:
             donewrker, busy = ray.wait(cputask, num_returns = len(cputask),  timeout=0.1)
             for wrker in donewrker:
