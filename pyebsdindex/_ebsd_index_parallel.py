@@ -167,6 +167,7 @@ def index_pats_distributed(
     Requires :mod:`ray[default]`. See the :doc:`installation guide
     </user/installation>` for details.
     """
+    starttime = timer()
     pats = None
     if patsin is None:
         pdim = None
@@ -270,34 +271,45 @@ def index_pats_distributed(
         ngpu = 0
         ngpupnode = 0
 
-    n_gpu_nodes = 1.0
+
     usegpu = True
     if usegpu:
-        if (n_cpu_nodes + n_gpu_nodes) > int(os.cpu_count()):
-            n_cpu_nodes -= 1
-        if n_cpu_nodes < 1:
-            n_cpu_nodes = 0.5 - 1e-6
-            n_gpu_nodes = 0.5 - 1e-6
-        ngpuwrker = 8 * ngpu
-        ngpu_per_wrker =  n_gpu_nodes/ngpuwrker - 1e-6
-        ncpu_per_wrker = n_gpu_nodes/ngpuwrker - 1e-6
+        gpupro = 12 # number of processes per gpu that will serve data to the gpu
+        if n_cpu_nodes - ngpu < 8:
+            ngpupro = 8
+        if n_cpu_nodes - ngpu < 2:
+            ngpupro = 2
+
+        n_cpu_per_gpu = max(min(1.0, n_cpu_nodes-ngpu), 0.5/ngpu)
+
+        ngpuwrker = gpupro * ngpu
+
+        ngpu_per_wrker =  1.0/ngpuwrker - 1.0e-6 # fraction of a GPU to give to each worker (band finding worker)
+        ncpugpu_per_wrker = n_cpu_per_gpu/ngpuwrker - 1.0e-6 # fraction of a cpu to allocate to each gpu worker
+
+        # amount of cpu to allocate to each cpu worker (indexing worker)
+        ncpucpu_per_worker = (n_cpu_nodes - ncpugpu_per_wrker * ngpuwrker)/n_cpu_nodes
+
+
         if chunksize <= 0:
             chunksize = __optimizegpuchunk__(indexer, ngpuwrker, gpu_id, clparam)
     else: # no gpus detected.
-        ngpuwrker = 0
+        ngpu_per_wrker = 0
         usegpu = False
-        n_gpu_nodes = 0
+        ngpupros = n_cpu_nodes
+        ncpucpu_per_worker = 0.5 - 1.0e-6
+        ncpugpu_per_wrker = 0.5 - 1.0e-6
         if chunksize <= 0:
             chunksize = 1000
 
     ray.shutdown()
 
-    print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes+n_gpu_nodes, ngpu, chunksize)
+    print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize)
     # ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
     # Need to append path for installs from source ... otherwise the ray
     # workers do not know where to find the PyEBSDIndex module.
     ray.init(
-        num_cpus=int(np.round(n_cpu_nodes+n_gpu_nodes)),
+        num_cpus=int(np.round(n_cpu_nodes)),
         num_gpus=ngpu,
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars": {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__))}},
@@ -349,7 +361,10 @@ def index_pats_distributed(
     ncpupatsdone = 0.0
 
     if keep_log is True:
-        newline = "\n"
+        if osplatform != 'Windows':
+            newline = "\n"
+        else:
+            newline = "\r\n"
     else:
         newline = "\r"
 
@@ -360,13 +375,17 @@ def index_pats_distributed(
     cpuworkers = []
     cputask = []
     ctaskindex = []
+    npatdone = 0.0
     chunkave = 0.0
+
+    #print(ngpuwrker, ncpugpu_per_wrker, ngpu_per_wrker)
+    #print(ncpuwrker, ncpucpu_per_worker)
 
     for i in range(ngpuwrker):
 
         gpuworkers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
             # These actors are read/write, thus can initialize the GPU queues
-            GPUWorker.options(num_cpus=ncpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
                 i, clparamfunction, gpu_id=gpu_id
             )
         )
@@ -388,15 +407,16 @@ def index_pats_distributed(
         gtaskindex.append(gjob)
         ngpusubmit += 1
         
-    # initiate the the CPU workers.
-    print(len(gpuworkers),len(gputask))
+    # initiate the CPU workers.
+    #print(len(gpuworkers), len(gputask))
     for i in range(ncpuwrker):
         cpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
             # These actors are read/write, thus can initialize the GPU queues
-            CPUWorker.options(num_cpus=1-1e-6, num_gpus=0).remote(i))
+            CPUWorker.options(num_cpus=ncpucpu_per_worker, num_gpus=0).remote(i))
+            #CPUWorker.options(num_cpus=ncpucpu_per_worker, num_gpus=0).remote(i))
         cputask.append(cpuworkers[i].indexpoles.remote(None, None, None,indexer=remote_indexer))
         ctaskindex.append(None)
-    print(len(cpuworkers))
+    #print(len(cpuworkers))
 
     while ncpudone < njobs:
 
@@ -411,61 +431,61 @@ def index_pats_distributed(
                 #ray.kill(gputask[jid])
             for wrker in donewrker:
                 jid = gputask.index(wrker)
-                #try:
-                message, (banddata, bandnorm, gjob) = ray.get(wrker)
+                try:
+                    message, (banddata, bandnorm, gjob) = ray.get(wrker)
 
-                if message == 'Done':
-                    banddataout[gjob.pstart - patstart: gjob.pend - patstart, :] = banddata
-                    bandnormsout[gjob.pstart - patstart: gjob.pend - patstart, :,:] = bandnorm
+                    if message == 'Done':
+                        banddataout[gjob.pstart - patstart: gjob.pend - patstart, :] = banddata
+                        bandnormsout[gjob.pstart - patstart: gjob.pend - patstart, :,:] = bandnorm
 
-                    cpujobs.append(CPUGPUJob(gjob.jobid, gjob.pstart, gjob.pend, extime=gjob.extime))
-                    ngpudone += 1
+                        cpujobs.append(CPUGPUJob(gjob.jobid, gjob.pstart, gjob.pend, extime=gjob.extime))
+                        ngpudone += 1
 
-                    if len(gpujobs) > 0: # still more gpu work to do
-                        gjob = gpujobs.pop(0)
+                        if len(gpujobs) > 0: # still more gpu work to do
+                            gjob = gpujobs.pop(0)
+                            if inputmode == "filemode":
+                                gputask[jid] = gpuworkers[jid].findbands.remote(gjob,
+                                        pats=None,
+                                        indexer=remote_indexer
+                                )
+                            else:
+                                gputask[jid] = gpuworkers[jid].findbands.remote(gjob,
+                                    pats=pats[gjob.pstart:gjob.pend, :, :],
+                                    indexer=remote_indexer,
+                               )
+                            gtaskindex[jid] = gjob
+                            ngpusubmit += 1
+                        else: # no more gpu tasks to submit
+                            del gpuworkers[jid]
+                            del gputask[jid]
+                            del gtaskindex[jid]
+                    else:
+                        raise Exception("Error in GPU processing patterns: ", gtaskindex[jid].pstart, gtaskindex[jid].pend)
+
+
+                except:
+                    gjob = gtaskindex[jid]
+                    print('A GPU death has occured', gjob.pstart, gjob.pend)
+                    del gpuworkers[jid]
+                    del gputask[jid]
+                    del gtaskindex[jid]
+                    gpujobs.append(gjob)
+                    if len(gpuworkers) == 0:
                         if inputmode == "filemode":
-                            gputask[jid] = gpuworkers[jid].findbands.remote(gjob,
-                                    pats=None,
-                                    indexer=remote_indexer
+                            gputask.append(
+                                gpuworkers[0].findbands.remote(gjob,
+                                   pats=None,
+                                   indexer=remote_indexer
+                                )
                             )
                         else:
-                            gputask[jid] = gpuworkers[jid].findbands.remote(gjob,
-                                pats=pats[gjob.pstart:gjob.pend, :, :],
-                                indexer=remote_indexer,
-                           )
-                        gtaskindex[jid] = gjob
-                        ngpusubmit += 1
-                    else: # no more gpu tasks to submit
-                        del gpuworkers[jid]
-                        del gputask[jid]
-                        del gtaskindex[jid]
-                else:
-                    raise Exception("Error in GPU processing patterns: ", gtaskindex[jid].pstart, gtaskindex[jid].pend)
-
-
-                # except:
-                #     gjob = gtaskindex[jid]
-                #     print('A GPU death has occured', gjob.pstart, gjob.pend)
-                #     del gpuworkers[jid]
-                #     del gputask[jid]
-                #     del gtaskindex[jid]
-                #     gpujobs.append(gjob)
-                #     if len(gpuworkers) == 0:
-                #         if inputmode == "filemode":
-                #             gputask.append(
-                #                 gpuworkers[0].findbands.remote(gjob,
-                #                    pats=None,
-                #                    indexer=remote_indexer
-                #                 )
-                #             )
-                #         else:
-                #             gputask.append(
-                #                 gpuworkers[0].findbands.remote(gjob,
-                #                    pats=pats[gjob.pstart:gjob.pend, :, :],
-                #                    indexer=remote_indexer,
-                #                 )
-                #             )
-                #         gtaskindex.append(gjob)
+                            gputask.append(
+                                gpuworkers[0].findbands.remote(gjob,
+                                   pats=pats[gjob.pstart:gjob.pend, :, :],
+                                   indexer=remote_indexer,
+                                )
+                            )
+                        gtaskindex.append(gjob)
             # toc = timer()
         if ncpudone < njobs:
             donewrker, busy = ray.wait(cputask, num_returns = len(cputask),  timeout=0.1)
@@ -476,8 +496,29 @@ def index_pats_distributed(
                     if message == 'Done':
                         dataout[:, cjob.pstart - patstart: cjob.pend - patstart] = indexdata
                         ncpudone += 1
+                        chunkave += cjob.rate
+                        npatdone += cjob.npat
+                        currenttime = timer() - starttime
                         #print(cjob.rate * n_cpu_nodes)
-
+                        print(
+                            "Completed: ",
+                            str(cjob.pstart),
+                            " -- ",
+                            str(cjob.pend),
+                            "  PPS:",
+                            "{:.0f}".format(cjob.rate*ncpuwrker)
+                            + ";"
+                            + "{:.0f}".format(chunkave / ncpudone * ncpuwrker)
+                            + ";"
+                            + "{:.0f}".format(npatdone/currenttime),
+                            "  ",
+                            "{:.0f}".format((ncpudone / njobs) * 100) + "%",
+                            "{:.0f};".format(currenttime)
+                            + "{:.0f}".format((njobs - ncpudone) / ncpudone * currenttime)
+                            + " running;remaining(s)",
+                            end=newline,
+                        )
+                        time.sleep(0.001)
                     if message != 'Error':
                         if ncpudone == njobs:
                             del cpuworkers[jid]
@@ -489,6 +530,8 @@ def index_pats_distributed(
                             bandnorm = bandnormsout[cjob.pstart - patstart: cjob.pend - patstart, :, :]
                             cputask[jid] = cpuworkers[jid].indexpoles.remote(cjob,banddata, bandnorm, indexer=remote_indexer)
                             ctaskindex[jid] = cjob
+
+
                         else: # there should be more to do, but waiting for work.
                             cputask[jid] = cpuworkers[jid].indexpoles.remote(None, None, None)
                             ctaskindex[jid] = None
@@ -496,8 +539,9 @@ def index_pats_distributed(
                     else:
                         raise Exception("Error in processing patterns: ", ctaskindex[jid].pstart,ctaskindex[jid].pend)
 
-                except:
 
+                except Exception as e:
+                    print(e)
                     cjob = ctaskindex[jid]
                     print('A CPU death has occured', cjob.pstart,cjob.pend)
                     del cpuworkers[jid]
@@ -665,7 +709,8 @@ class CPUWorker:
 
             cpujob._endtime()
             return "Done", (indxData, cpujob)
-        except:
+        except Exception as e:
+            print(e)
             cpujob.rate = None
             return "Error", (None, cpujob)
 class CPUGPUJob:
