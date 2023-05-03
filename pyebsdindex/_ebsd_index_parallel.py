@@ -366,7 +366,7 @@ def index_pats_distributed(
 
         gpuworkers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
             # These actors are read/write, thus can initialize the GPU queues
-            GPUWorker.options(num_cpus=1, num_gpus=ngpu_per_wrker).remote(
+            GPUWorker.options(num_cpus=ncpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
                 i, clparamfunction, gpu_id=gpu_id
             )
         )
@@ -387,13 +387,13 @@ def index_pats_distributed(
             )
         gtaskindex.append(gjob)
         ngpusubmit += 1
-        time.sleep(0.1)
+        
     # initiate the the CPU workers.
     print(len(gpuworkers),len(gputask))
     for i in range(ncpuwrker):
         cpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
             # These actors are read/write, thus can initialize the GPU queues
-            CPUWorker.options(num_cpus=1, num_gpus=0).remote(i))
+            CPUWorker.options(num_cpus=1-1e-6, num_gpus=0).remote(i))
         cputask.append(cpuworkers[i].indexpoles.remote(None, None, None,indexer=remote_indexer))
         ctaskindex.append(None)
     print(len(cpuworkers))
