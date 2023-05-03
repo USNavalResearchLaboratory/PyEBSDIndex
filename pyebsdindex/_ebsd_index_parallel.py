@@ -293,7 +293,7 @@ def index_pats_distributed(
 
 
         if chunksize <= 0:
-            chunksize = __optimizegpuchunk__(indexer, ngpuwrker, gpu_id, clparam)
+            chunksize = __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam)
     else:  # no gpus detected.
         ngpu_per_wrker = 0
         usegpu = False
@@ -422,7 +422,7 @@ def index_pats_distributed(
     while ncpudone < njobs:
 
         if ngpudone < njobs: # check if gpu is done
-            donewrker, busy = ray.wait(gputask,num_returns = len(gputask),  timeout=0.1)
+            donewrker, busy = ray.wait(gputask,num_returns = len(gputask),  timeout=0.01)
             #if len(wrker) > 0:  # trying to catch a hung worker.  Rare, but it happens
             #print(len(donewrker))
             #else:
@@ -488,10 +488,10 @@ def index_pats_distributed(
                             )
                         gtaskindex.append(gjob)
             # toc = timer()
-            if ngpudone >= njobs:
-                print('\n \n GPU Done')
+            if (ngpudone >= njobs) and (verbose >1 ):
+                print('\n GPU Done')
         if ncpudone < njobs:
-            donewrker, busy = ray.wait(cputask, num_returns = len(cputask),  timeout=0.1)
+            donewrker, busy = ray.wait(cputask, num_returns = len(cputask),  timeout=0.01)
             for wrker in donewrker:
                 jid = cputask.index(wrker)
                 try:
@@ -541,7 +541,7 @@ def index_pats_distributed(
                             ctaskindex[jid] = None
 
                     else:
-                        raise Exception("Error in processing patterns: ", ctaskindex[jid].pstart,ctaskindex[jid].pend)
+                        raise Exception("Error in indexing bands: ", ctaskindex[jid].pstart,ctaskindex[jid].pend)
 
 
                 except Exception as e:
@@ -609,7 +609,7 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     chunkguess *= safetyval
     if clparam.gpu[0].vendor == 'AMD': # 'AMD implmentation of opencl does better with clearing memory'
     #    # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
-        chunkguess *= 3.0
+        chunkguess *= 1.0
 
 
 
