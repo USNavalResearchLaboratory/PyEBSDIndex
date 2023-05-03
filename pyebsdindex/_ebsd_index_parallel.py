@@ -72,6 +72,7 @@ def index_pats_distributed(
     ebsd_indexer_obj=None,
     keep_log=False,
     gpu_id=None,
+    verbose = 0
 ):
     """Index EBSD patterns in parallel.
 
@@ -500,25 +501,26 @@ def index_pats_distributed(
                         npatdone += cjob.npat
                         currenttime = timer() - starttime
                         #print(cjob.rate * n_cpu_nodes)
-                        print(
-                            "Completed: ",
-                            str(cjob.pstart),
-                            " -- ",
-                            str(cjob.pend),
-                            "  PPS:",
-                            "{:.0f}".format(cjob.rate*ncpuwrker)
-                            + ";"
-                            + "{:.0f}".format(chunkave / ncpudone * ncpuwrker)
-                            + ";"
-                            + "{:.0f}".format(npatdone/currenttime),
-                            "  ",
-                            "{:.0f}".format((ncpudone / njobs) * 100) + "%",
-                            "{:.0f};".format(currenttime)
-                            + "{:.0f}".format((njobs - ncpudone) / ncpudone * currenttime)
-                            + " running;remaining(s)",
-                            end=newline,
-                        )
-                        time.sleep(0.001)
+                        if verbose > 0:
+                            print(
+                                "Completed: ",
+                                str(cjob.pstart),
+                                " -- ",
+                                str(cjob.pend),
+                                "  PPS:",
+                                "{:.0f}".format(cjob.rate*ncpuwrker)
+                                + ";"
+                                + "{:.0f}".format(chunkave / ncpudone * ncpuwrker)
+                                + ";"
+                                + "{:.0f}".format(npatdone/currenttime),
+                                "  ",
+                                "{:.0f}".format((ncpudone / njobs) * 100) + "%",
+                                "{:.0f};".format(currenttime)
+                                + "{:.0f}".format((njobs - ncpudone) / ncpudone * currenttime)
+                                + " running;remaining(s)",
+                                end=newline,
+                            )
+                        #time.sleep(0.001)
                     if message != 'Error':
                         if ncpudone == njobs:
                             del cpuworkers[jid]
@@ -556,6 +558,7 @@ def index_pats_distributed(
                         ctaskindex.append(None)
 
     ray.shutdown()
+    print('\n')
     if return_indexer_obj:
         return dataout, banddataout, indexer
     else:
@@ -594,13 +597,13 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     patdim = indexer.bandDetectPlan.patDim
     rdndim = np.array([indexer.bandDetectPlan.nTheta+2*indexer.bandDetectPlan.padding[1],
                        indexer.bandDetectPlan.nRho+2*indexer.bandDetectPlan.padding[0]])
-    memperpat = 4.0*float(patdim[0] * patdim[1] + 9.0 * rdndim[0] * rdndim[1])# rough estimate
+    memperpat = 4.0*float(patdim[0] * patdim[1] + 6.0 * rdndim[0] * rdndim[1])# rough estimate
 
     #print('Mem/pat:', memperpat)
     chunkguess = (float(gmem)/float(ncpu_per_gpu)) / memperpat
 
     #print('chunkguess:', chunkguess)
-    safetyval = 0.5
+    safetyval = 0.8
     chunkguess *= safetyval
     if clparam.gpu[0].vendor == 'AMD': # 'AMD implmentation of opencl does better with clearing memory'
     #    # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
