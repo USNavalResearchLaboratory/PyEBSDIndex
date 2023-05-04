@@ -239,14 +239,14 @@ class EBSDPatternFile():
 
     pStartEnd = np.asarray(patStartCount, dtype=np.int64)
     if pStartEnd.ndim == 1: # read a continuous set of patterns.
-      patStart = patStartCount[0]
-      nPatToRead = patStartCount[-1]
+      patStart = int(patStartCount[0])
+      nPatToRead = int(patStartCount[-1])
       if nPatToRead == -1:
-        nPatToRead = self.nPatterns - patStart
+        nPatToRead = int(self.nPatterns - patStart)
       if nPatToRead == 0:
         nPatToRead = 1
       if (patStart + nPatToRead) > self.nPatterns:
-        nPatToRead = self.nPatterns - patStart
+        nPatToRead = int(self.nPatterns - patStart)
 
 
       # this function does the actual reading from the file.
@@ -256,22 +256,22 @@ class EBSDPatternFile():
 
 
     elif pStartEnd.ndim == 2: # read a slab of patterns.
-        colstart = pStartEnd[0,0]
-        ncolread = pStartEnd[1,0]
-        rowstart = pStartEnd[0,1]
-        nrowread = pStartEnd[1,1]
+        colstart = int(pStartEnd[0,0])
+        ncolread = int(pStartEnd[1,0])
+        rowstart = int(pStartEnd[0,1])
+        nrowread = int(pStartEnd[1,1])
 
         patStart = [colstart, rowstart]
         if ncolread < 0:
-          ncolread = self.nCols - colstart
+          ncolread = int(self.nCols - colstart)
         if nrowread < 0:
-          nrowread = self.nRows - rowstart
+          nrowread = int(self.nRows - rowstart)
 
         if (colstart+ncolread) > self.nCols:
-          ncolread = self.nCols - colstart
+          ncolread = int(self.nCols - colstart)
 
         if (rowstart+nrowread) > self.nRows:
-          nrowread = self.nRows - rowstart
+          nrowread = int(self.nRows - rowstart)
         nrowread = np.uint64(nrowread)
         ncolread = np.uint64(ncolread)
         nPatToRead = [ncolread, nrowread]
@@ -279,7 +279,7 @@ class EBSDPatternFile():
         patterns = np.zeros([int(ncolread*nrowread),self.patternH,self.patternW],dtype=typeout)
 
         for i in range(nrowread):
-          pstart = int(((rowstart+i)*self.nCols)+colstart)
+          pstart = int(int(int(rowstart+i)*self.nCols)+colstart)
           ptemp, xyloc = self.read_data(convertToFloat=convertToFloat,patStartCount = [pstart,ncolread],returnArrayOnly=True)
 
           patterns[int(i*ncolread):int((i+1)*ncolread), :, :] = ptemp
@@ -344,8 +344,8 @@ class EBSDPatternFile():
     # self.nPatterns == number of patterns in the file
     # nPats to write == number of patterns to write out
     if pStartEnd.ndim == 1:  # write a continuous set of patterns.
-      patStart = patStartCount[0]
-      nPatToWrite = patStartCount[-1]
+      patStart = int(patStartCount[0])
+      nPatToWrite = int(patStartCount[-1])
       if nPatToWrite == -1:
         nPatToWrite = npats
       if nPatToWrite == 0:
@@ -358,26 +358,26 @@ class EBSDPatternFile():
       self.pat_writer(pat2write,patStart,nPatToWrite, typewrite)
 
     elif pStartEnd.ndim == 2: # write a slab of patterns.
-        colstart = pStartEnd[0,0]
-        ncolwrite = pStartEnd[1,0]
-        rowstart = pStartEnd[0,1]
-        nrowwrite = pStartEnd[1,1]
+        colstart = int(pStartEnd[0,0])
+        ncolwrite = int(pStartEnd[1,0])
+        rowstart = int(pStartEnd[0,1])
+        nrowwrite = int(pStartEnd[1,1])
 
         patStart = [colstart, rowstart]
         if ncolwrite < 0:
-          ncolwrite = self.nCols - colstart
+          ncolwrite = int(self.nCols - colstart)
         if nrowwrite < 0:
-          nrowwrite = self.nRows - rowstart
+          nrowwrite = int(self.nRows - rowstart)
 
         if (colstart+ncolwrite) > self.nCols:
-          ncolwrite = self.nCols - colstart
+          ncolwrite = int(self.nCols - colstart)
 
         if (rowstart+nrowwrite) > self.nRows:
-          nrowwrite = self.nRows - rowstart
+          nrowwrite = int(self.nRows - rowstart)
 
 
         for i in range(nrowwrite):
-          pstart = ((rowstart+i)*self.nCols)+colstart
+          pstart = int(int(int(rowstart+i)*self.nCols)+colstart)
           self.write_data(newpatterns = pats[int(i*ncolwrite):int((i+1)*ncolwrite), :, :], patStartCount=[pstart,ncolwrite],writeHead=False,
                           flt2int=flt2int,scalevalue=0.98, maxScale = max)
   def pat_writer(self, pat2write, patStart, nPatToWrite, typewrite):
@@ -583,17 +583,21 @@ class UPFile(EBSDPatternFile):
 
   def pat_writer(self, pat2write, patStart, nPatToWrite, typewrite):
     try:
-      f = open(Path(self.filepath).expanduser(),'br+')
-      f.seek(0,0)
-    except:
-      print("File Not Found:",str(Path(self.filepath)))
+      with open(Path(self.filepath).expanduser(),'br+') as f:
+        #print(patStart)
+        f.seek(0,0)
+        nPerPat = int(self.patternW * self.patternH)
+        nPerPatByte = int(nPerPat * typewrite(0).nbytes)
+        f.seek(int(nPerPatByte * (patStart) + self.filePos), 0)
+        pat2write[0:nPatToWrite, :, :].tofile(f)
+        #print(patStart)
+    except Exception as e:
+      print(e)
+      print(str(Path(self.filepath)))
       return -1
 
-    nPerPat = self.patternW * self.patternH
-    nPerPatByte = nPerPat * typewrite(0).nbytes
-    f.seek(int(nPerPatByte * (patStart) + self.filePos),0)
-    pat2write[0:nPatToWrite,:,:].tofile(f)
-    f.close()
+
+
 
 
 

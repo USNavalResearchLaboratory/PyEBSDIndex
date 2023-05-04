@@ -364,8 +364,13 @@ class NLPAR:
     print(lam, sr, dthresh)
 
     for j in range(0,nrows,chunksize):
+      print('Row start', j)
+
       rowstartread = np.int64(max(0, j-sr))
       rowend = min(j + chunksize+sr,nrows)
+
+      if (rowend - rowstartread) < (2*sr+1):
+        rowstartread = np.int64(max(0, rowend - (2*sr+1)))
       rowcountread = np.int64(rowend-rowstartread)
       data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
@@ -387,7 +392,8 @@ class NLPAR:
       else:
         sigchunk = sigma[rowstartread:rowend,:]
 
-      print('Block', j)
+      #dataout = data
+
       dataout = self.nlpar_nb(data,lam, sr, dthresh, sigchunk,
                               rowcountread,ncols,indices,saturation_protect)
 
@@ -399,7 +405,7 @@ class NLPAR:
         for i in range(dataout.shape[0]):
           temp = dataout[i,:,:]
           temp -= temp.min()
-          temp *= float(mxval)/temp.max()
+          temp *= np.float32(mxval)/temp.max()
           dataout[i,:,:] = temp
 
       patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
@@ -409,6 +415,7 @@ class NLPAR:
       #return dataout
       #sigma[j:j+rowstartcount[1],:] += \
       #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
+
     numba.set_num_threads(nthreadpos)
 
 
@@ -443,10 +450,12 @@ class NLPAR:
     sigma = np.zeros((nrows, ncols), dtype=np.float32)
     #d_nn = np.zeros((nrows, ncols, int((2*nn+1)**2)), dtype=np.float32)
     colstartcount = np.asarray([0,ncols],dtype=np.int64)
-    dave = 0.0
+
     for j in range(0,nrows,chunksize):
       rowstartread = np.int64(max(0, j-nn))
       rowend = min(j + chunksize+nn,nrows)
+      if (rowend - rowstartread) < (3):
+        rowstartread = np.int64(max(0, rowend - (3)))
       rowcountread = np.int64(rowend-rowstartread)
       data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
@@ -459,9 +468,9 @@ class NLPAR:
         rowstartcount = np.asarray([j-rowstartread,rowcountread - (j-rowstartread) ], dtype=np.int64)
       else:
         rowstartcount = np.asarray([j-rowstartread,chunksize ], dtype=np.int64)
-      dtic = timer()
+
       sigchunk, temp = self.sigma_numba(data,nn, rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
-      dave += (timer() - dtic)
+
       sigma[j:j+rowstartcount[1],:] += \
         sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
 
@@ -573,7 +582,7 @@ class NLPAR:
             dij[j,i,count,1] = np.uint64(i_nn) # want to save this for labmda optimization
             indx_nn = i_nn+ncols*j_nn
             d2 = np.float32(0.0)
-            n2 = np.float32(0.0)
+            n2 = np.float32(1.0e-12)
             nout[j,i,count] = n0 # want to save this for labmda optimization
             if not((i == i_nn) and (j == j_nn)):
               for q in range(shpind[0]):
@@ -583,8 +592,9 @@ class NLPAR:
                   n2 += 1.0
                   d2 += (d0 - d1)**2
               nout[j,i,count] = n2
-              s0 = d2 / np.float32(n2 * 2.0)
+
               if d2 >= 1.e-3: #sometimes EDAX collects the same pattern twice
+                s0 = d2 / np.float32(n2 * 2.0)
                 if s0 < mind:
                   mind = s0
             dout[j,i,count] = d2 # want to save this for labmda optimization
@@ -592,12 +602,13 @@ class NLPAR:
             count += 1
 
         sigma[j,i] = np.sqrt(mind)
+        #if sigma[j,i] > 1e12:
+        #  print(sigma[j,i], dout[j,i,:], nout[i,j,:])
     return sigma,( dout, nout, dij)
 
   @staticmethod
-  @numba.jit(nopython=True,cache=True,fastmath=True,parallel=True)
+  @numba.jit(nopython=True,cache=True,fastmath=False,parallel=True)
   def nlpar_nb(data,lam, sr, dthresh, sigma, nrows,ncols,indices,saturation_protect=True):
-
     def getpairid(idx0, idx1):
       idx0_t = int(idx0)
       idx1_t = int(idx1)
@@ -666,7 +677,7 @@ class NLPAR:
             counter += 1
         #print('________________')
         # end of window scanning
-        sum = np.float(0.0)
+        sum = np.float32(0.0)
         for i_nn in range(winsz):
 
           weights[i_nn] = np.maximum(weights[i_nn]-dthresh, numba.float32(0.0))
