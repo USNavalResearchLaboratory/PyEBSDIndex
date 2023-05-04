@@ -273,8 +273,8 @@ def index_pats_distributed(
         ngpupnode = 0
 
 
-    usegpu = True
-    if usegpu:
+
+    if ngpu > 0:
         ngpupro = 12  # number of processes per gpu that will serve data to the gpu
         if n_cpu_nodes - ngpu < 8:
             ngpupro = 8
@@ -297,12 +297,13 @@ def index_pats_distributed(
     else:  # no gpus detected.
         ngpu_per_wrker = 0
         usegpu = False
-        ngpupros = n_cpu_nodes
+        ngpu_per_wrker = 0
+        ngpuwrker = n_cpu_nodes
         ncpucpu_per_worker = 0.5 - 1.0e-6
         ncpugpu_per_wrker = 0.5 - 1.0e-6
         if chunksize <= 0:
             chunksize = 1000
-
+    ncpuwrker = n_cpu_nodes
     ray.shutdown()
 
     print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize)
@@ -340,7 +341,7 @@ def index_pats_distributed(
         gpujobs.append(CPUGPUJob(jid, jb[0], jb[1]))
         jid += 1
 
-    ncpuwrker =  n_cpu_nodes
+
     if njobs < ncpuwrker:
         ncpuwrker = njobs
     if njobs < ngpuwrker:
