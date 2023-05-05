@@ -272,6 +272,8 @@ def index_pats_distributed(
         ngpu = 0
         ngpupnode = 0
 
+    if indexer.bandDetectPlan.useCPU == True:
+        ngpu = 0
 
 
     if ngpu > 0:
@@ -304,6 +306,7 @@ def index_pats_distributed(
         if chunksize <= 0:
             chunksize = 1000
     ncpuwrker = n_cpu_nodes
+
     ray.shutdown()
 
     print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize)
