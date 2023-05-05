@@ -570,7 +570,7 @@ def index_pats_distributed(
     else:
         return dataout, banddataout
 
-def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
+def __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam):
 
 
     gpulist = []
@@ -586,6 +586,7 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
             gpulist.append(g)
     else:
         temp = np.atleast_1d(gpu_id)
+
         for g in temp:
             gpulist.append(clparam.gpu[g])
     ngpu = len(gpulist)
@@ -595,10 +596,14 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
 
     gmem = 1e99
     for g in gpulist:
+
         if g.global_mem_size < gmem:
             gmem = g.global_mem_size
+
+    gmem = 0.8*gmem # Build a margin in.
     #print('Global Mem:', gmem)
-    ncpu_per_gpu = max(1, np.ceil(n_cpu_nodes/ngpu))
+    #ncpu_per_gpu = max(1, np.ceil(n_cpu_nodes/ngpu))
+
     #print('Ncpu/gpu:', ncpu_per_gpu)
     patdim = indexer.bandDetectPlan.patDim
     rdndim = np.array([indexer.bandDetectPlan.nTheta+2*indexer.bandDetectPlan.padding[1],
@@ -606,28 +611,22 @@ def __optimizegpuchunk__(indexer, n_cpu_nodes, gpu_id, clparam):
     memperpat = 4.0*float(patdim[0] * patdim[1] + 6.0 * rdndim[0] * rdndim[1])# rough estimate
 
     #print('Mem/pat:', memperpat)
-    chunkguess = (float(gmem)/float(ncpu_per_gpu)) / memperpat
+    chunkguess = (float(gmem)/float(ngpupro)) / memperpat
 
     #print('chunkguess:', chunkguess)
-    safetyval = 0.8
-    chunkguess *= safetyval
-    if clparam.gpu[0].vendor == 'AMD': # 'AMD implmentation of opencl does better with clearing memory'
-    #    # this is a cheat, because 1/2 the time the GPU will be idle while the CPU is compputing.
-        chunkguess *= 1.0
-
 
 
     #print('cheatguess:', chunkguess)
     chunk = int(max(2, np.floor(chunkguess/16))*16) # ideally should be a multiple of 16
     #print('chunk:', chunk)
-    #check for powers of two - for some reason it runs very slow with powers of two.
+    #check for powers of two: it is adventageous to be near those.
     twocheck = np.log2(float(chunk))
-    if np.abs((twocheck) - np.round(twocheck)) < 1e-6:
-        chunk += 16
+    if np.abs((twocheck) - np.round(twocheck)) < 0.2:
+        chunk = int(2**int(np.round(twocheck)))
 
     # finally - I am unsure how to check for integrated graphics that report system memory, so I am going
     # throw an arbitrary cap on this:
-    chunk = min(2016, chunk)
+    chunk = min(2048, chunk)
 
     return chunk
 
