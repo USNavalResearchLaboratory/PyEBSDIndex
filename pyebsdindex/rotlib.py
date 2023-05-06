@@ -844,12 +844,12 @@ def ho2cuL(hoIn,p=P):
   pf = numba.float32(p > 0) * 2.0 - 1.0
   ho,m,n,intype = prepIn(hoIn)
   cu = np.zeros((n,3),dtype=intype)
-  LPR1 = np.float(1.33067003949147)  # (3pi/4)**(1/3)
-  LPpref = np.float(1.38197659788534)  # sqrt(6/pi)
-  LPbeta = np.float(0.962874509979126)  # pi**(5/6)/6**(1/6)/2
-  LPr2 = np.float(1.4142135623731)  # sqrt(2)
-  LPpi12 = np.float(0.261799387799149)  # pi/12
-  LPsc = np.float(0.897772786961286)  # a/ap == (pi**(5/6)/6**(1/6)) / pi**(2/3)
+  LPR1 = np.float64(1.33067003949147)  # (3pi/4)**(1/3)
+  LPpref = np.float64(1.38197659788534)  # sqrt(6/pi)
+  LPbeta = np.float64(0.962874509979126)  # pi**(5/6)/6**(1/6)/2
+  LPr2 = np.float64(1.4142135623731)  # sqrt(2)
+  LPpi12 = np.float64(0.261799387799149)  # pi/12
+  LPsc = np.float64(0.897772786961286)  # a/ap == (pi**(5/6)/6**(1/6)) / pi**(2/3)
   eps_loc = 1e-7
 
 
@@ -1344,12 +1344,12 @@ def lambert3DCubeToBall(xyz):
 
 @numba.jit(['f8[:](f8[:])','f8[:](f4[:])'], nopython=True,fastmath=nbFastmath, cache=nbcache)
 def lambert3DBallToCube(xyz):
-  LPR1 = np.float(1.33067003949147) # (3pi/4)**(1/3)
-  LPpref = np.float(1.38197659788534) # sqrt(6/pi)
-  LPbeta = np.float(0.962874509979126) # pi**(5/6)/6**(1/6)/2
-  LPr2 = np.float(1.4142135623731) # sqrt(2)
-  LPpi12 = np.float(0.261799387799149) # pi/12
-  LPsc = np.float(0.897772786961286) # a/ap == (pi**(5/6)/6**(1/6)) / pi**(2/3)
+  LPR1 = np.float64(1.33067003949147) # (3pi/4)**(1/3)
+  LPpref = np.float64(1.38197659788534) # sqrt(6/pi)
+  LPbeta = np.float64(0.962874509979126) # pi**(5/6)/6**(1/6)/2
+  LPr2 = np.float64(1.4142135623731) # sqrt(2)
+  LPpi12 = np.float64(0.261799387799149) # pi/12
+  LPsc = np.float64(0.897772786961286) # a/ap == (pi**(5/6)/6**(1/6)) / pi**(2/3)
   eps_loc = 1e-7
 
   xyzcu = np.zeros(3, dtype = np.float64)

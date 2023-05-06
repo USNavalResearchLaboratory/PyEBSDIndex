@@ -650,7 +650,7 @@ class NLPAR:
             counter += 1
         #print('________________')
         # end of window scanning
-        sum = np.float(0.0)
+        sum = np.float32(0.0)
         for i_nn in range(winsz):
 
           weights[i_nn] = np.maximum(weights[i_nn]-dthresh, numba.float32(0.0))
