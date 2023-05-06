@@ -399,7 +399,7 @@ class EBSDIndexer:
         clparams=None,
         PC=None,
         verbose=0,
-        chunksize=528,
+        chunksize=512,
     ):
         """Index EBSD patterns.
 

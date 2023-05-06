@@ -24,9 +24,7 @@
 
 import numpy as np
 import multiprocessing
-#import pyswarms as pso
 import scipy.optimize as opt
-#from functools import partial
 from timeit import default_timer as timer
 
 

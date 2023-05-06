@@ -94,7 +94,6 @@ setup(
         "matplotlib",
         "numpy",
         "numba",
-        "pyswarms",
         "scipy",
     ],
     # Files to include when distributing package (see also MANIFEST.in)

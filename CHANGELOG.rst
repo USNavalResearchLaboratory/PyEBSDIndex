@@ -10,20 +10,35 @@ Unreleased
 
 Added
 -----
+- Initial support for uncompressed EBSP files from Oxford systems.
+- Significant improvement in the particle swarm optimization for pattern center optimization.
+- Initial support for non-cubic phases. Hexagonal verified with EDAX convention.  Others are untested.
+- Significant improvements in phase differentiation.
+- NLPAR support for Oxford HDF5 and EBSP.
 
 Changed
 -------
+- CRITICAL! All ``ebsd_pattern.EBSDPatternFiles.read_data()`` calls will now return TWO arguments.
+  The patterns (same as previous), and an nd.array of the x,y location within the scan of the patterns. The origin is
+  the center of the scan, and reported in microns.
+- ``ebsd_index.index_pats_distributed()`` now will auto optimize the number of patterns processed at a time depending on GPU
+    capability, and is set as the default.
+- Updated tutorials for new features.
 
 Deprecated
 ----------
 
 Removed
 -------
-
+- Removed requirement for installation of pyswarms.
+- Removed any references to np.floats and replaced with float() or np.float32/64.
 Fixed
 -----
 - Hough transform figure when ``verbose=2`` is passed to various indexing methods is now
   plotted in its own figure.
+- Several bug fixes with NLPAR file reading/writing.
+- Complete rewrite of the scheduling for ``ebsd_index.index_pats_distributed()`` function to be compatible
+  with NVIDIA cards.
 
 Security
 --------
