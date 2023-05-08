@@ -170,8 +170,9 @@ class BandDetect(band_detect.BandDetect):
         im2show[-rhoMaskTrim:,:] = 0
 
         im2show = np.fliplr(im2show)
-        plt.figure()
-        plt.imshow(im2show, cmap='gray', extent=[0, 180, -self.rhoMax, self.rhoMax],
+        fig = plt.figure(figsize=(12,4))
+        subrdn = fig.add_subplot(1,2,1, xlim = (0,180), ylim = (-self.rhoMax, self.rhoMax) )
+        subrdn.imshow(im2show, cmap='gray', extent=[0, 180, -self.rhoMax, self.rhoMax],
                    interpolation='none', zorder=1, aspect='auto')
         width = bandData['width'][-1, :]
         width /= width.min()
@@ -179,13 +180,14 @@ class BandDetect(band_detect.BandDetect):
         xplt = np.squeeze(180.0 - np.interp(bandData['aveloc'][-1,:,1]+0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
         yplt = np.squeeze( -1.0 * np.interp(bandData['aveloc'][-1,:,0]-0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
 
-        plt.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
+        subrdn.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
 
         for pt in range(self.nBands):
-          plt.annotate(str(pt + 1),np.squeeze([xplt[pt]+4,yplt[pt]]), color='yellow')
-        plt.xlim(0,180)
-        plt.ylim(-self.rhoMax, self.rhoMax)
-
+          subrdn.annotate(str(pt + 1),np.squeeze([xplt[pt]+4,yplt[pt]]), color='yellow')
+        #subrdn.xlim(0,180)
+        #subrdn.ylim(-self.rhoMax, self.rhoMax)
+        subpat = fig.add_subplot(1,2,2)
+        subpat.imshow(patterns[-1,:,:], cmap='gray')
 
     except Exception as e: # something went wrong - try the CPU
       print(e)
