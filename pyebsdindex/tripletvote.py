@@ -423,7 +423,7 @@ class BandIndexer():
     pairangs = self.angpairs['angles']
     pairfam = self.angpairs['familyid']
 
-    accumulator, bandFam, bandRank, band_cm = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
+    accumulator, bandFam, bandRank, band_cm, accumulator_nw = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
     #accumulator, bandFam, bandRank, band_cm = self._pairvote_numba(bandangs, self.angTol, pairangs, pairfam,
     #                                                               nfam, n_bands)
     if verbose > 2:
@@ -479,9 +479,17 @@ class BandIndexer():
     if nMatch >=2:
       if self.high_fidelity == True:
 
-        srt = np.argsort(fitb[whGood])
-        whgood6 = whGood[srt[0:np.min([7, whGood.shape[0]])]]
-
+        score = accumulator[[self.completelib['familyid'][polematch[whGood]]], [whGood]]
+        score /= accumulator_nw[[self.completelib['familyid'][polematch[whGood]]], [whGood]] + 1.0e-6
+        score = np.squeeze(score)
+        #print(score, whGood.shape[0])
+        srt = np.flip(np.argsort(score))
+        #srt = np.flip(np.argsort(band_intensity[whGood]))
+        whgood6 = whGood[srt[0:np.min([6, whGood.shape[0]])]]
+        #whgood6 = whGood[0:min(6, whGood.shape[0])]
+        if verbose > 2:
+          print("Good bands:", whGood+1)
+          print("Fit Bands: ", whgood6+1)
         weights6 = band_intensity[whgood6]
         pflt6 = (np.asarray(polesCart[polematch[whgood6], :], dtype=np.float64))
         bndnorm6 = (np.asarray(bandnorms[whgood6, :], dtype=np.float64))
@@ -806,6 +814,7 @@ class BandIndexer():
   def _tripvote_numba(bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
     LUTTemp = np.asarray(LUT).copy()
     accumulator = np.zeros((nfam, n_bands), dtype=np.float32)
+    accumulatorW = np.zeros((nfam, n_bands), dtype=np.float32)
     tshape = np.shape(tripAngles)
     ntrip = int(tshape[0])
     #count  = 0.0
@@ -857,58 +866,78 @@ class BandIndexer():
             w2 = (2.0 * angTol - (angTest0[0] + angTest0[2]))
             w3 = (2.0 * angTol - (angTest0[1] + angTest0[2]))
             #print(w1, w2, w3)
-            accumulator[f[0],i] += w1
-            accumulator[f[1],j] += w2
-            accumulator[f[2],k] += w3
+            accumulatorW[f[0],i] += w1
+            accumulatorW[f[1],j] += w2
+            accumulatorW[f[2],k] += w3
+            accumulator[f[0], i] += 1
+            accumulator[f[1], j] += 1
+            accumulator[f[2], k] += 1
             t1 = False
             t2 = False
             t3 = False
             if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
-              accumulator[f[0],j] += w1
-              accumulator[f[1],i] += w2
-              accumulator[f[2],k] += w3
+              accumulatorW[f[0],j] += w1
+              accumulatorW[f[1],i] += w2
+              accumulatorW[f[2],k] += w3
+              accumulator[f[0], j] += 1
+              accumulator[f[1], i] += 1
+              accumulator[f[2], k] += 1
               t1 = True
             if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
-              accumulator[f[0],i] += w1
-              accumulator[f[1],k] += w2
-              accumulator[f[2],j] += w3
+              accumulatorW[f[0],i] += w1
+              accumulatorW[f[1],k] += w2
+              accumulatorW[f[2],j] += w3
+              accumulator[f[0], i] += 1
+              accumulator[f[1], k] += 1
+              accumulator[f[2], j] += 1
               t2 = True
             if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
-              accumulator[f[0],k] += w1
-              accumulator[f[1],j] += w2
-              accumulator[f[2],i] += w3
+              accumulatorW[f[0],k] += w1
+              accumulatorW[f[1],j] += w2
+              accumulatorW[f[2],i] += w3
+              accumulator[f[0], k] += 1
+              accumulator[f[1], j] += 1
+              accumulator[f[2], i] += 1
               t3 = True
             if (t1 and t2 and t3):
-              accumulator[f[0],k] += w1
-              accumulator[f[1],i] += w2
-              accumulator[f[2],j] += w3
+              accumulatorW[f[0],k] += w1
+              accumulatorW[f[1],i] += w2
+              accumulatorW[f[2],j] += w3
 
-              accumulator[f[0], j] += w1
-              accumulator[f[1], k] += w2
-              accumulator[f[2], i] += w3
+              accumulatorW[f[0], j] += w1
+              accumulatorW[f[1], k] += w2
+              accumulatorW[f[2], i] += w3
+
+              accumulator[f[0], k] += 1
+              accumulator[f[1], i] += 1
+              accumulator[f[2], j] += 1
+
+              accumulator[f[0], j] += 1
+              accumulator[f[1], k] += 1
+              accumulator[f[2], i] += 1
 
 
     mxvote = np.zeros(n_bands, dtype=np.int32)
     tvotes = np.zeros(n_bands, dtype=np.int32)
     band_cm = np.zeros(n_bands, dtype=np.float32)
     for q in range(n_bands):
-      mxvote[q] = np.amax(accumulator[:,q])
-      tvotes[q] = np.sum(accumulator[:,q])
+      mxvote[q] = np.amax(accumulatorW[:,q])
+      tvotes[q] = np.sum(accumulatorW[:,q])
 
     for i in range(n_bands):
       if tvotes[i] < 1:
         band_cm[i] = 0.0
       else:
-        srt = np.argsort(accumulator[:,i])
-        band_cm[i] = (accumulator[srt[-1],i] - accumulator[srt[-2],i]) / tvotes[i]
+        srt = np.argsort(accumulatorW[:,i])
+        band_cm[i] = (accumulatorW[srt[-1],i] - accumulatorW[srt[-2],i]) / tvotes[i]
 
     bandRank = np.zeros(n_bands, dtype=np.float32)
     bandFam = np.zeros(n_bands, dtype=np.int32)
     for q in range(n_bands):
-      bandFam[q] = np.argmax(accumulator[:,q])
+      bandFam[q] = np.argmax(accumulatorW[:,q])
     bandRank = (n_bands - np.arange(n_bands)) / n_bands * band_cm * mxvote
 
-    return accumulator, bandFam, bandRank, band_cm
+    return accumulatorW, bandFam, bandRank, band_cm, accumulator
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
