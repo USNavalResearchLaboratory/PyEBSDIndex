@@ -486,11 +486,14 @@ class BandIndexer():
         srt = np.flip(np.argsort(score))
         #srt = np.flip(np.argsort(band_intensity[whGood]))
         whgood6 = whGood[srt[0:np.min([6, whGood.shape[0]])]]
-        #whgood6 = whGood[0:min(6, whGood.shape[0])]
-        if verbose > 2:
-          print("Good bands:", whGood+1)
-          print("Fit Bands: ", whgood6+1)
+        #if verbose > 2:
+        #  print("Good bands:", whGood+1)
+        #  print("Fit Bands: ", whgood6+1)
         weights6 = band_intensity[whgood6]
+        weights6 -= weights6.min()
+        weights6 *= 2*weights6.max()
+        weights6 += 1
+
         pflt6 = (np.asarray(polesCart[polematch[whgood6], :], dtype=np.float64))
         bndnorm6 = (np.asarray(bandnorms[whgood6, :], dtype=np.float64))
         #print('____')
@@ -498,6 +501,21 @@ class BandIndexer():
         #print(bndnorm6)
         #print('____')
         avequat, fit = self._refine_orientation_quest(bndnorm6, pflt6, weights=weights6)
+
+
+        whgood6 = whGood[0:min(6, whGood.shape[0])]
+        weights6 = band_intensity[whgood6]
+        weights6 -= weights6.min()
+        weights6 *= 2*weights6.max()
+        weights6 += 1
+        pflt6 = (np.asarray(polesCart[polematch[whgood6], :], dtype=np.float64))
+        bndnorm6 = (np.asarray(bandnorms[whgood6, :], dtype=np.float64))
+        avequat2, fit2 = self._refine_orientation_quest(bndnorm6, pflt6, weights=weights6)
+        if fit2 > fit:
+          fit = fit2
+          avequat = avequat2
+        #else:
+          #print('False')
         fit = np.arccos(np.clip(fit, -1.0, 1.0))*RADEG
         #avequat, fit = self.refine_orientation(bandnorms,whGood,polematch)
       else:
@@ -862,9 +880,9 @@ class BandIndexer():
             f = tripID[q,:]
             f = f[unsrtFID]
             #print(angTest0[q,:])
-            w1 = (2.0 * angTol - (angTest0[0] + angTest0[1]))
-            w2 = (2.0 * angTol - (angTest0[0] + angTest0[2]))
-            w3 = (2.0 * angTol - (angTest0[1] + angTest0[2]))
+            w1 = ( angTol - 0.5*(angTest0[0] + angTest0[1]) )
+            w2 = ( angTol - 0.5*(angTest0[0] + angTest0[2]) )
+            w3 = ( angTol - 0.5*(angTest0[1] + angTest0[2]) )
             #print(w1, w2, w3)
             accumulatorW[f[0],i] += w1
             accumulatorW[f[1],j] += w2
