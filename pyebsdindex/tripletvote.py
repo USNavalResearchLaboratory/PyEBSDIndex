@@ -482,17 +482,23 @@ class BandIndexer():
         score = accumulator[[self.completelib['familyid'][polematch[whGood]]], [whGood]]
         score /= accumulator_nw[[self.completelib['familyid'][polematch[whGood]]], [whGood]] + 1.0e-6
         score = np.squeeze(score)
-        #print(score, whGood.shape[0])
+
         srt = np.flip(np.argsort(score))
+        #print(srt+1)
+        #print(score[srt])
+        #print(band_intensity[whGood[srt]])
+
         #srt = np.flip(np.argsort(band_intensity[whGood]))
-        whgood6 = whGood[srt[0:np.min([7, whGood.shape[0]])]]
+        whgood6 = whGood[srt[0:np.min([6, whGood.shape[0]])]]
         #if verbose > 2:
         #  print("Good bands:", whGood+1)
         #  print("Fit Bands: ", whgood6+1)
+        #weights6 = score[srt[0:np.min([6, whGood.shape[0]])]]
         weights6 = band_intensity[whgood6]
         weights6 -= weights6.min()
-        weights6 *= 2/weights6.max()
-        weights6 += 1
+        weights6 *= 1/weights6.max()
+        #weights6 += 1
+        weights6 = np.exp(weights6**2)
         #weights6 = np.exp(weights6)
 
         pflt6 = (np.asarray(polesCart[polematch[whgood6], :], dtype=np.float64))
