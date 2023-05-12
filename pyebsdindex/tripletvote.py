@@ -485,39 +485,26 @@ class BandIndexer():
         #print(score, whGood.shape[0])
         srt = np.flip(np.argsort(score))
         #srt = np.flip(np.argsort(band_intensity[whGood]))
-        whgood6 = whGood[srt[0:np.min([6, whGood.shape[0]])]]
+        whgood6 = whGood[srt[0:np.min([7, whGood.shape[0]])]]
         #if verbose > 2:
         #  print("Good bands:", whGood+1)
         #  print("Fit Bands: ", whgood6+1)
         weights6 = band_intensity[whgood6]
         weights6 -= weights6.min()
-        weights6 *= 2*weights6.max()
+        weights6 *= 2/weights6.max()
         weights6 += 1
+        #weights6 = np.exp(weights6)
 
         pflt6 = (np.asarray(polesCart[polematch[whgood6], :], dtype=np.float64))
         bndnorm6 = (np.asarray(bandnorms[whgood6, :], dtype=np.float64))
-        #print('____')
-        #print(pflt6)
-        #print(bndnorm6)
-        #print('____')
+
         avequat, fit = self._refine_orientation_quest(bndnorm6, pflt6, weights=weights6)
+        #fitfull = self._fitcheck(avequat,
+        #                         np.asarray(bandnorms[whGood, :]),  np.asarray(polesCart[polematch[whGood], :] ))
 
 
-        whgood6 = whGood[0:min(6, whGood.shape[0])]
-        weights6 = band_intensity[whgood6]
-        weights6 -= weights6.min()
-        weights6 *= 2*weights6.max()
-        weights6 += 1
-        pflt6 = (np.asarray(polesCart[polematch[whgood6], :], dtype=np.float64))
-        bndnorm6 = (np.asarray(bandnorms[whgood6, :], dtype=np.float64))
-        avequat2, fit2 = self._refine_orientation_quest(bndnorm6, pflt6, weights=weights6)
-        if fit2 > fit:
-          fit = fit2
-          avequat = avequat2
-        #else:
-          #print('False')
         fit = np.arccos(np.clip(fit, -1.0, 1.0))*RADEG
-        #avequat, fit = self.refine_orientation(bandnorms,whGood,polematch)
+
       else:
         avequat = rotlib.om2qu(R)
       whmatch = np.nonzero(polematch >= 0)[0]
@@ -1548,3 +1535,11 @@ class BandIndexer():
     solSrt = np.argsort(solutionVotes)
 
     return solutions, nsolutions, solutionVotes, solSrt
+  def _fitcheck(self, q, bandnorms, cartxstalpoles):
+    bandnorms = np.atleast_2d(bandnorms)
+    cartxstalpoles = np.atleast_2d(cartxstalpoles)
+    bandnorms_xstal = rotlib.quat_vector(q, bandnorms)
+    mean_dot = np.mean(np.sum(bandnorms_xstal*cartxstalpoles, axis = 1))
+    # mean_ang = np.degrees(np.arccos(mean_dot))
+    return mean_dot
+
