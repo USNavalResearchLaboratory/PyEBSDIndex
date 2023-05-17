@@ -696,10 +696,15 @@ class EBSPFile(EBSDPatternFile):
     else:
       self.version = version
 
+    per_pat_header = 4
+    if self.version >= 5:
+      per_pat_header = 6
+
     if self.version >= 1:
+      memoffset = 8
       if self.version >= 4:
         self.mysterybyte = np.fromfile(f, dtype=np.uint8, count=1)
-
+        memoffset = 9
       #loc0 = int(np.fromfile(f, dtype=np.uint64, count=1))
       #currentloc = f.tell()
       #loc1 = loc0
@@ -717,20 +722,35 @@ class EBSPFile(EBSDPatternFile):
         loc0 = int(np.fromfile(f, dtype=np.uint64, count=1))
         counter += 1
       f.seek(-8*counter, 1) # move back 8 bytes (or however far we needed to move into the file to find a legitamte offset.
-      loc02N = np.fromfile(f, dtype=np.uint64, count=int((loc0-8)/8+0.001))
+
+      loc02N = np.fromfile(f, dtype=np.uint64, count=int((loc0)/8+0.001))
 
 
+      if self.version <=4:
+        loc1 = int((loc0-memoffset)/8+0.001)
 
-      loc1 = int((loc0-8)/8+0.001)
+        counter = 0
+        while loc1 != counter:
+          if loc02N[counter] != 0:  # a non-stored pattern? Crazy.
+            loc_i = int((loc02N[counter]-memoffset)/8)
+            loc1 = min([loc1, loc_i])
+          counter += 1
 
-      counter = 0
-      while loc1 != counter:
-        if loc02N[counter] != 0:  # a non-stored pattern? Crazy.
-          loc_i = int((loc02N[counter]-8)/8)
-          loc1 = min([loc1, loc_i])
-        counter += 1
 
-      self.nPatterns = int((counter))
+        self.nPatterns = int((counter))
+      elif self.version == 5:
+        f.seek(loc02N[0], 0)
+        patdata = np.fromfile(f, dtype=np.uint32, count=per_pat_header)
+        if patdata[0] == 1:
+          print("Sorry, compressed EBSP files are not supported")
+          return None
+        patternW = int(patdata[-2])
+        patternH = int(patdata[-3])
+        magic_indx = patternH + (patternW << 32)
+        wh = np.nonzero(loc02N == magic_indx)
+        self.nPatterns = wh[0].min()
+
+
 
       if self.version == 0:
         f.seek(0)
@@ -739,6 +759,8 @@ class EBSPFile(EBSDPatternFile):
       if self.version >= 4:
         f.seek(1,1)
 
+
+
       self.filePos = np.fromfile(f, dtype=np.uint64, count=self.nPatterns)
 
       # going to assume that all patterns are the same as the first pattern the file.
@@ -746,7 +768,9 @@ class EBSPFile(EBSDPatternFile):
       #patdata = np.fromfile(f, dtype=np.uint32, count=4)
       #patdata0 = np.fromfile(f, dtype=np.uint8, count=1)
 
-      patdata = np.fromfile(f, dtype=np.uint32, count=4)
+      #patdata = np.fromfile(f, dtype=np.uint32, count=4)
+
+      patdata = np.fromfile(f, dtype=np.uint32, count=per_pat_header)
 
       if patdata[0] == 1:
         print("Sorry, compressed EBSP files are not supported")
@@ -758,9 +782,9 @@ class EBSPFile(EBSDPatternFile):
       #print(np.fromfile(f, dtype=np.uint32, count=8))
       #print(np.fromfile(f, dtype=np.uint32, count=1))
 
-      self.patternW = np.uint32(patdata[2])
-      self.patternH = np.uint32(patdata[1])
-      nbytespat = patdata[3]
+      self.patternW = np.uint32(patdata[-2])
+      self.patternH = np.uint32(patdata[-3])
+      nbytespat = patdata[-1]
 
 
       #if self.version == 1:
@@ -794,7 +818,7 @@ class EBSPFile(EBSDPatternFile):
           self.hasxypos = True
         else:
           loc0 = np.min(self.filePos[self.filePos > 0])
-          f.seek(int(loc0 + 16 + nbytespat))
+          f.seek(int(loc0 + 4*per_pat_header + nbytespat))
           havepos = np.fromfile(f, dtype=np.uint8, count=1)
           if havepos > 0:
             footoffset = 1
@@ -808,9 +832,11 @@ class EBSPFile(EBSDPatternFile):
       else:
         for i in range(self.nPatterns):
           if self.filePos[i] > 0:
-            f.seek(int(self.filePos[i] + 16 + nbytespat + footoffset))
-            xall[i] = np.fromfile(f, dtype=np.float64, count=1)
+            f.seek(int(self.filePos[i] + 4*per_pat_header + nbytespat + footoffset))
+
+            x1 = np.fromfile(f, dtype=np.float64, count=1)
             #print(x1, i)
+            xall[i] = x1
             f.seek(footoffset, 1)
             yall[i] = np.fromfile(f, dtype=np.float64, count=1)
 
@@ -868,10 +894,14 @@ class EBSPFile(EBSDPatternFile):
     else:
       xyoffset = 1
 
+    per_pat_head = 16
+    if self.version >= 5:
+      per_pat_head = 24
+
     for i in range(int(patStart), int(patStart + nPatToRead)):
       ii = int(i - patStart)
       if self.filePos[i] > 0:
-        f.seek(int(self.filePos[i] + 16))
+        f.seek(int(self.filePos[i] + per_pat_head))
         readpats[ii, :] = np.fromfile(f, dtype=typeread, count=int(nPerPat))
         if readxypos == True:
           f.seek(xyoffset, 1)
