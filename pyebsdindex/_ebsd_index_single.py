@@ -509,8 +509,10 @@ class EBSDIndexer:
         )
         return banddata, bandnorm
 
-    def _indexbandsphase(self, banddata, bandnorm, verbose = 0):
+    def _indexbandsphase(self, banddata, bandnorm, verbose = 0, **kwargs):
 
+        rhomax = 1.0e12
+        rhomax = self.bandDetectPlan.rhoMax * (1-self.bandDetectPlan.rhoMaskFrac)
         shpBandDat = banddata.shape
         npoints = int(banddata.size/(shpBandDat[-1])+0.1)
         nPhases = len(self.phaseLib)
@@ -539,8 +541,13 @@ class EBSDIndexer:
                 bDat1 = bDat1[whgood]
                 bandNorm1 = bandNorm1[whgood, :]
                 indxData["pq"][0:nPhases, i] = np.sum(bDat1["max"], axis=0)
-
+                adj_intensity = (-1*np.abs(bDat1["rho"]) * 0.5 / rhomax + 1) * bDat1["max"]
+                #adj_intensity = bDat1["avemax"]
+                #print(bDat1["max"])
+                #print(adj_intensity)
                 for j in range(len(self.phaseLib)):
+
+
                     (
                         avequat,
                         fit,
@@ -550,7 +557,7 @@ class EBSDIndexer:
                         matchAttempts,
                         totvotes,
                     ) = self.phaseLib[j].bandindex(
-                        bandNorm1, band_intensity=bDat1["avemax"], band_widths=bDat1["width"], verbose=verbose,
+                        bandNorm1, band_intensity=adj_intensity, band_widths=bDat1["width"], verbose=verbose,
                     )
                     # avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].pairVoteOrientation(bandNorm1,goNumba=True)
                     if nMatch >= 3:
