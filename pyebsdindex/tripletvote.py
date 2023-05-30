@@ -445,6 +445,7 @@ class BandIndexer():
     fit = 1000.0
     nMatch = -1
     avequat = np.zeros(4, dtype=np.float32)
+    avequat[0] = 1.0
     polematch = np.zeros([n_bands], dtype = int)-1
     whGood = -1
 
