@@ -41,12 +41,13 @@ environ["NUMBA_CACHE_DIR"] = str(tempdir)
 def addphase(libtype=None, phasename=None,
              spacegroup=None,
              latticeparameter=None,
-             polefamilies=None):
+             polefamilies=None, nband_earlyexit = 10):
 
   if libtype is not None:
 
     #set up generic FCC
     if str(libtype).upper() == 'FCC':
+      nband_earlyexit=8
       if phasename is None:
         phasename = 'FCC'
       if spacegroup is None:
@@ -62,6 +63,7 @@ def addphase(libtype=None, phasename=None,
 
     # Set up a generic BCC
     if str(libtype).upper() == 'BCC':
+      nband_earlyexit=8
       if phasename is None:
         phasename = 'BCC'
       if spacegroup is None:
@@ -99,8 +101,11 @@ def addphase(libtype=None, phasename=None,
     if polefamilies is None:
       polefamilies = np.array([[0, 0, 2], [1, 1, 1], [0, 2, 2], [1, 1, 3]]).astype(np.int32)
 
-  triplib = BandIndexer(phasename=phasename, spacegroup=spacegroup,
-                        latticeparameter=latticeparameter, polefamilies=np.atleast_2d(polefamilies))
+  triplib = BandIndexer(phasename=phasename,
+                        spacegroup=spacegroup,
+                        latticeparameter=latticeparameter,
+                        polefamilies=np.atleast_2d(polefamilies),
+                        nband_earlyexit=nband_earlyexit)
 
   triplib.build_trip_lib()
   return triplib
