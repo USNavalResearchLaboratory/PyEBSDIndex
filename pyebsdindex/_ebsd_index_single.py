@@ -297,7 +297,7 @@ class EBSDIndexer:
         rhoMaskFrac=0.15,
         nBands=9,
         patDim=None,
-        nband_earlyexit = 20,
+        nband_earlyexit = None,
         **kwargs
     ):
         """Create an EBSD indexer."""
@@ -526,10 +526,13 @@ class EBSDIndexer:
             return indxData
 
         if self.nband_earlyexit is None:
-            earlyexit = shpBandDat[1]  # default to all the poles.
-            # for ph in self.phaselist:
-            #     if hasattr(ph, 'nband_earlyexit'):
-            #         earlyexit = min(earlyexit, ph.nband_earlyexit)
+            earlyexit = -1
+            for ph in self.phaselist:
+                if hasattr(ph, 'nband_earlyexit'):
+                    earlyexit = max(earlyexit, ph.nband_earlyexit)
+            if earlyexit < 0:
+                earlyexit = shpBandDat[1]  # default to all the poles.
+            self.nband_earlyexit = earlyexit
         else:
             earlyexit = self.nband_earlyexit
 
