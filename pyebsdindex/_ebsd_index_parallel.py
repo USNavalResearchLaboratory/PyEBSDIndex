@@ -315,7 +315,7 @@ def index_pats_distributed(
     # workers do not know where to find the PyEBSDIndex module.
     ray.init(
         num_cpus=int(np.round(n_cpu_nodes)),
-        num_gpus=ngpu,
+        num_gpus=ngpu*ngpuwrker,
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars": {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__))}},
         logging_level=logging.WARNING,
@@ -390,8 +390,9 @@ def index_pats_distributed(
 
         gpuworkers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
             # These actors are read/write, thus can initialize the GPU queues
-            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
-                i, clparamfunction, gpu_id=gpu_id
+            #GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=1).remote(
+                actorid=i, clparammodule=clparamfunction, gpu_id=gpu_id
             )
         )
         gjob = gpujobs.pop(0)
