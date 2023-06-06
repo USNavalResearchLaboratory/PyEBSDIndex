@@ -267,6 +267,11 @@ def index_pats_distributed(
         else:
             if ngpu is None:
                 ngpu = len(clparam.gpu)
+            cudagpuvis = '"'
+            for cdgpu in range(len(clparam.gpu)):
+                cudagpuvis += str(cdgpu)+','
+            cudagpuvis += '"'
+
             #ngpupnode = ngpu / n_cpu_nodes
     except:
         ngpu = 0
@@ -317,7 +322,9 @@ def index_pats_distributed(
         num_cpus=int(np.round(n_cpu_nodes)),
         num_gpus=ngpu*ngpuwrker,
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
-        runtime_env={"env_vars": {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__))}},
+        runtime_env={"env_vars":
+                      {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__)),
+                      "CUDA_VISIBLE_DEVICES":cudagpuvis }},
         logging_level=logging.WARNING,
     )  # Supress INFO messages from ray.
 
@@ -391,8 +398,8 @@ def index_pats_distributed(
         gpuworkers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
             # These actors are read/write, thus can initialize the GPU queues
             #GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
-            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=1).remote(
-                actorid=i, clparammodule=clparamfunction, gpu_id=gpu_id
+            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+                actorid=i, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis = cudagpuvis
             )
         )
         gjob = gpujobs.pop(0)
@@ -634,7 +641,7 @@ def __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam):
 
 @ray.remote(num_cpus=1, num_gpus=1)
 class GPUWorker:
-    def __init__(self, actorid=0, clparammodule=None, gpu_id=None):
+    def __init__(self, actorid=0, clparammodule=None, gpu_id=None, cudavis = '0'):
         # sys.path.append(path.dirname(path.dirname(__file__)))  # do this to help Ray find the program files
         # import openclparam # do this to help Ray find the program files
         # device, context, queue, program, mf
@@ -642,6 +649,7 @@ class GPUWorker:
         # self.indxstart = None
         # self.indxend = None
         # self.rate = None
+        os.environ["CUDA_VISIBLE_DEVICES"] = cudavis
         self.actorID = actorid
         self.openCLParams = None
         self.useGPU = False
