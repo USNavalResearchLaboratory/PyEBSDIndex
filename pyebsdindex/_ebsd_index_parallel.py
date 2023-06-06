@@ -256,6 +256,7 @@ def index_pats_distributed(
 
 
     ngpu = None
+    cudagpuvis = '0'
     if gpu_id is not None:
         ngpu = np.atleast_1d(gpu_id).shape[0]
 
@@ -285,6 +286,8 @@ def index_pats_distributed(
         if n_cpu_nodes - ngpu < 8:
             ngpupro = 8
         if n_cpu_nodes - ngpu < 2:
+            ngpupro = 2
+        if clparam.platform.vendor == 'NVIDIA Corporation':
             ngpupro = 2
 
         n_cpu_per_gpu = max(min(1.0, n_cpu_nodes-ngpu), 0.5/ngpu)
