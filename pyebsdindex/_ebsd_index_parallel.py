@@ -45,8 +45,8 @@ else:
     from pyebsdindex import band_detect as band_detect
 
 RAYIPADDRESS = '127.0.0.1'
-osplatform = platform.system()
-if osplatform == 'Darwin':
+OSPLATFORM  = platform.system()
+if OSPLATFORM  == 'Darwin':
     RAYIPADDRESS = '0.0.0.0' # the localhost address does not work on macOS when on a VPN
 
 def index_pats_distributed(
@@ -287,7 +287,7 @@ def index_pats_distributed(
             ngpupro = 8
         if n_cpu_nodes - ngpu < 2:
             ngpupro = 2
-        if clparam.platform.vendor == 'NVIDIA Corporation':
+        if OSPLATFORM == 'Linux':
             ngpupro = 2
 
         n_cpu_per_gpu = max(min(1.0, n_cpu_nodes-ngpu), 0.5/ngpu)
@@ -375,7 +375,7 @@ def index_pats_distributed(
     ncpupatsdone = 0.0
 
     if keep_log is True:
-        if osplatform != 'Windows':
+        if OSPLATFORM != 'Windows':
             newline = "\n"
         else:
             newline = "\r\n"
