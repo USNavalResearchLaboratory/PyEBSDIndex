@@ -282,13 +282,13 @@ def index_pats_distributed(
 
 
     if ngpu > 0:
-        ngpupro = 12  # number of processes per gpu that will serve data to the gpu
-        if n_cpu_nodes - ngpu < 8:
+        ngpupro = max(12, ngpu*2)  # number of processes that will serve data to the gpu
+        if n_cpu_nodes < 8:
             ngpupro = 8
-        if n_cpu_nodes - ngpu < 2:
+        if n_cpu_nodes < 2:
             ngpupro = 2
-        if OSPLATFORM == 'Linux':
-            ngpupro = 2
+        #if OSPLATFORM == 'Linux':
+        #    ngpupro = 2
 
         n_cpu_per_gpu = max(min(1.0, n_cpu_nodes-ngpu), 0.5/ngpu)
 
@@ -394,46 +394,53 @@ def index_pats_distributed(
 
     #print(ngpuwrker, ncpugpu_per_wrker, ngpu_per_wrker)
     #print(ncpuwrker, ncpucpu_per_worker)
-
-    for i in range(ngpuwrker):
-
-        gpuworkers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
-            # These actors are read/write, thus can initialize the GPU queues
-            #GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
-            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
-                actorid=i, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis = cudagpuvis
-            )
-        )
-        gjob = gpujobs.pop(0)
-        if inputmode == "filemode":
-            gputask.append(
-                gpuworkers[i].findbands.remote(gjob,
-                    pats=None,
-                    indexer=remote_indexer
-                )
-            )
-        else:
-            gputask.append(
-                gpuworkers[i].findbands.remote(gjob,
-                    pats = pats[gjob.pstart:gjob.pend, :, :],
-                    indexer=remote_indexer,
-                )
-            )
-        gtaskindex.append(gjob)
-        ngpusubmit += 1
-        
-    # initiate the CPU workers.
-    #print(len(gpuworkers), len(gputask))
-    for i in range(ncpuwrker):
-        cpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
-            # These actors are read/write, thus can initialize the GPU queues
-            CPUWorker.options(num_cpus=ncpucpu_per_worker).remote(i))
-            #CPUWorker.options(num_cpus=1.0, num_gpus=0).remote(i))
-        cputask.append(cpuworkers[i].indexpoles.remote(None, None, None,indexer=remote_indexer))
-        ctaskindex.append(None)
-    #print(len(cpuworkers))
-
+    gpu_launched = 0
+    cpu_launched = 0
     while ncpudone < njobs:
+        #for i in range(ngpuwrker):
+
+        while (gpu_launched < ngpuwrker) and (len(gpujobs) > 0):
+            i = len(gpuworkers)
+            gpuworkers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
+                # These actors are read/write, thus can initialize the GPU queues
+                #GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+                GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+                    actorid=i, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis = cudagpuvis
+                )
+            )
+            gjob = gpujobs.pop(0)
+            if inputmode == "filemode":
+                gputask.append(
+                    gpuworkers[i].findbands.remote(gjob,
+                        pats=None,
+                        indexer=remote_indexer
+                    )
+                )
+            else:
+                gputask.append(
+                    gpuworkers[i].findbands.remote(gjob,
+                        pats = pats[gjob.pstart:gjob.pend, :, :],
+                        indexer=remote_indexer,
+                    )
+                )
+            gtaskindex.append(gjob)
+            gpu_launched += 1
+
+        # initiate the CPU workers.
+        #print(len(gpuworkers), len(gputask))
+        #for i in range(ncpuwrker):
+        if (cpu_launched < ncpuwrker) and (ncpudone < njobs):
+            i = len(cpuworkers)
+            cpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
+                # These actors are read/write, thus can initialize the GPU queues
+                CPUWorker.options(num_cpus=ncpucpu_per_worker).remote(i))
+                #CPUWorker.options(num_cpus=1.0, num_gpus=0).remote(i))
+            cputask.append(cpuworkers[i].indexpoles.remote(None, None, None,indexer=remote_indexer))
+            ctaskindex.append(None)
+            cpu_launched += 1
+        #print(len(cpuworkers))
+
+
 
         if ngpudone < njobs: # check if gpu is done
             donewrker, busy = ray.wait(gputask,num_returns = len(gputask),  timeout=0.01)
@@ -471,6 +478,7 @@ def index_pats_distributed(
                             gtaskindex[jid] = gjob
                             ngpusubmit += 1
                         else: # no more gpu tasks to submit
+                            #del gpuworkers[jid]
                             del gpuworkers[jid]
                             del gputask[jid]
                             del gtaskindex[jid]
@@ -539,9 +547,12 @@ def index_pats_distributed(
                         #time.sleep(0.001)
                     if message != 'Error':
                         if ncpudone == njobs:
-                            del cpuworkers[jid]
-                            del cputask[jid]
-                            del ctaskindex[jid]
+                            cpuworkers[jid] = None
+                            cputask[jid] = None
+                            ctaskindex[jid] = None
+                            #del cpuworkers[jid]
+                            #del cputask[jid]
+                            #del ctaskindex[jid]
                         elif len(cpujobs) > 0:
                             cjob = cpujobs.pop(0)
                             banddata = banddataout[cjob.pstart - patstart: cjob.pend - patstart, :]
