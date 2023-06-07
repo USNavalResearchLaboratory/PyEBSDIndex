@@ -292,7 +292,7 @@ def index_pats_distributed(
 
         n_cpu_per_gpu = max(min(1.0, n_cpu_nodes-ngpu), 0.5/ngpu)
 
-        ngpuwrker = ngpupro * ngpu
+        ngpuwrker = ngpupro 
 
         ngpu_per_wrker =  1.0/ngpuwrker - 1.0e-6 # fraction of a GPU to give to each worker (band finding worker)
         ncpugpu_per_wrker = n_cpu_per_gpu/ngpuwrker - 1.0e-6 # fraction of a cpu to allocate to each gpu worker
