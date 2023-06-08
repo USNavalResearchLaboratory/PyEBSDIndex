@@ -292,7 +292,7 @@ def index_pats_distributed(
 
         n_cpu_per_gpu = max(min(1.0, n_cpu_nodes-ngpu), 0.5/ngpu)
 
-        ngpuwrker = ngpupro 
+        ngpuwrker = ngpupro
 
         ngpu_per_wrker =  1.0/ngpuwrker - 1.0e-6 # fraction of a GPU to give to each worker (band finding worker)
         ncpugpu_per_wrker = n_cpu_per_gpu/ngpuwrker - 1.0e-6 # fraction of a cpu to allocate to each gpu worker
@@ -399,7 +399,7 @@ def index_pats_distributed(
     while ncpudone < njobs:
         #for i in range(ngpuwrker):
 
-        while (gpu_launched < ngpuwrker) and (len(gpujobs) > 0):
+        if (gpu_launched < ngpuwrker) and (len(gpujobs) > 0):
             i = len(gpuworkers)
             gpuworkers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
                 # These actors are read/write, thus can initialize the GPU queues
@@ -632,7 +632,7 @@ def __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam):
     memperpat = 4.0*float(patdim[0] * patdim[1] + 6.0 * rdndim[0] * rdndim[1])# rough estimate
 
     #print('Mem/pat:', memperpat)
-    chunkguess = (float(gmem)/float(ngpupro)) / memperpat
+    chunkguess = ngpu*(float(gmem)/float(ngpupro)) / memperpat
 
     #print('chunkguess:', chunkguess)
 
