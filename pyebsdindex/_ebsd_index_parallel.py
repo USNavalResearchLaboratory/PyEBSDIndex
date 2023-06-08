@@ -316,7 +316,7 @@ def index_pats_distributed(
 
     ray.shutdown()
 
-    print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize)
+
     # ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
     # Need to append path for installs from source ... otherwise the ray
     # workers do not know where to find the PyEBSDIndex module.
@@ -329,6 +329,8 @@ def index_pats_distributed(
                       "CUDA_VISIBLE_DEVICES":cudagpuvis }},
         logging_level=logging.WARNING,
     )  # Supress INFO messages from ray.
+
+    print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize)
 
     # Place indexer obj in shared memory store so all workers can use it - this is read only.
     remote_indexer = ray.put(indexer)
@@ -399,7 +401,7 @@ def index_pats_distributed(
     while ncpudone < njobs:
         #for i in range(ngpuwrker):
 
-        if (gpu_launched < ngpuwrker) and (len(gpujobs) > 0):
+        while (gpu_launched < ngpuwrker) and (len(gpujobs) > 0):
             i = len(gpuworkers)
             gpuworkers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
                 # These actors are read/write, thus can initialize the GPU queues
@@ -670,7 +672,7 @@ class GPUWorker:
             try:
                 if (
                     sys.platform != "darwin"
-                ):  # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a
+                ):  # linux with NVIDIA (unsure if it is the os or GPU type) is slow to make a context
                     self.openCLParams = clparammodule()
                 else:  # MacOS handles GPU memory conflicts much better when the context is destroyed between each
                     # run, and has very low overhead for making the context.
@@ -684,7 +686,7 @@ class GPUWorker:
                 gpu_list = np.atleast_1d(gpu_id)
                 ngpu = gpu_list.shape[0]
                 self.openCLParams.gpu_id = gpu_list[self.actorID % ngpu]
-                self.openCLParams.get_context()
+                #self.openCLParams.get_context()
                 #self.openCLParams.get_queue()
                 self.useGPU = True
             except:
