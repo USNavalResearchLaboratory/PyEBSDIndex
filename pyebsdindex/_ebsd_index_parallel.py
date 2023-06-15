@@ -284,7 +284,7 @@ def index_pats_distributed(
     if ngpu > 0:
         ngpupro = max(12, ngpu*2)  # number of processes that will serve data to the gpu
         if n_cpu_nodes < 8:
-            ngpupro = 8
+            ngpupro = min(ngpupro,8)
         if n_cpu_nodes < 2:
             ngpupro = 2
         #if OSPLATFORM == 'Linux':
@@ -330,7 +330,7 @@ def index_pats_distributed(
         logging_level=logging.WARNING,
     )  # Supress INFO messages from ray.
 
-    print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize)
+    print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize, ngpuwrker, ncpuwrker)
 
     # Place indexer obj in shared memory store so all workers can use it - this is read only.
     remote_indexer = ray.put(indexer)
@@ -402,6 +402,8 @@ def index_pats_distributed(
         #for i in range(ngpuwrker):
 
         while (gpu_launched < ngpuwrker) and (len(gpujobs) > 0):
+        #if (gpu_launched < ngpuwrker) and (len(gpujobs) > 0):
+
             i = len(gpuworkers)
             gpuworkers.append( # make a new Ray Actor that can call the indexer defined in shared memory.
                 # These actors are read/write, thus can initialize the GPU queues
