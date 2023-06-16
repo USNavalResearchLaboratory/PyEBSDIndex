@@ -221,6 +221,7 @@ def index_pats(
         clparams=clparams,
         verbose=verbose,
         chunksize=chunksize,
+        gpu_id = gpu_id,
     )
 
     if not return_indexer_obj:
@@ -400,6 +401,7 @@ class EBSDIndexer:
         PC=None,
         verbose=0,
         chunksize=512,
+        **kwargs
     ):
         """Index EBSD patterns.
 
@@ -462,7 +464,8 @@ class EBSDIndexer:
         if npats == -1:
             npats = npoints
 
-        banddata, bandnorm = self._detectbands(pats, PC, xyloc=xyloc, clparams=clparams, verbose=verbose, chunksize=chunksize)
+        banddata, bandnorm = self._detectbands(pats, PC, xyloc=xyloc, clparams=clparams, verbose=verbose,
+                                               chunksize=chunksize)
         tic = timer()
 
         indxData = self._indexbandsphase(banddata, bandnorm, verbose=verbose)

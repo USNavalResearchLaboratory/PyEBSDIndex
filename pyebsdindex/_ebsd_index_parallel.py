@@ -326,7 +326,7 @@ def index_pats_distributed(
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars":
                       {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__)),
-                      "CUDA_VISIBLE_DEVICES":cudagpuvis }},
+                      }},
         logging_level=logging.WARNING,
     )  # Supress INFO messages from ray.
 
@@ -682,13 +682,14 @@ class GPUWorker:
                     self.openCLParams = clparammodule()
                     # self.openCLParams.gpu_id = 0
                     # self.openCLParams.gpu_id = 1
-                    self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
+                    # self.openCLParams.gpu_id = self.actorID % self.openCLParams.ngpu
                 if gpu_id is None:
                     gpu_id = np.arange(self.openCLParams.ngpu)
                 gpu_list = np.atleast_1d(gpu_id)
                 ngpu = gpu_list.shape[0]
+                #print(self.actorID, ngpu)
                 self.openCLParams.gpu_id = gpu_list[self.actorID % ngpu]
-                #self.openCLParams.get_context()
+                self.openCLParams.get_context()
                 #self.openCLParams.get_queue()
                 self.useGPU = True
             except:
