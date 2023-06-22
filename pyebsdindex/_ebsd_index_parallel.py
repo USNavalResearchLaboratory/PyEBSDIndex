@@ -282,7 +282,7 @@ def index_pats_distributed(
 
 
     if ngpu > 0:
-        ngpupro = max(12, ngpu*2)  # number of processes that will serve data to the gpu
+        ngpupro = max(12, ngpu*8)  # number of processes that will serve data to the gpu
         if n_cpu_nodes < 8:
             ngpupro = min(ngpupro,8)
         if n_cpu_nodes < 2:
@@ -536,11 +536,11 @@ def index_pats_distributed(
                                 " -- ",
                                 str(cjob.pend),
                                 "  PPS:",
-                                "{:.0f}".format(cjob.rate*ncpuwrker)
-                                + ";"
-                                + "{:.0f}".format(chunkave / ncpudone * ncpuwrker)
-                                + ";"
-                                + "{:.0f}".format(npatdone/currenttime),
+                                #"{:.0f}".format(cjob.rate*ncpuwrker)
+                                #+ ";"
+                                #+ "{:.0f}".format(chunkave / ncpudone * ncpuwrker)
+                                #+ ";" +
+                                "{:.0f}".format(npatdone/currenttime),
                                 "  ",
                                 "{:.0f}".format((ncpudone / njobs) * 100) + "%",
                                 "{:.0f};".format(currenttime)

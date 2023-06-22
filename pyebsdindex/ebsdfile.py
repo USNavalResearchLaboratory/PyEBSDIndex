@@ -138,22 +138,22 @@ def writeoh5(filename, indexer, data,
       for phase in indexer.phaseLib:
         f.create_dataset(datasetname + '/EBSD/Header/Phase/'+str(pcount)+'/LGsymID', data=np.array([np.int32(phase.lauecode)]))
         f.create_dataset(datasetname + '/EBSD/Header/Phase/' + str(pcount) + '/Lattice Constant a',
-                         data=np.array([np.int32(phase.latticeparameter[0]*10)]))
+                         data=np.array([np.float32(phase.latticeparameter[0]*10)]))
 
         f.create_dataset(datasetname + '/EBSD/Header/Phase/' + str(pcount) + '/Lattice Constant alpha',
-                         data=np.array([np.int32(phase.latticeparameter[3])]))
+                         data=np.array([np.float32(phase.latticeparameter[3])]))
 
         f.create_dataset(datasetname + '/EBSD/Header/Phase/' + str(pcount) + '/Lattice Constant b',
-                         data=np.array([np.int32(phase.latticeparameter[1] * 10)]))
+                         data=np.array([np.float32(phase.latticeparameter[1] * 10)]))
 
         f.create_dataset(datasetname + '/EBSD/Header/Phase/' + str(pcount) + '/Lattice Constant beta',
-                         data=np.array([np.int32(phase.latticeparameter[4])]))
+                         data=np.array([np.float32(phase.latticeparameter[4])]))
 
         f.create_dataset(datasetname + '/EBSD/Header/Phase/' + str(pcount) + '/Lattice Constant c',
-                         data=np.array([np.int32(phase.latticeparameter[2] * 10)]))
+                         data=np.array([np.float32(phase.latticeparameter[2] * 10)]))
 
         f.create_dataset(datasetname + '/EBSD/Header/Phase/' + str(pcount) + '/Lattice Constant gamma',
-                         data=np.array([np.int32(phase.latticeparameter[5])]))
+                         data=np.array([np.float32(phase.latticeparameter[5])]))
         pname = str(phase.phasename)
         chararray = np.chararray(1, itemsize=len(pname)+1)
         chararray[:] = pname

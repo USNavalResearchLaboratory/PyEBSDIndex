@@ -234,6 +234,7 @@ class NLPAR:
 
     dthresh = np.float32(dthresh)
     lamopt_values = []
+    
     for j in range(0,nrows,chunksize):
       print('Block',j)
       #rowstartread = np.int64(max(0,j - nn))
