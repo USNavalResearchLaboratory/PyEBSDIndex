@@ -2,7 +2,7 @@
 PyEBSDIndex |release| documentation
 ===================================
 
-Python based tool for Hough/Radon based EBSD orientation indexing.
+Python based tool for Radon based EBSD orientation indexing.
 
 The pattern processing is based on a GPU pipeline, and is based on the work of S. I.
 Wright and B. L. Adams. Metallurgical Transactions A-Physical Metallurgy and Materials

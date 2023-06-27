@@ -72,7 +72,7 @@ setup(
         "EBSD",
         "electron backscatter diffraction",
         "HI",
-        "Hough indexing",
+        "Radon indexing",
         "NLPAR",
     ],
     zip_safe=True,

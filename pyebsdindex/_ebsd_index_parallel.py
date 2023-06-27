@@ -20,7 +20,7 @@
 # Author: David Rowenhorst;
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
-"""Setup and handling of Hough indexing runs of EBSD patterns in
+"""Setup and handling of Radon indexing runs of EBSD patterns in
 parallel.
 """
 

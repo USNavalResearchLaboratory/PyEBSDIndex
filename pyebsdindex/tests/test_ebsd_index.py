@@ -44,7 +44,7 @@ class TestEBSDIndexer:
         assert indexer.vendor == "EDAX"
 
     def test_index_pats(self, pattern_al_sim_20kv):
-        """Test Hough indexing and setting/passing projection center
+        """Test Radon indexing and setting/passing projection center
         values.
         """
         pc = (0.4, 0.72, 0.6)
@@ -67,7 +67,7 @@ class TestEBSDIndexer:
 
     @pytest.mark.skipif(not _ray_installed, reason="ray is not installed")
     def test_index_pats_multi(self, pattern_al_sim_20kv):
-        """Test Hough indexing parallelized with ray."""
+        """Test Radon indexing parallelized with ray."""
         from pyebsdindex.ebsd_index import index_pats_distributed
 
         patterns = np.repeat(pattern_al_sim_20kv[None, ...], 4, axis=0)

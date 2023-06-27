@@ -20,7 +20,7 @@
 # Author: David Rowenhorst;
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
-"""Setup and handling of Hough indexing runs of EBSD patterns on a
+"""Setup and handling of Radon indexing runs of EBSD patterns on a
 single thread.
 """
 
@@ -138,7 +138,7 @@ def index_pats(
         OpenCL parameters passed to :mod:`pyopencl` if the package is
         installed.
     verbose : int, optional
-        0 - no output (default), 1 - timings, 2 - timings and the Hough
+        0 - no output (default), 1 - timings, 2 - timings and the Radon
         transform of the first pattern with detected bands highlighted.
     chunksize : int, optional
         Default is 528.
@@ -231,7 +231,7 @@ def index_pats(
 
 
 class EBSDIndexer:
-    """Setup of Hough indexing of EBSD patterns.
+    """Setup of Radon indexing of EBSD patterns.
 
     Parameters
     ----------
@@ -427,7 +427,7 @@ class EBSDIndexer:
             must be four numbers, the final number being the pixel size.
         verbose : int, optional
             0 - no output (default), 1 - timings, 2 - timings and the
-            Hough transform of the first pattern with detected bands
+            Radon transform of the first pattern with detected bands
             highlighted.
         chunksize : int, optional
             Default is 528.

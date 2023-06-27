@@ -34,7 +34,7 @@ Removed
 - Removed any references to np.floats and replaced with float() or np.float32/64.
 Fixed
 -----
-- Hough transform figure when ``verbose=2`` is passed to various indexing methods is now
+- Radon transform figure when ``verbose=2`` is passed to various indexing methods is now
   plotted in its own figure.
 - Several bug fixes with NLPAR file reading/writing.
 - Complete rewrite of the scheduling for ``ebsd_index.index_pats_distributed()`` function to be compatible
