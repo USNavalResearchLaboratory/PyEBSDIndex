@@ -3,6 +3,8 @@ include CHANGELOG.rst
 include CONTRIBUTING.rst
 include IPFCubic.pdf
 include IPFCubic.png
+include IPFHex.pdf
+include IPFHex.png
 include License
 include MANIFEST.in
 include README.md
