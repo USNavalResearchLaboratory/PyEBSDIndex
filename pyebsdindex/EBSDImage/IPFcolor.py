@@ -36,9 +36,9 @@ def qu2ipf_cubic(quats, vector=np.array([0,0,1.0])):
 def ipf_color_cubic(xstalvect):
   shp = xstalvect.shape
   if len(shp) == 1:
-    xstalv = xstalvect.reshape(1,shp)
+    xstalv = np.copy(xstalvect.reshape(1,shp))
   else:
-    xstalv = xstalvect
+    xstalv = np.copy(xstalvect)
   npoints = shp[0]
 
   xstalv = np.abs(xstalv)
@@ -57,15 +57,18 @@ def ipf_color_cubic(xstalvect):
   b = np.sqrt((triPts[1,0]) ** 2. + (triPts[1,1]) ** 2.)
   c = np.sqrt(triPts[2,0] ** 2. + triPts[2,1] ** 2.)
 
-  y0 = 1/2. * np.sqrt( ((b+c-a)*(c+a-b)*(a+b-c)) / (a+b+c) )
-  x0 = y0 / middle
+  #y0 = 1/2. * np.sqrt( ((b+c-a)*(c+a-b)*(a+b-c)) / (a+b+c) )
+  #x0 = y0 / middle
+  y0 = np.mean(triPts[:, 1])
+  x0 = np.mean(triPts[:, 0])
 
   S = np.sqrt((xP - x0) ** 2. + (yP - y0) ** 2.)
-  H = np.arctan((yP - y0) / (xP - x0)) *180.0/np.pi
+  H = np.arctan2((yP - y0) , (xP - x0)) *180.0/np.pi
   V = np.ones(npoints)
 
-  H =  (xP < x0).astype(np.float)*180.0+H
-  H = H + 240.0 - np.arctan((triPts[2,1] - y0) / (triPts[2,0] - x0)) * 180.0/np.pi
+  #H =  (xP < x0).astype(np.float)*180.0+H
+  H = H + 240.0 - np.arctan2((triPts[2,1] - y0) , (triPts[2,0] - x0)) * 180.0/np.pi
+  #H = H - np.arctan2(-y0 , -x0) * 180.0 / np.pi
   sMax = np.sqrt(x0**2+y0**2)
   S = S / (sMax) * 0.8 + 0.2
 
@@ -171,4 +174,142 @@ def ipf_ledgend_cubic(size=512):
   anno011 = plt.text(size - 10*fsize*size/512/figsz,triOrigin[1] - 7*fsize*size/512.0/figsz,'011',fontsize=fsize)
   anno111 = plt.text(size - 10*fsize*size/512/figsz,(triangleWY+triOrigin[1])*1.0,'111',fontsize=fsize)
   fig.savefig("IPFCubic.png",bbox_inches=0, transparent=True)
+  plt.close(1001)
+
+
+def qu2ipf_hex(quats, vector=np.array([0,0,1.0])):
+  xstalvect = rotlib.quat_vector(quats,vector)
+  return ipf_color_hex(xstalvect).clip(0.0, 1.0)
+
+def ipf_color_hex(xstalvect):
+  shp = xstalvect.shape
+  if len(shp) == 1:
+    xstalv = np.copy(xstalvect.reshape(1,shp))
+  else:
+    xstalv = np.copy(xstalvect)
+  npoints = shp[0]
+
+  xstalv /= np.sqrt((xstalv ** 2).sum(-1))[..., np.newaxis]
+  xstalv[xstalv[:, 2] < 0, :] *= -1
+
+  theta = np.arctan2(xstalv[:,1], xstalv[:,0])
+  wh = np.where(theta >= np.pi/3.)[0]
+  q60 = rotlib.quatnorm(np.array([ np.cos(np.pi/6.0),0, 0, -0.50000000]))
+
+  while wh.size > 0:
+    xstalv[wh,:] = rotlib.quat_vector(q60,xstalv[wh,:] )
+    theta = np.arctan2(xstalv[:, 1], xstalv[:, 0])
+    wh = np.where(theta >= np.pi / 3.)[0]
+
+
+
+  theta = np.arctan2(xstalv[:, 1], xstalv[:, 0])
+  wh = np.where(theta < 0.0)[0]
+  q60 = np.array([np.cos(np.pi / 6.0), 0, 0, 0.50000000])
+  while wh.size > 0:
+    xstalv[wh, :] = rotlib.quat_vector(q60, xstalv[wh, :])
+    theta = np.arctan2(xstalv[:, 1], xstalv[:, 0])
+    wh = np.where(theta < 0.0)[0]
+
+
+  theta = np.arctan2(xstalv[:, 1], xstalv[:, 0])
+  wh = np.where(theta >= np.pi / 6.)[0]
+  if wh.size > 0:
+    nx = -np.sin(np.pi / 6.)
+    ny = np.cos(np.pi / 6.)
+    const = 2. * (nx * xstalv[wh,0] + ny * xstalv[wh, 1])
+    xstalv[wh, 0] -= const * nx
+    xstalv[wh, 1] -= const * ny
+
+
+
+  xP = (xstalv[:,0]) / (1 + xstalv[:,2])
+  yP = (xstalv[:,1]) / (1 + xstalv[:,2])
+
+  # cubic unit tri center
+  triPts = np.array( [[0,0],
+                      [1.0 ,0],
+                      [np.sqrt(3.)/2.0, 0.5 ]], dtype = np.float)
+
+  middle = np.tan(1. / 2. * np.arctan(triPts[2,1] / triPts[2,0]))
+
+  a = np.sqrt( (triPts[2,1] - triPts[1,1]) ** 2. + (triPts[2,0] - triPts[1,0]) ** 2.)
+  b = np.sqrt((triPts[1,0]) ** 2. + (triPts[1,1]) ** 2.)
+  c = np.sqrt(triPts[2,0] ** 2. + triPts[2,1] ** 2.)
+
+  #y0 = 0.4 * np.sqrt( ((b+c-a)*(c+a-b)*(a+b-c)) / (a+b+c) )
+  #x0 = y0 / middle
+  y0 = np.mean(triPts[:,1])
+  x0 = np.mean(triPts[:, 0])
+
+
+  S = np.sqrt((xP - x0) ** 2. + (yP - y0) ** 2.)
+  H = np.arctan2(1.25*(yP - y0) , (xP - x0)) * 180.0 / np.pi
+  V = np.ones(npoints)
+
+  #H = (xP < x0).astype(np.float) * 180.0 + H
+  H = H + 240.0 - np.arctan2((triPts[2, 1] - y0) , (triPts[2, 0] - x0)) * 180.0 / np.pi
+  #H = H  - np.arctan2((- y0), ( - x0)) * 180.0 / np.pi
+  sMax = np.sqrt(x0 ** 2 + y0 ** 2)
+  S = S / (sMax) * 0.75 + 0.25
+
+  H = H % (360.0)
+  H = H / 360.0
+
+  RGB = pltcolors.hsv_to_rgb(np.array([H,S,V]).T)
+
+  return RGB
+
+
+def ipf_ledgend_hex(size=512):
+  szx = size
+  aspect = 0.6
+  szy = np.round(size*aspect).astype(int)
+  triangleWX = np.round(size*1.0).astype(int)
+  triangleWY = np.round(triangleWX * aspect).astype(int)
+
+  #triOrigin = np.round(np.array([0.1,0.1])*size).astype(int)
+  triOrigin = np.array([0,0]).astype(int)
+
+  triScale = 1.0/triangleWX #0.82842708/triangleWX
+  np0 = triangleWX*triangleWY
+  triXY = np.indices([triangleWY,triangleWX])
+  triYX_stereo = (triXY*triScale).reshape(2,np0)
+  xt = triYX_stereo[1,:]*2
+  yt = triYX_stereo[0,:]*2
+
+  xyz = np.zeros((np0, 3))
+
+  xyz[:,2] = (4. - (xt**2+ yt**2))/(4. + (xt**2+ yt**2))
+  xyz[:,0] = (xyz[:,2] + 1.) * (xt / 2.)
+  xyz[:,1] = (xyz[:,2] + 1.) * (yt / 2.)
+  pltest = np.sqrt(xt ** 2 + yt**2) < 2.0
+  pltest2 = (xyz[:,2] >= 0.0).squeeze()
+
+  theta  =  np.arctan2(xyz[:,1],xyz[:,0]) < np.pi/6
+  theta = np.logical_and( theta, pltest)
+  #theta = np.logical_and(theta, pltest2)
+
+  wh = np.nonzero( theta)[0]
+  #return xyz[wh,:]
+  rgbaTri = np.full((np0, 4), 1.0, dtype = np.float32)
+  rgbaTri[:,3] = 0.0
+  rgbaTri[wh,3] = 1.0
+  rgbaTri[wh,0:3] = ipf_color_hex(xyz[wh,:])
+
+  rgbaTri = rgbaTri.reshape(triangleWY,triangleWX,4)
+  dpi = size
+  figsz = 1.0
+  fsize = 4.0#/512*size
+
+  fig = plt.figure(1001, figsize=(figsz,figsz*aspect),dpi=size/figsz*0.5)
+  ax = plt.Axes(fig,[-0.2,0.15,1.4,aspect*1.4])
+  ax.set_axis_off()
+  fig.add_axes(ax)
+
+  img = plt.imshow(rgbaTri, origin='lower', extent=[0,szx,0,szy])
+  anno001 = plt.text(triOrigin[0] - 5*fsize*size/512/figsz,triOrigin[1] - 8*fsize*size/512.0/figsz, r'0001', fontsize = 0.9*fsize)
+  anno011 = plt.text(size - 10*fsize*size/512/figsz,triOrigin[1] - 9.5*fsize*size/512.0/figsz,r'$2\bar{1}\bar{1}0$',fontsize=0.9*fsize)
+  anno111 = plt.text(size - 25*fsize*size/512/figsz,(triangleWY+triOrigin[1])*0.85,r'$10\bar{1}0$',fontsize=0.9*fsize)
+  fig.savefig("IPFHex.png",bbox_inches=0, transparent=True)
   plt.close(1001)
