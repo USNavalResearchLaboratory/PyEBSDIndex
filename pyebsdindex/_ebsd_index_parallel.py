@@ -521,9 +521,10 @@ def index_pats_distributed(
             for wrker in donewrker:
                 jid = cputask.index(wrker)
                 try:
-                    message, (indexdata, cjob) = ray.get(wrker)
+                    message, (indexdata,bnddata, cjob) = ray.get(wrker)
                     if message == 'Done':
                         dataout[:, cjob.pstart - patstart: cjob.pend - patstart] = indexdata
+                        banddataout[cjob.pstart - patstart: cjob.pend - patstart, :] = bnddata
                         ncpudone += 1
                         chunkave += cjob.rate
                         npatdone += cjob.npat
@@ -734,20 +735,20 @@ class CPUWorker:
 
     def indexpoles(self, cpujob, banddata, bandnorm, indexer=None):
         if cpujob is None:
-            return 'Bored', (None, None)
+            return 'Bored', (None, None, None)
         try:
             # print(type(self.openCLParams.ctx))
 
             cpujob._starttime()
 
-            indxData = indexer._indexbandsphase(banddata, bandnorm, verbose=0)
+            indxData, banddata = indexer._indexbandsphase(banddata, bandnorm, verbose=0)
 
             cpujob._endtime()
-            return "Done", (indxData, cpujob)
+            return "Done", (indxData,banddata, cpujob)
         except Exception as e:
             print(e)
             cpujob.rate = None
-            return "Error", (None, cpujob)
+            return "Error", (None,None, cpujob)
 class CPUGPUJob:
     def __init__(self,jobid, pstart, pend, extime=0.0):
         self.jobid = jobid

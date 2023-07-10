@@ -468,7 +468,7 @@ class EBSDIndexer:
                                                chunksize=chunksize)
         tic = timer()
 
-        indxData = self._indexbandsphase(banddata, bandnorm, verbose=verbose)
+        indxData, banddata = self._indexbandsphase(banddata, bandnorm, verbose=verbose)
 
         if verbose > 0:
             print("Band Vote Time: ", timer() - tic)
@@ -521,12 +521,14 @@ class EBSDIndexer:
         nPhases = len(self.phaseLib)
         q = np.zeros((nPhases, npoints, 4))
         indxData = np.zeros((nPhases + 1, npoints), dtype=self.dataTemplate)
+        bandmatchindex = np.zeros((nPhases, npoints,shpBandDat[-1],2), dtype=np.int32)-100
+        banddataout = banddata.copy()
 
         indxData["phase"] = -1
         indxData["fit"] = 180.0
         indxData["totvotes"] = 0
         if self.phaseLib[0] is None:
-            return indxData
+            return indxData, banddata
 
         if self.nband_earlyexit is None:
             earlyexit = -1
@@ -552,7 +554,7 @@ class EBSDIndexer:
                 #print(bDat1["max"])
                 #print(adj_intensity)
                 for j in range(len(self.phaseLib)):
-
+                    bandmatchindex[j,i, :, 0] = j
 
                     (
                         avequat,
@@ -574,6 +576,8 @@ class EBSDIndexer:
                         indxData["nmatch"][j, i] = nMatch
                         indxData["matchattempts"][j, i] = matchAttempts
                         indxData["totvotes"][j, i] = totvotes
+                        bandmatchindex[j,i, whgood, 1] = bandmatch
+
                     if nMatch >= earlyexit:
                         break
 
@@ -584,6 +588,7 @@ class EBSDIndexer:
         q = q.reshape(nPhases, npoints, 4)
         indxData["quat"][0:nPhases, :, :] = q
         indxData[-1, :] = indxData[0, :]
+        banddataout['band_match_index'][:,:,:] = bandmatchindex[0,:,:,:].squeeze()
         if nPhases > 1:
             for j in range(1, nPhases):
                 # indxData[-1, :] = np.where(
@@ -591,14 +596,12 @@ class EBSDIndexer:
                 #    > (indxData[j + 1, :]["cm"] * indxData[j + 1, :]["nmatch"]),
                 #    indxData[j, :],
                 #    indxData[j + 1, :],
-                indxData[-1, :] = np.where(
-                    ((3.0 - indxData[j, :]["fit"]) * indxData[j, :]["nmatch"])
-                    > ((3.0 - indxData[-1, :]["fit"]) * indxData[-1, :]["nmatch"]),
-                    indxData[j, :],
-                    indxData[-1, :]
-                )
-
-        return indxData
+                phasetest = ((3.0 - indxData[j, :]["fit"]) * indxData[j, :]["nmatch"]) \
+                            > ((3.0 - indxData[-1, :]["fit"]) * indxData[-1, :]["nmatch"])
+                whbetter = np.nonzero(phasetest)
+                indxData[-1, whbetter] = indxData[j, whbetter]
+                banddataout['band_match_index'][whbetter,:] =  bandmatchindex[j,whbetter,:,:].squeeze()
+        return indxData, banddataout
     def _detector2refframe(self):
         ven = str.upper(self.vendor)
         if ven in ["EDAX", "EMSOFT", "KIKUCHIPY"]:

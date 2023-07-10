@@ -79,7 +79,7 @@ class BandDetect():
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
                     ('pqmax', np.float32), ('width', np.float32), ('theta', np.float32), ('rho', np.float32),
-                    ('valid', np.int8)])
+                    ('valid', np.int8),('band_match_index', np.int32, (2))])
 
 
     if (patterns is None) and (patDim is None):
@@ -302,6 +302,7 @@ class BandDetect():
     nPats = shape[0]
 
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
+    bandData['band_match_index'] = -100
     if chunksize < 0:
       nchunks = 1
       chunksize = nPats

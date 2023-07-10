@@ -55,7 +55,7 @@ def _optfunction(PC_i, indexer, banddat):
         #nbands_fit = 0
         #phase = indexer.phaseLib[0]
         nbands = indexer.bandDetectPlan.nBands
-        indexdata = indexer._indexbandsphase( banddat, bandnorm)
+        indexdata, banddat = indexer._indexbandsphase( banddat, bandnorm)
 
 
 
