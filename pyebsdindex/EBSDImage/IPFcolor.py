@@ -209,7 +209,7 @@ def ipf_ledgend_cubic(size=512):
   anno001 = plt.text(triOrigin[0] - 5*fsize*size/512/figsz,triOrigin[1] - 7*fsize*size/512.0/figsz, '001', fontsize = fsize)
   anno011 = plt.text(size - 10*fsize*size/512/figsz,triOrigin[1] - 7*fsize*size/512.0/figsz,'011',fontsize=fsize)
   anno111 = plt.text(size - 10*fsize*size/512/figsz,(triangleWY+triOrigin[1])*1.0,'111',fontsize=fsize)
-  fig.savefig("IPFCubic.png",bbox_inches=0, transparent=True)
+  fig.savefig("IPFCubic.pdf",bbox_inches=0, transparent=True)
   plt.close(1001)
 
 
@@ -280,13 +280,13 @@ def ipf_color_hex(xstalvect):
 
 
   S = np.sqrt((xP - x0) ** 2. + (yP - y0) ** 2.)
-  H = np.arctan2(1.25*(yP - y0) , (xP - x0)) * 180.0 / np.pi
+  H = np.arctan2((yP - y0) , (xP - x0)) * 180.0 / np.pi
   V = np.ones(npoints)
 
   #H = (xP < x0).astype(np.float) * 180.0 + H
-  H = H + 240.0 - np.arctan2((triPts[2, 1] - y0) , (triPts[2, 0] - x0)) * 180.0 / np.pi
+  H = H + 240 - np.arctan2((triPts[2, 1] - y0) , (triPts[2, 0] - x0)) * 180.0 / np.pi
   #H = H  - np.arctan2((- y0), ( - x0)) * 180.0 / np.pi
-  sMax = np.sqrt(x0 ** 2 + y0 ** 2)
+  sMax = np.sqrt((triPts[:,0] - x0) ** 2 + (triPts[:,1] - y0) ** 2).max()
   S = S / (sMax) * 0.75 + 0.25
 
   H = H % (360.0)
@@ -347,5 +347,5 @@ def ipf_ledgend_hex(size=512):
   anno001 = plt.text(triOrigin[0] - 5*fsize*size/512/figsz,triOrigin[1] - 8*fsize*size/512.0/figsz, r'0001', fontsize = 0.9*fsize)
   anno011 = plt.text(size - 10*fsize*size/512/figsz,triOrigin[1] - 9.5*fsize*size/512.0/figsz,r'$2\bar{1}\bar{1}0$',fontsize=0.9*fsize)
   anno111 = plt.text(size - 25*fsize*size/512/figsz,(triangleWY+triOrigin[1])*0.85,r'$10\bar{1}0$',fontsize=0.9*fsize)
-  fig.savefig("IPFHex.png",bbox_inches=0, transparent=True)
+  fig.savefig("IPFHex.pdf",bbox_inches=0, transparent=True)
   plt.close(1001)
