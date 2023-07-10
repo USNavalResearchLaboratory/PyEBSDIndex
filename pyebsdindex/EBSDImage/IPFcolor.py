@@ -29,6 +29,42 @@ import numpy as np
 from pyebsdindex import rotlib
 
 
+def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize = None):
+  nphase = len(indexer.phaseLib)
+
+  npoints = ebsddata.shape[-1]
+  ipfphase = np.zeros((nphase,npoints,3), dtype =np.float32)+1
+
+  phcount = 0
+  for ph in indexer.phaseLib:
+    quat = ebsddata[phcount]['quat']
+    if ph.lauecode == 43:
+      ipfphase[phcount, :, :] = qu2ipf_cubic(quat, vector=vector)
+    if ph.lauecode == 62:
+      ipfphase[phcount, :, :] = qu2ipf_hex(quat, vector=vector)
+    phcount += 1
+  phase = ((ebsddata[-1]['phase']).copy()).clip(0).reshape(npoints,1)
+  ipfout = np.choose(phase, ipfphase).squeeze()
+  ipfout[ebsddata[-1]['fit'] > 179,:] = 0
+
+
+  if xsize is not None:
+    xsize = int(xsize)
+    if ysize is None:
+      ysize = int(npoints // xsize + np.int64((npoints % xsize) > 0))
+      print(ysize)
+  else:
+    xsize = int(npoints)
+    ysize = 1
+
+  npts = int(npoints)
+  if int(xsize*ysize) < npoints:
+    npts = int(xsize*ysize)
+  ipf_out = ipfout[0:npts,:].reshape(ysize, xsize,3)
+  return ipf_out
+
+
+
 def qu2ipf_cubic(quats, vector=np.array([0,0,1.0])):
   xstalvect = rotlib.quat_vector(quats,vector)
   return ipf_color_cubic(xstalvect).clip(0.0, 1.0)
