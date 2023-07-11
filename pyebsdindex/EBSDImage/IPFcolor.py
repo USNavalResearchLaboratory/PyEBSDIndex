@@ -86,7 +86,7 @@ def ipf_color_cubic(xstalvect):
   # cubic unit tri center
   triPts = np.array( [[0,0],
                       [2. / np.sqrt(2.) / (1. + 1. / np.sqrt(2.)),0],
-                      [2. / np.sqrt(3.) / (1. + 1. / np.sqrt(3.)),2. / np.sqrt(3.) / (1. + 1. / np.sqrt(3.))]], dtype = np.float)
+                      [2. / np.sqrt(3.) / (1. + 1. / np.sqrt(3.)),2. / np.sqrt(3.) / (1. + 1. / np.sqrt(3.))]], dtype = np.float32)
 
   middle = np.tan(1. / 2. * np.arctan(triPts[2,1] / triPts[2,0]))
   a = np.sqrt( (triPts[2,1] - triPts[1,1]) ** 2. + (triPts[2,0] - triPts[1,0]) ** 2.)
@@ -265,7 +265,7 @@ def ipf_color_hex(xstalvect):
   # cubic unit tri center
   triPts = np.array( [[0,0],
                       [1.0 ,0],
-                      [np.sqrt(3.)/2.0, 0.5 ]], dtype = np.float)
+                      [np.sqrt(3.)/2.0, 0.5 ]], dtype = np.float32)
 
   middle = np.tan(1. / 2. * np.arctan(triPts[2,1] / triPts[2,0]))
 
