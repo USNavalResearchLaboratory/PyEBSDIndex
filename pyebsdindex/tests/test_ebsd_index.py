@@ -72,9 +72,10 @@ class TestEBSDIndexer:
 
         patterns = np.repeat(pattern_al_sim_20kv[None, ...], 4, axis=0)
         indexer = EBSDIndexer(PC=(0.4, 0.6, 0.5), patDim=patterns.shape[1:])
-        data = index_pats_distributed(patterns, ebsd_indexer_obj=indexer)
+        data = index_pats_distributed(patsin=patterns, ebsd_indexer_obj=indexer)[0]
 
         # Expected rotation
         euler = np.rad2deg(qu2eu(data[0]["quat"]))
+        
         assert np.isclose(euler[0], self._possible_euler, atol=2).any()
         assert np.allclose(euler[0], euler[1:])
