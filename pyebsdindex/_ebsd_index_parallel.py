@@ -47,7 +47,7 @@ else:
 RAYIPADDRESS = '127.0.0.1'
 OSPLATFORM  = platform.system()
 if OSPLATFORM  == 'Darwin':
-    RAYIPADDRESS = '0.0.0.0' # the localhost address does not work on macOS when on a VPN
+    RAYIPADDRESS = '127.0.0.1' # the localhost address does not work on macOS when on a VPN
 
 def index_pats_distributed(
     patsin=None,
