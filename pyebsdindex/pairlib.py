@@ -167,7 +167,7 @@ class pairlib():
     angTable = np.arccos(angTable)*RADEG
     famindx0 = ((np.concatenate( ([0],np.cumsum(nFamComplete)) ))[0:-1]).astype(dtype=np.int)
     cartPoles = self.xstalplane2cart(sympolesComplete)
-    cartPoles /= np.linalg.norm(cartPoles, axis = 1).reshape(np.int(cartPoles.size/3),1)
+    cartPoles /= np.linalg.norm(cartPoles, axis = 1).reshape(int(cartPoles.size/3),1)
     self.completelib = {
                    'poles' : sympolesComplete,
                    'polesCart': cartPoles,
@@ -212,8 +212,8 @@ class pairlib():
 
   def calc_pole_dot(self,poles1,poles2,rMetricTensor = np.identity(3)):
 
-    p1 = poles1.reshape(np.int(poles1.size / 3), 3)
-    p2 = poles2.reshape(np.int(poles2.size / 3), 3)
+    p1 = poles1.reshape(int(poles1.size // 3), 3)
+    p2 = poles2.reshape(int(poles2.size // 3), 3)
 
     n1 = p1.shape[0]
     n2 = p2.shape[0]
@@ -243,7 +243,7 @@ class pairlib():
     for i in range(6):
       LUT[:, LUTA[i,0], LUTA[i,1], LUTA[i,2]] = LUTB[i,:]
 
-    ntrips = np.int(libANG.size / 3)
+    ntrips = int(libANG.size // 3)
     for i in range(ntrips):
       temp = np.squeeze(libANG[i,:])
       srt = np.argsort(temp)

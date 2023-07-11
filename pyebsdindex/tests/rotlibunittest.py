@@ -12,7 +12,7 @@ RADDEG = 180.0/pi
 # quaternion misorientation to evaluate the error.
 
 def testrotlib(float32=False, return_quat=False, seed = 1, n = 1000000):
-  n = np.int(n)
+  n = int(n)
   np.random.seed(seed)
   qu = (np.random.random((n,4))*2.0-1)
   if float32 is True:

@@ -452,7 +452,7 @@ class UPFile(EBSDPatternFile):
       self.patternW = dat[0]
       self.patternH = dat[1]
       self.filePos = dat[2]
-      self.nPatterns = np.int((Path(self.filepath).expanduser().stat().st_size - 16) /
+      self.nPatterns = int((Path(self.filepath).expanduser().stat().st_size - 16) /
                               (self.patternW * self.patternH * (self.filedatatype(0).nbytes)))
       if self.xStep is None:
         self.xStep = 0.0
@@ -474,7 +474,7 @@ class UPFile(EBSDPatternFile):
       dat = np.fromfile(f, dtype=np.uint32, count=2)
       self.nCols = np.uint64(dat[0])
       self.nRows = np.uint64(dat[1])
-      self.nPatterns = np.int(self.nCols.astype(np.uint64) * self.nRows.astype(np.uint64))
+      self.nPatterns = int(self.nCols.astype(np.uint64) * self.nRows.astype(np.uint64))
       self.hexflag = np.fromfile(f, dtype=np.uint8, count=1)[0]
       dat = np.fromfile(f, dtype=np.float64, count=2)
       self.xStep = dat[0]
