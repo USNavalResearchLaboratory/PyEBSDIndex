@@ -20,6 +20,9 @@
 # Author: David Rowenhorst;
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
+# For more info see
+# Patrick T. Brewick, Stuart I. Wright, David J. Rowenhorst. Ultramicroscopy, 200:50–61, May 2019.
+
 """Non-local pattern averaging and re-indexing (NLPAR)."""
 
 from pathlib import Path

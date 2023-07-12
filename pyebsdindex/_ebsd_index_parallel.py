@@ -18,7 +18,7 @@
 # some notice that they have been modified.
 #
 # Author: David Rowenhorst;
-# The US Naval Research Laboratory Date: 21 Aug 2020
+# The US Naval Research Laboratory Date: 12 July 2023
 
 """Setup and handling of Radon indexing runs of EBSD patterns in
 parallel.
@@ -148,18 +148,34 @@ def index_pats_distributed(
     Returns
     -------
     indxData : numpy.ndarray
-        Complex numpy array (or array of structured data), that is
+        Structured numpy array, that is
         [nphases + 1, npoints]. The data is stored for each phase used
         in indexing and the ``indxData[-1]`` layer uses the best guess
         on which is the most likely phase, based on the fit, and number
         of bands matched for each phase. Each data entry contains the
-        orientation expressed as a quaternion (quat) (using the
+        orientation expressed as a quaternion ('quat') (using the
         convention of ``vendor`` or :attr:`indexer.vendor`), Pattern
-        Quality (pq), Confidence Metric (cm), Phase ID (phase), Fit
-        (fit) and Number of Bands Matched (nmatch). There are some other
+        Quality ('pq'), Confidence Metric ('cm'), Phase ID ('phase'), Fit
+        ('fit') and Number of Bands Matched ('nmatch'). There are some other
         metrics reported, but these are mostly for debugging purposes.
+        The number and order of fields are not guaranteed to remain the same, but
+        fields listed here are stable.
+        (phase) parameter will be set to -1 for any no-solution point.
     bandData : numpy.ndarray
-        Band identification data from the Radon transform.
+        Band identification data from the Radon transform. Stored
+        as a structured numpy array, of dimensions [npoints, nbands].
+        With fields that include:
+                    band ID ('id'), 
+                    peak max intesensity [used to calculate pattern quality] ('max')
+                    nearest integer location of the Radon peak ('maxloc'),
+                    nearest neighbor average of the max peak intensity('avemax'), 
+                    sub-pixel location of the Radon peak ('aveloc'),
+                    a metric of the band width ('width'), 
+                    the theta value of the sub-pixel location on the Radon [lower-left origin] ('theta'), 
+                    the rho value of the sub-pixel location on the Radon [lower-left origin]('rho'),
+                    was the peak detected ('valid'),
+                    index for phase number and pole number that indexed to this band('band_match_index')
+                    [use the EBSDIndexer method indexer.getmatchedpole(banddata)]
     indexer : EBSDIndexer
         EBSD indexer, returned if ``return_indexer_obj=True``.
 

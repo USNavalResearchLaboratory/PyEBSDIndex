@@ -435,19 +435,34 @@ class EBSDIndexer:
         Returns
         -------
         indxData : numpy.ndarray
-            Complex numpy array (or array of structured data), that is
-            [nphases + 1, npoints]. The data is stored for each phase
-            used in indexing and the `indxData[-1]` layer uses the best
-            guess on which is the most likely phase, based on the fit,
-            and number of bands matched for each phase. Each data entry
-            contains the orientation expressed as a quaternion (quat)
-            (using `self.vendor`'s convention), Pattern Quality (pq),
-            Confidence Metric (cm), Phase ID (phase), Fit (fit) and
-            Number of Bands Matched (nmatch). There are some other
-            metrics reported, but these are mostly for debugging
-            purposes.
-        banddata : numpy.ndarray
-            Band identification data from the Radon transform.
+            Structured numpy array, that is
+            [nphases + 1, npoints]. The data is stored for each phase used
+            in indexing and the ``indxData[-1]`` layer uses the best guess
+            on which is the most likely phase, based on the fit, and number
+            of bands matched for each phase. Each data entry contains the
+            orientation expressed as a quaternion ('quat') (using the
+            convention of ``vendor`` or :attr:`indexer.vendor`), Pattern
+            Quality ('pq'), Confidence Metric ('cm'), Phase ID ('phase'), Fit
+            ('fit') and Number of Bands Matched ('nmatch'). There are some other
+            metrics reported, but these are mostly for debugging purposes.
+            The number and order of fields are not guaranteed to remain the same, but
+            fields listed here are stable.
+            (phase) parameter will be set to -1 for any no-solution point.
+        bandData : numpy.ndarray
+            Band identification data from the Radon transform. Stored
+            as a structured numpy array, of dimensions [npoints, nbands].
+            With fields that include:
+                    band ID ('id'),
+                    peak max intesensity [used to calculate pattern quality] ('max')
+                    nearest integer location of the Radon peak ('maxloc'),
+                    nearest neighbor average of the max peak intensity('avemax'),
+                    sub-pixel location of the Radon peak ('aveloc'),
+                    a metric of the band width ('width'),
+                    the theta value of the sub-pixel location on the Radon [lower-left origin] ('theta'),
+                    the rho value of the sub-pixel location on the Radon [lower-left origin]('rho'),
+                    was the peak detected ('valid'),
+                    index for phase number and pole number that indexed to this band('band_match_index')
+                    [use the EBSDIndexer method indexer.getmatchedpole(banddata)]
         patstart : int
             Starting index of the indexed patterns.
         npats : int
@@ -474,6 +489,64 @@ class EBSDIndexer:
             print("Band Vote Time: ", timer() - tic)
 
         return indxData, banddata, patstart, npats
+    def getmatchedpole(self, banddata, float_out=False):
+        """Return the pole from the library that was matched to the detected band.
+
+                Parameters
+                ----------
+                banddata : numpy.ndarray, output structured bandata array from
+                    ebsd_index.index_pats or ebsd_index.index_pats_distributed.
+                float_out: False[default]/True, optional
+                    Default is to return an array of ints with Miller indices.
+                    If set to True, then floats, with unit length will be returned in the
+                    sample Cartesian reference frame.
+                    (length is only valid for cubic systems).
+                npats : int, optional
+                    Number of patterns to index. Default is ``-1``, which will
+                    index up to the final pattern in ``patsin``.
+
+                Returns
+                -------
+                matched poles: numpy.ndarray int
+                   The default is an array [npoints, nbands, 3] that contain the Miller
+                   indices of the matching pole (note, that hexagonal will also return only
+                   three index notation). If the float_out is set to True, then
+                   the output will be floating point vectors of length one, within the sample Cartesian
+                   reference frame.
+                """
+        nphases = len(self.phaseLib)
+
+        bnddat = banddata
+        shpbdndat = bnddat.shape
+        if len(shpbdndat) == 0:
+            bnddat = np.array(bnddat).reshape(1)
+        shpbdndat = bnddat.shape
+        nbands = shpbdndat[-1]
+        if len(shpbdndat) == 1:
+            bnddat = bnddat.reshape(1, nbands)
+        shpbdndat = bnddat.shape
+        npoints = shpbdndat[0]
+
+        polesout = np.zeros((npoints,nbands,3))
+        if float_out is False:
+            polekey = 'poles'
+        else:
+            polekey = 'polesCart'
+
+        for ph in range(nphases):
+            wh = np.nonzero(bnddat['band_match_index'][:,0,0] == ph)[0]
+            if len(wh) == 0:
+                continue
+            pindex = bnddat['band_match_index'][wh,:, 1]
+            poles = self.phaseLib[ph].completelib[polekey][pindex,:]
+            polesout[wh, :, :] = poles
+
+        if float_out is False:
+            polesout = np.round(polesout).astype(int)
+
+        return polesout
+
+
 
     def _getpats(self, patsin=None, patstart=0, npats=-1, xyloc=None):
         if patsin is None:
