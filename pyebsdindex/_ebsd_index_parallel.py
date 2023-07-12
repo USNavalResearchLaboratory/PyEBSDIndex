@@ -47,7 +47,7 @@ else:
 RAYIPADDRESS = '127.0.0.1'
 OSPLATFORM  = platform.system()
 if OSPLATFORM  == 'Darwin':
-    RAYIPADDRESS = '127.0.0.1' # the localhost address does not work on macOS when on a VPN
+    RAYIPADDRESS = '0.0.0.0' # the localhost address does not work on macOS when on a VPN
 
 def index_pats_distributed(
     patsin=None,
@@ -320,9 +320,10 @@ def index_pats_distributed(
     # ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
     # Need to append path for installs from source ... otherwise the ray
     # workers do not know where to find the PyEBSDIndex module.
-    ray.init(
+    rayclust = ray.init(
         num_cpus=int(np.round(n_cpu_nodes)),
         num_gpus=ngpu*ngpuwrker,
+        #dashboard_host = RAYIPADDRESS,
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars":
                       {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__)),
@@ -331,7 +332,7 @@ def index_pats_distributed(
     )  # Supress INFO messages from ray.
 
     print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize, ngpuwrker, ncpuwrker)
-
+    #print(rayclust)
     # Place indexer obj in shared memory store so all workers can use it - this is read only.
     remote_indexer = ray.put(indexer)
     # Get the function that will collect opencl parameters - if opencl

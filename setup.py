@@ -30,6 +30,7 @@ extra_feature_requirements = {
     ],
     "parallel": [
         "ray[default]                   >= 1.13",
+        "pydantic                       < 2",
     ]
 }
 # Create a development installation "dev" including "doc" and "tests"
