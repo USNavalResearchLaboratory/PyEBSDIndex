@@ -15,6 +15,10 @@ Added
 - Initial support for non-cubic phases. Hexagonal verified with EDAX convention.  Others are untested.
 - Significant improvements in phase differentiation.
 - NLPAR support for Oxford HDF5 and EBSP.
+- Initial support for Oxford .h5oina files
+- Added IPF coloring/legends for hexagonal phases
+- Data output files in .ang and EDAX .oh5 files
+
 
 Changed
 -------
@@ -24,6 +28,7 @@ Changed
 - ``ebsd_index.index_pats_distributed()`` now will auto optimize the number of patterns processed at a time depending on GPU
     capability, and is set as the default.
 - Updated tutorials for new features.
+
 
 Deprecated
 ----------

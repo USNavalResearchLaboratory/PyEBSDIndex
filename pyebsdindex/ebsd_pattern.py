@@ -277,12 +277,14 @@ class EBSDPatternFile():
         nPatToRead = [ncolread, nrowread]
 
         patterns = np.zeros([int(ncolread*nrowread),self.patternH,self.patternW],dtype=typeout)
+        xyloc = np.zeros([int(ncolread*nrowread),2],dtype=np.float32)
 
         for i in range(nrowread):
           pstart = int(int(int(rowstart+i)*self.nCols)+colstart)
-          ptemp, xyloc = self.read_data(convertToFloat=convertToFloat,patStartCount = [pstart,ncolread],returnArrayOnly=True)
+          ptemp, xyloctemp = self.read_data(convertToFloat=convertToFloat,patStartCount = [pstart,ncolread],returnArrayOnly=True)
 
           patterns[int(i*ncolread):int((i+1)*ncolread), :, :] = ptemp
+          xyloc[int(i*ncolread):int((i+1)*ncolread), :] = xyloctemp
 
     if returnArrayOnly == True:
       return patterns, xyloc

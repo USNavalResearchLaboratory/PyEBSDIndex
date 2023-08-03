@@ -209,8 +209,8 @@ def writeoh5(filename, indexer, data,
           if nrows is None:
             nrows = np.ceil(data.shape[-1] / ncols)
 
-      ncols = np.array([np.int32(ncols)])
-      nrows = np.array([np.int32(nrows)])
+      ncols = np.array([np.int32(ncols)]).squeeze()
+      nrows = np.array([np.int32(nrows)]).squeeze()
 
       f.create_dataset(datasetname + '/EBSD/Header/nColumns',
                        data=ncols)
