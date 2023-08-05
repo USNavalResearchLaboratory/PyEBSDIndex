@@ -168,25 +168,27 @@ def index_pats_distributed(
     bandData : numpy.ndarray
         Band identification data from the Radon transform. Stored
         as a structured numpy array, of dimensions [npoints, nbands].
+
         With fields that include:
-            band ID ('id'),
-            peak max intesensity [used to calculate pattern quality] ('max')
-            nearest integer location of the Radon peak ('maxloc'),
-            nearest neighbor average of the max peak intensity('avemax'),
-            sub-pixel location of the Radon peak ('aveloc'),
-            a metric of the band width ('width'),
-            the theta value of the sub-pixel location on the Radon [lower-left origin] ('theta'),
-            the rho value of the sub-pixel location on the Radon [lower-left origin]('rho'),
-            was the peak detected ('valid'),
-            index for phase number and pole number that indexed to this band('band_match_index')
-            [use the EBSDIndexer method indexer.getmatchedpole(banddata)]
+            - id: band ID
+            - max: peak max intesensity (used to calculate pattern quality)
+            - maxloc: nearest integer location of the Radon peak
+            - avemax: nearest neighbor average of the max peak intensity
+            - aveloc: sub-pixel location of the Radon peak
+            - width: a metric of the band width
+            - theta: the theta value of the sub-pixel location on the Radon (lower-left origin)
+            - rho: the rho value of the sub-pixel location on the Radon (lower-left origin)
+            - valid: was the peak detected
+            - band_match_index: index for phase number and pole number that indexed to this band
+              (use :meth:`~EBSDIndexer.getmatchedpole`)
+
     indexer : EBSDIndexer
         EBSD indexer, returned if ``return_indexer_obj=True``.
 
     Notes
     -----
-    Requires :mod:`ray[default]`. See the :doc:`installation guide
-    </user/installation>` for details.
+    Requires the ``ray[default]`` package. See the :doc:`installation
+    guide </user/installation>` for details.
     """
     starttime = timer()
     pats = None

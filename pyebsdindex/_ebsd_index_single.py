@@ -162,18 +162,20 @@ def index_pats(
     bandData : numpy.ndarray
         Band identification data from the Radon transform. Stored
         as a structured numpy array, of dimensions [npoints, nbands].
+
         With fields that include:
-            band ID ('id'),
-            peak max intesensity [used to calculate pattern quality] ('max')
-            nearest integer location of the Radon peak ('maxloc'),
-            nearest neighbor average of the max peak intensity('avemax'),
-            sub-pixel location of the Radon peak ('aveloc'),
-            a metric of the band width ('width'),
-            the theta value of the sub-pixel location on the Radon [lower-left origin] ('theta'),
-            the rho value of the sub-pixel location on the Radon [lower-left origin]('rho'),
-            was the peak detected ('valid'),
-            index for phase number and pole number that indexed to this band('band_match_index')
-            [use the EBSDIndexer method indexer.getmatchedpole(banddata)]
+            - id: band ID
+            - max: peak max intesensity (used to calculate pattern quality)
+            - maxloc: nearest integer location of the Radon peak
+            - avemax: nearest neighbor average of the max peak intensity
+            - aveloc: sub-pixel location of the Radon peak
+            - width: a metric of the band width
+            - theta: the theta value of the sub-pixel location on the Radon (lower-left origin)
+            - rho: the rho value of the sub-pixel location on the Radon (lower-left origin)
+            - valid: was the peak detected
+            - band_match_index: index for phase number and pole number that indexed to this band
+              (use :meth:`~EBSDIndexer.getmatchedpole`)
+
     indexer : EBSDIndexer
         EBSD indexer, returned if ``return_indexer_obj=True``.
     """
@@ -463,18 +465,20 @@ class EBSDIndexer:
         bandData : numpy.ndarray
             Band identification data from the Radon transform. Stored
             as a structured numpy array, of dimensions [npoints, nbands].
+
             With fields that include:
-                band ID ('id'),
-                peak max intesensity [used to calculate pattern quality] ('max')
-                nearest integer location of the Radon peak ('maxloc'),
-                nearest neighbor average of the max peak intensity('avemax'),
-                sub-pixel location of the Radon peak ('aveloc'),
-                a metric of the band width ('width'),
-                the theta value of the sub-pixel location on the Radon [lower-left origin] ('theta'),
-                the rho value of the sub-pixel location on the Radon [lower-left origin]('rho'),
-                was the peak detected ('valid'),
-                index for phase number and pole number that indexed to this band('band_match_index')
-                [use the EBSDIndexer method indexer.getmatchedpole(banddata)]
+                - id: band ID
+                - max: peak max intesensity (used to calculate pattern quality)
+                - maxloc: nearest integer location of the Radon peak
+                - avemax: nearest neighbor average of the max peak intensity
+                - aveloc: sub-pixel location of the Radon peak
+                - width: a metric of the band width
+                - theta: the theta value of the sub-pixel location on the Radon (lower-left origin)
+                - rho: the rho value of the sub-pixel location on the Radon (lower-left origin)
+                - valid: was the peak detected
+                - band_match_index: index for phase number and pole number that indexed to this band
+                  (use :meth:`~EBSDIndexer.getmatchedpole`)
+
         patstart : int
             Starting index of the indexed patterns.
         npats : int
@@ -503,26 +507,30 @@ class EBSDIndexer:
         return indxData, banddata, patstart, npats
 
     def getmatchedpole(self, banddata, float_out=False):
-        """Return the pole from the library that was matched to the detected band.
+        """Return the pole from the library that was matched to the
+        detected band.
 
         Parameters
         ----------
-        banddata : numpy.ndarray, output structured bandata array from
-            ebsd_index.index_pats or ebsd_index.index_pats_distributed.
-        float_out: False[default]/True, optional
-            Default is to return an array of ints with Miller indices.
-            If set to True, then floats, with unit length will be returned in the
-            sample Cartesian reference frame.
-            (length is only valid for cubic systems).
+        banddata : numpy.ndarray
+            Output structured band data array from
+            :meth:`~pyebsdindex.ebsd_index.index_pats` or
+            :meth:`~pyebsdindex.ebsd_index.index_pats_distributed`.
+        float_out : bool, optional
+            Default (False) is to return an array of ints with Miller
+            indices. If set to True, then floats, with unit length, will
+            be returned in the sample Cartesian reference frame.
+            (Length is only valid for cubic systems).
 
         Returns
         -------
-        polesout : numpy.ndarray int
-           The default is an array [npoints, nbands, 3] that contain the Miller
-           indices of the matching pole (note, that hexagonal will also return only
-           three index notation). If the float_out is set to True, then
-           the output will be floating point vectors of length one, within the sample Cartesian
-           reference frame.
+        numpy.ndarray
+            The default is an array [npoints, nbands, 3] that contains
+            the Miller indices (as ints) of the matching pole (note that
+            hexagonal will also return only three-index notation). If
+            the float_out is set to True, then the output will be
+            floating point vectors of length one, within the sample
+            Cartesian reference frame.
         """
         nphases = len(self.phaseLib)
 
@@ -700,6 +708,7 @@ class EBSDIndexer:
             raise ValueError("`self.vendor` unknown")
 
         return quatref2detect
+
 #    def pcCorrect(self, xy=[[0.0, 0.0]]):
 #        # TODO: At somepoint we will put some methods here for
 #        #  correcting the PC depending on the location within the scan.
