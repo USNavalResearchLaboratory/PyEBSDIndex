@@ -26,12 +26,11 @@ from pyebsdindex import _ray_installed
 from pyebsdindex._ebsd_index_single import EBSDIndexer, index_pats
 
 if _ray_installed:
-    from pyebsdindex._ebsd_index_parallel import index_pats_distributed#, IndexerRay
+    from pyebsdindex._ebsd_index_parallel import index_pats_distributed
 
 
 __all__ = [
     "EBSDIndexer",
-    #"IndexerRay",
     "index_pats",
     "index_pats_distributed",
 ]

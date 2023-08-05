@@ -29,7 +29,8 @@ from timeit import default_timer as timer
 import numpy as np
 import h5py
 
-from pyebsdindex import tripletvote as bandindexer # use triplet voting as the default indexer.
+from pyebsdindex import tripletvote as bandindexer  # use triplet voting as the default indexer.
+from pyebsdindex.tripletvote import BandIndexer
 from pyebsdindex import (
     ebsd_pattern,
     rotlib,
@@ -159,7 +160,20 @@ def index_pats(
         (fit) and Number of Bands Matched (nmatch). There are some other
         metrics reported, but these are mostly for debugging purposes.
     bandData : numpy.ndarray
-        Band identification data from the Radon transform.
+        Band identification data from the Radon transform. Stored
+        as a structured numpy array, of dimensions [npoints, nbands].
+        With fields that include:
+            band ID ('id'),
+            peak max intesensity [used to calculate pattern quality] ('max')
+            nearest integer location of the Radon peak ('maxloc'),
+            nearest neighbor average of the max peak intensity('avemax'),
+            sub-pixel location of the Radon peak ('aveloc'),
+            a metric of the band width ('width'),
+            the theta value of the sub-pixel location on the Radon [lower-left origin] ('theta'),
+            the rho value of the sub-pixel location on the Radon [lower-left origin]('rho'),
+            was the peak detected ('valid'),
+            index for phase number and pole number that indexed to this band('band_match_index')
+            [use the EBSDIndexer method indexer.getmatchedpole(banddata)]
     indexer : EBSDIndexer
         EBSD indexer, returned if ``return_indexer_obj=True``.
     """
@@ -221,7 +235,6 @@ def index_pats(
         clparams=clparams,
         verbose=verbose,
         chunksize=chunksize,
-        gpu_id = gpu_id,
     )
 
     if not return_indexer_obj:
@@ -298,7 +311,7 @@ class EBSDIndexer:
         rhoMaskFrac=0.15,
         nBands=9,
         patDim=None,
-        nband_earlyexit = None,
+        nband_earlyexit=None,
         **kwargs
     ):
         """Create an EBSD indexer."""
@@ -313,9 +326,9 @@ class EBSDIndexer:
         for ph in self.phaselist:
             if ph is None:
                 self.phaseLib.append(None)
-            if (ph.__class__.__name__).lower() == 'str':
+            if isinstance(ph, str):
                 self.phaseLib.append(bandindexer.addphase(libtype=ph))
-            if (ph.__class__.__name__) == 'BandIndexer':
+            if isinstance(ph, BandIndexer):
                 self.phaseLib.append(ph)
 
         self.vendor = "EDAX"
@@ -401,7 +414,6 @@ class EBSDIndexer:
         PC=None,
         verbose=0,
         chunksize=512,
-        **kwargs
     ):
         """Index EBSD patterns.
 
@@ -430,7 +442,7 @@ class EBSDIndexer:
             Radon transform of the first pattern with detected bands
             highlighted.
         chunksize : int, optional
-            Default is 528.
+            Default is 512.
 
         Returns
         -------
@@ -452,17 +464,17 @@ class EBSDIndexer:
             Band identification data from the Radon transform. Stored
             as a structured numpy array, of dimensions [npoints, nbands].
             With fields that include:
-                    band ID ('id'),
-                    peak max intesensity [used to calculate pattern quality] ('max')
-                    nearest integer location of the Radon peak ('maxloc'),
-                    nearest neighbor average of the max peak intensity('avemax'),
-                    sub-pixel location of the Radon peak ('aveloc'),
-                    a metric of the band width ('width'),
-                    the theta value of the sub-pixel location on the Radon [lower-left origin] ('theta'),
-                    the rho value of the sub-pixel location on the Radon [lower-left origin]('rho'),
-                    was the peak detected ('valid'),
-                    index for phase number and pole number that indexed to this band('band_match_index')
-                    [use the EBSDIndexer method indexer.getmatchedpole(banddata)]
+                band ID ('id'),
+                peak max intesensity [used to calculate pattern quality] ('max')
+                nearest integer location of the Radon peak ('maxloc'),
+                nearest neighbor average of the max peak intensity('avemax'),
+                sub-pixel location of the Radon peak ('aveloc'),
+                a metric of the band width ('width'),
+                the theta value of the sub-pixel location on the Radon [lower-left origin] ('theta'),
+                the rho value of the sub-pixel location on the Radon [lower-left origin]('rho'),
+                was the peak detected ('valid'),
+                index for phase number and pole number that indexed to this band('band_match_index')
+                [use the EBSDIndexer method indexer.getmatchedpole(banddata)]
         patstart : int
             Starting index of the indexed patterns.
         npats : int
@@ -489,31 +501,29 @@ class EBSDIndexer:
             print("Band Vote Time: ", timer() - tic)
 
         return indxData, banddata, patstart, npats
+
     def getmatchedpole(self, banddata, float_out=False):
         """Return the pole from the library that was matched to the detected band.
 
-                Parameters
-                ----------
-                banddata : numpy.ndarray, output structured bandata array from
-                    ebsd_index.index_pats or ebsd_index.index_pats_distributed.
-                float_out: False[default]/True, optional
-                    Default is to return an array of ints with Miller indices.
-                    If set to True, then floats, with unit length will be returned in the
-                    sample Cartesian reference frame.
-                    (length is only valid for cubic systems).
-                npats : int, optional
-                    Number of patterns to index. Default is ``-1``, which will
-                    index up to the final pattern in ``patsin``.
+        Parameters
+        ----------
+        banddata : numpy.ndarray, output structured bandata array from
+            ebsd_index.index_pats or ebsd_index.index_pats_distributed.
+        float_out: False[default]/True, optional
+            Default is to return an array of ints with Miller indices.
+            If set to True, then floats, with unit length will be returned in the
+            sample Cartesian reference frame.
+            (length is only valid for cubic systems).
 
-                Returns
-                -------
-                matched poles: numpy.ndarray int
-                   The default is an array [npoints, nbands, 3] that contain the Miller
-                   indices of the matching pole (note, that hexagonal will also return only
-                   three index notation). If the float_out is set to True, then
-                   the output will be floating point vectors of length one, within the sample Cartesian
-                   reference frame.
-                """
+        Returns
+        -------
+        polesout : numpy.ndarray int
+           The default is an array [npoints, nbands, 3] that contain the Miller
+           indices of the matching pole (note, that hexagonal will also return only
+           three index notation). If the float_out is set to True, then
+           the output will be floating point vectors of length one, within the sample Cartesian
+           reference frame.
+        """
         nphases = len(self.phaseLib)
 
         bnddat = banddata
@@ -546,8 +556,6 @@ class EBSDIndexer:
 
         return polesout
 
-
-
     def _getpats(self, patsin=None, patstart=0, npats=-1, xyloc=None):
         if patsin is None:
             pats, xylocin = self.fID.read_data(
@@ -571,7 +579,8 @@ class EBSDIndexer:
                 if np.all((np.array(pshape[1:3]) - self.bandDetectPlan.patDim) == 0):
                     self.bandDetectPlan.band_detect_setup(patDim=pshape[1:3])
         return pats, xyloc
-    def _detectbands(self, pats, PC, xyloc=None, clparams=None, verbose=0, chunksize=528 ):
+
+    def _detectbands(self, pats, PC, xyloc=None, clparams=None, verbose=0, chunksize=528):
         banddata = self.bandDetectPlan.find_bands(
             pats, clparams=clparams, verbose=verbose, chunksize=chunksize
         )
@@ -585,9 +594,9 @@ class EBSDIndexer:
         )
         return banddata, bandnorm
 
-    def _indexbandsphase(self, banddata, bandnorm, verbose = 0, **kwargs):
+    def _indexbandsphase(self, banddata, bandnorm, verbose=0):
 
-        rhomax = 1.0e12
+#        rhomax = 1.0e12
         rhomax = self.bandDetectPlan.rhoMax * (1-self.bandDetectPlan.rhoMaskFrac)
         shpBandDat = banddata.shape
         npoints = int(banddata.size/(shpBandDat[-1])+0.1)
@@ -675,6 +684,7 @@ class EBSDIndexer:
                 indxData[-1, whbetter] = indxData[j, whbetter]
                 banddataout['band_match_index'][whbetter,:] =  bandmatchindex[j,whbetter,:,:].squeeze()
         return indxData, banddataout
+
     def _detector2refframe(self):
         ven = str.upper(self.vendor)
         if ven in ["EDAX", "EMSOFT", "KIKUCHIPY"]:
