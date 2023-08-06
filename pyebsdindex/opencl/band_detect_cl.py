@@ -152,7 +152,6 @@ class BandDetect(band_detect.BandDetect):
         print('Band Label Time:', blabeltime)
         print('Total Band Find Time:',tottime)
       if verbose > 1:
-        plt.clf()
 
         if len(rdnConvarray.shape) == 3:
           im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
@@ -170,10 +169,16 @@ class BandDetect(band_detect.BandDetect):
         im2show[-rhoMaskTrim:,:] = 0
 
         im2show = np.fliplr(im2show)
-        fig = plt.figure(figsize=(12,4))
-        subrdn = fig.add_subplot(1,2,1, xlim = (0,180), ylim = (-self.rhoMax, self.rhoMax) )
-        subrdn.imshow(im2show, cmap='gray', extent=[0, 180, -self.rhoMax, self.rhoMax],
-                   interpolation='none', zorder=1, aspect='auto')
+        fig = plt.figure(figsize=(12, 4))
+        subrdn = fig.add_subplot(121, xlim=(0, 180), ylim=(-self.rhoMax, self.rhoMax))
+        subrdn.imshow(
+            im2show,
+            cmap='gray',
+            extent=[0, 180, -self.rhoMax, self.rhoMax],
+            interpolation='none',
+            zorder=1,
+            aspect='auto'
+        )
         width = bandData['width'][-1, :]
         width /= width.min()
         width *= 2.0
@@ -183,11 +188,11 @@ class BandDetect(band_detect.BandDetect):
         subrdn.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
 
         for pt in range(self.nBands):
-          subrdn.annotate(str(pt + 1),np.squeeze([xplt[pt]+4,yplt[pt]]), color='yellow')
+          subrdn.annotate(str(pt + 1), np.squeeze([xplt[pt] + 4, yplt[pt]]), color='yellow')
         #subrdn.xlim(0,180)
         #subrdn.ylim(-self.rhoMax, self.rhoMax)
-        subpat = fig.add_subplot(1,2,2)
-        subpat.imshow(patterns[-1,:,:], cmap='gray')
+        subpat = fig.add_subplot(122)
+        subpat.imshow(patterns[-1, :, :], cmap='gray')
 
     except Exception as e: # something went wrong - try the CPU
       print(e)

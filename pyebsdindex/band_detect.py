@@ -345,7 +345,6 @@ class BandDetect():
       print('Band Label Time:', blabeltime)
       print('Total Band Find Time:',tottime)
     if verbose > 1:
-      plt.clf()
 
       if len(rdnConv.shape) == 3:
         im2show = rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
