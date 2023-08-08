@@ -529,7 +529,7 @@ class PSOOpt():
 
         with multiprocessing.Pool(min(multiprocessing.cpu_count(), self.n_particles)) as pool:
             if verbose >= 1:
-                print('n_particle:', self.n_particles, 'c1:', self.c1, 'c2:', self.c2, 'w:', self.w )
+                print('n_particles:', self.n_particles, 'c1:', self.c1, 'c2:', self.c2, 'w:', self.w )
 
             self.niter = niter
             for iter in range(niter):

@@ -42,6 +42,31 @@ def addphase(libtype=None, phasename=None,
              spacegroup=None,
              latticeparameter=None,
              polefamilies=None, nband_earlyexit = 10):
+  """Return a band indexer for a phase.
+
+  Parameters
+  ----------
+  libtype : str, optional
+      Shorthand definition of a phase. Options are FCC, BCC, or HCP.
+  phasename : str, optional
+      Phase name.
+  spacegroup : int, optional
+      Space group of the phase.
+  latticeparameter : np.ndarray, tuple, or list, optional
+      Lattice parameters (a, b, c, alpha, beta, gamma).
+  polefamilies : np.ndarray, tuple, or list, optional
+      Reflector families to use in indexing.
+  nband_earlyexit : int, optional
+      If this phase is first in a list of phases used in indexing, and
+      if this many bands are matched, the remaining phases in the list
+      will not be checked. Default is 10, unless ``libtype`` is
+      passed, in which case it is 8.
+
+  Returns
+  -------
+  BandIndexer
+      Band indexer for this phase.
+  """
 
   if libtype is not None:
 
@@ -254,7 +279,7 @@ class BandIndexer():
     if (self.lauecode == 62) or (self.lauecode == 6):
       if self.polefamilies.shape[-1] == 4:
         poles = crystal_sym.hex4poles2hex3poles(np.array(self.polefamilies))
-    poles = np.reshape(poles, (-1,3) )
+    poles = poles.reshape((-1, 3))
 
     npoles = poles.shape[0]
     sympoles = [] # list of all HKL variants which does not count the invariant pole as unique.
@@ -285,7 +310,6 @@ class BandIndexer():
 
     sympolesComplete = np.concatenate(sympolesComplete)
     #print(sympolesComplete)
-    nsyms = np.sum(nFamily).astype(np.int32)
     famindx = np.concatenate( ([0],np.cumsum(nFamComplete)) )
     angs = []
     familyID = []
@@ -296,18 +320,17 @@ class BandIndexer():
         #print('______', i,j)
         #print(np.round(fampoles).astype(int))
 
-        ang = np.squeeze(self._calc_pole_dot_int(polesFlt[i, :], fampoles,
-                                                 rMetricTensor=crystalmats.reciprocalMetricTensor)) # for each input pole, calculate
+        ang = self._calc_pole_dot_int(polesFlt[i, :], fampoles, rMetricTensor=crystalmats.reciprocalMetricTensor) # for each input pole, calculate
+        ang = np.squeeze(ang)
 
         ang = np.clip(ang, -1.0, 1.0)
         #sign = (ang >= 0).astype(np.float32) - (ang < 0).astype(np.float32)
         #sign = np.atleast_1d(sign)
-        ang = np.round(np.arccos(np.abs(ang))*RADEG*100).astype(np.int32) # get the unique angles between the input
+        ang = np.round(np.arccos(ang)*RADEG*100).astype(np.int32) # get the unique angles between the input
         ang = np.atleast_1d(ang)
         # pole, and the family poles. Angles within 0.01 deg are taken as the same.
         unqang, argunq = np.unique(ang, return_index=True)
         unqang = unqang/100.0 # revert back to the actual angle in degrees.
-
 
         wh = np.nonzero(unqang > 1.0)[0]
         nwh = wh.size
@@ -530,48 +553,50 @@ class BandIndexer():
       print('all: ',timer() - tic0)
     return avequat, fit, cm2, polematch, nMatch, ij, acc_correct #sumaccum
 
-
   def _symrotpoles(self, pole, crystalmats):
-
     polecart = np.matmul(crystalmats.reciprocalStructureMatrix, np.array(pole).T)
     sympolescart = rotlib.quat_vector(self.qsymops, polecart)
     return np.transpose(np.matmul(crystalmats.invReciprocalStructureMatrix, sympolescart.T))
 
   def _symrotdir(self, pole, crystalmats):
-
     polecart = np.matmul(crystalmats.directStructureMatrix, np.array(pole).T)
     sympolescart = rotlib.quat_vector(self.qsymops, polecart)
     return np.transpose(np.matmul(crystalmats.invDirectStructureMatrix, sympolescart.T))
 
-  def _hkl_unique(self, poles, reduceInversion=True, rMT = np.identity(3)):
-    """
-    When given a list of integer HKL poles (plane normals), will return only the unique HKL variants
+  def _hkl_unique(self, poles, reduceInversion=True, rMT=np.identity(3)):
+    """When given a list of integer HKL poles (plane normals), will
+    return only the unique HKL variants.
 
     Parameters
     ----------
-    poles: numpy.ndarray (n,3) in HKL integer form.
-    reduceInversion: True/False.  If True, then the any inverted crystal pole
-    will also be removed from the uniquelist.  The angle between poles
-    rMT: reciprocol metric tensor -- needed to calculated
+    poles : np.ndarray
+        (n, 3) in HKL integer form.
+    reduceInversion : bool, optional
+        If True, then any inverted crystal pole will also be removed
+        from the unique list.
+    rMT : np.ndarray
+        Reciprocol metric tensor. Needed to calculated the angle between
+        poles.
 
     Returns
     -------
-    numpy.ndarray (n,3) in HKL integer form of the unique poles.
+    np.ndarray
+        (n, 3) in HKL integer form of the unique poles.
     """
+    polesout = poles.reshape((-1, 3))
 
-    npoles = poles.shape[0]
-    intPoles =np.array(poles.round().astype(np.int32))
+    intPoles = polesout.round().astype(np.int32)
     mn = intPoles.min()
     intPoles -= mn
     basis = intPoles.max()+1
     basis3 = np.array([1,basis, basis**2])
     test = intPoles.dot(basis3)
 
-    un, unq = np.unique(test, return_index=True)
+    if polesout.shape[0] > 1:
+      _, unq = np.unique(test, return_index=True)
+      polesout = polesout[unq]
 
-    polesout = poles[unq, :]
-
-    if reduceInversion == True:
+    if reduceInversion:
       family = polesout
       nf = family.shape[0]
       test = self._calc_pole_dot_int(family, family, rMetricTensor = rMT)
@@ -579,12 +604,12 @@ class BandIndexer():
       testSum = np.sum( (test < -0.99999).astype(np.int32)*np.arange(nf).reshape(1,nf), axis = 1)
       whpos = np.nonzero( np.logical_or(testSum < np.arange(nf), (testSum == 0)))[0]
       polesout = polesout[whpos, :]
+
     return polesout
 
   def _calc_pole_dot_int(self, poles1, poles2, rMetricTensor = np.identity(3)):
-
-    p1 = poles1.reshape(np.int64(poles1.size / 3), 3)
-    p2 = poles2.reshape(np.int64(poles2.size / 3), 3)
+    p1 = poles1.reshape(-1, 3)
+    p2 = poles2.reshape(-1, 3)
 
     n1 = p1.shape[0]
     n2 = p2.shape[0]
