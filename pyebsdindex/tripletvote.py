@@ -226,7 +226,7 @@ class BandIndexer():
     keep = np.ones(npoles.shape[0], dtype = int)
     dot = np.abs(npoles.dot(npoles.T))
     for i in range(npoles.shape[0]):
-      wh = np.nonzero(dot[i, i+1:] > 0.999)[0]
+      wh = np.nonzero(dot[i, i+1:] > 0.99999)[0]
       if len(wh) > 0:
         keep[i+1+wh] = 0
 
