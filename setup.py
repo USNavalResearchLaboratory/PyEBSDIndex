@@ -24,7 +24,6 @@ extra_feature_requirements = {
         "coverage                       >= 5.0",
         "pytest                         >= 5.4",
         "pytest-cov                     >= 2.8.1",
-        "pytest-xdist",
     ],
     "gpu": [
         "pyopencl",
