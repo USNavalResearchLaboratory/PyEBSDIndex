@@ -20,6 +20,9 @@
 # Author: David Rowenhorst;
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
+# For more info see
+# Patrick T. Brewick, Stuart I. Wright, David J. Rowenhorst. Ultramicroscopy, 200:50–61, May 2019.
+
 """Non-local pattern averaging and re-indexing (NLPAR)."""
 
 from pathlib import Path
@@ -74,14 +77,23 @@ class NLPAR:
       self.filepath = Path(fpath)
       self.hdfdatapath = hdf5path
 
+  def setoutfile(self, patternfile, filepath=None):
+    """Set the output file.
 
+    Parameters
+    ----------
+    patternfile
+      Input pattern file object from ebsd_pattern.
+    filepath
+      String.
 
-
-  def setoutfile(self,patternfile, filepath=None):
-    '''patternfile is an input pattern file object from ebsd_pattern.  Filepath is a string.
-    In the future I want to be able to specify the HDF5 data path to store the output data, but that
-    is proving to be a bit of a mess.  For now, a copy of the original HDF5 is made, and the NLPAR patterns will be
-    overwritten on top of the originals. '''
+    Notes
+    -----
+    In the future I want to be able to specify the HDF5 data path to
+    store the output data, but that is proving to be a bit of a mess.
+    For now, a copy of the original HDF5 is made, and the NLPAR patterns
+    will be overwritten on top of the originals.
+    """
     self.filepathout = None
     self.hdfdatapathout = None
     pathtemp = np.atleast_1d(filepath)
@@ -101,24 +113,25 @@ class NLPAR:
             raise ValueError('Error: File input and output are exactly the same.')
             return
 
-        patternfile.copy_file([self.filepathout,self.hdfdatapathout] )
+        patternfile.copy_file([self.filepathout,self.hdfdatapathout], empty_data=True)
         return  # fpath and (maybe) hdf5 path were set manually.
       else: # this is a hdf5 file
         if self.hdfdatapathout is None:
-          patternfile.copy_file(self.filepathout)
+          patternfile.copy_file(self.filepathout, empty_data=True)
           self.hdfdatapathout = patternfile.h5patdatpth
           return
         else:
-          patternfile.copy_file([self.filepathout, self.hdfdatapathout])
+          patternfile.copy_file([self.filepathout, self.hdfdatapathout], empty_data=True)
           return
 
     if patternfile is not None: # the user has set no path.
       hdf5path = None
-      if patternfile.filetype == 'UP':
+      
+      if patternfile.filetype in ['UP', 'EBSP']:
         p = Path(patternfile.filepath)
         appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
         newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
-        patternfile.copy_file(newfilepath)
+        patternfile.copy_file(newfilepath,empty_data=True)
 
       if patternfile.filetype == 'HDF5':
         hdf5path_tmp = str(patternfile.h5patdatpth).split('/')
@@ -131,7 +144,7 @@ class NLPAR:
         hdf5path = hdf5path_org+appnd
         newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
         #patternfile.copy_file([newfilepath, hdf5path_org], newh5path=hdf5path)
-        patternfile.copy_file([newfilepath])
+        patternfile.copy_file([newfilepath], empty_data=True)
         hdf5path = patternfile.h5patdatpth
 
       self.filepathout = newfilepath
@@ -141,21 +154,36 @@ class NLPAR:
   def getinfileobj(self):
     if self.filepath is not None:
       fID = ebsd_pattern.get_pattern_file_obj([self.filepath, self.hdfdatapath])
-      if fID.nRows is not None:
-        self.nrows = fID.nRows
-      else:
-        fID.nRows = self.nrows
-      if fID.nCols is not None:
-        self.ncols = fID.nCols
-      else:
-        fID.nCols = self.ncols
+      if (fID.nRows is not None):
+        if (self.nrows is None):
+          self.nrows = fID.nRows
+        else:
+          fID.nRows = self.nrows
+
+      if (fID.nCols is not None):
+        if (self.ncols is None):
+          self.ncols = fID.nCols
+        else:
+          fID.nCols = self.ncols
+
       return fID
+
     else:
       return None
 
   def getoutfileobj(self):
     if self.filepathout is not None:
-      return ebsd_pattern.get_pattern_file_obj([self.filepathout, self.hdfdatapathout])
+      fID = ebsd_pattern.get_pattern_file_obj([self.filepathout, self.hdfdatapathout])
+      if self.nrows is not None:
+        fID.nRows = self.nrows
+      else:
+        self.nrows = fID.nRows
+
+      if self.ncols is not None:
+        fID.nCols = self.ncols
+      else:
+        self.ncols = fID.nCols
+      return fID
     else:
       return None
 
@@ -218,13 +246,14 @@ class NLPAR:
 
     dthresh = np.float32(dthresh)
     lamopt_values = []
+    
     for j in range(0,nrows,chunksize):
       print('Block',j)
       #rowstartread = np.int64(max(0,j - nn))
       rowstartread = np.int64(j)
       rowend = min(j + chunksize + nn,nrows)
       rowcountread = np.int64(rowend - rowstartread)
-      data = patternfile.read_data(patStartCount=[[0,rowstartread],[ncols,rowcountread]],
+      data, xyloc = patternfile.read_data(patStartCount=[[0,rowstartread],[ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
 
       shp = data.shape
@@ -348,10 +377,15 @@ class NLPAR:
     print(lam, sr, dthresh)
 
     for j in range(0,nrows,chunksize):
+      print('Row start', j)
+
       rowstartread = np.int64(max(0, j-sr))
       rowend = min(j + chunksize+sr,nrows)
+
+      if (rowend - rowstartread) < (2*sr+1):
+        rowstartread = np.int64(max(0, rowend - (2*sr+1)))
       rowcountread = np.int64(rowend-rowstartread)
-      data = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
+      data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
 
       shpdata = data.shape
@@ -371,7 +405,8 @@ class NLPAR:
       else:
         sigchunk = sigma[rowstartread:rowend,:]
 
-      print('Block', j)
+      #dataout = data
+
       dataout = self.nlpar_nb(data,lam, sr, dthresh, sigchunk,
                               rowcountread,ncols,indices,saturation_protect)
 
@@ -383,7 +418,7 @@ class NLPAR:
         for i in range(dataout.shape[0]):
           temp = dataout[i,:,:]
           temp -= temp.min()
-          temp *= float(mxval)/temp.max()
+          temp *= np.float32(mxval)/temp.max()
           dataout[i,:,:] = temp
 
       patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
@@ -393,6 +428,7 @@ class NLPAR:
       #return dataout
       #sigma[j:j+rowstartcount[1],:] += \
       #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
+
     numba.set_num_threads(nthreadpos)
 
 
@@ -427,12 +463,14 @@ class NLPAR:
     sigma = np.zeros((nrows, ncols), dtype=np.float32)
     #d_nn = np.zeros((nrows, ncols, int((2*nn+1)**2)), dtype=np.float32)
     colstartcount = np.asarray([0,ncols],dtype=np.int64)
-    dave = 0.0
+
     for j in range(0,nrows,chunksize):
       rowstartread = np.int64(max(0, j-nn))
       rowend = min(j + chunksize+nn,nrows)
+      if (rowend - rowstartread) < (3):
+        rowstartread = np.int64(max(0, rowend - (3)))
       rowcountread = np.int64(rowend-rowstartread)
-      data = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
+      data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
 
       shp = data.shape
@@ -443,9 +481,9 @@ class NLPAR:
         rowstartcount = np.asarray([j-rowstartread,rowcountread - (j-rowstartread) ], dtype=np.int64)
       else:
         rowstartcount = np.asarray([j-rowstartread,chunksize ], dtype=np.int64)
-      dtic = timer()
+
       sigchunk, temp = self.sigma_numba(data,nn, rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
-      dave += (timer() - dtic)
+
       sigma[j:j+rowstartcount[1],:] += \
         sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
 
@@ -557,7 +595,7 @@ class NLPAR:
             dij[j,i,count,1] = np.uint64(i_nn) # want to save this for labmda optimization
             indx_nn = i_nn+ncols*j_nn
             d2 = np.float32(0.0)
-            n2 = np.float32(0.0)
+            n2 = np.float32(1.0e-12)
             nout[j,i,count] = n0 # want to save this for labmda optimization
             if not((i == i_nn) and (j == j_nn)):
               for q in range(shpind[0]):
@@ -567,8 +605,9 @@ class NLPAR:
                   n2 += 1.0
                   d2 += (d0 - d1)**2
               nout[j,i,count] = n2
-              s0 = d2 / np.float32(n2 * 2.0)
+
               if d2 >= 1.e-3: #sometimes EDAX collects the same pattern twice
+                s0 = d2 / np.float32(n2 * 2.0)
                 if s0 < mind:
                   mind = s0
             dout[j,i,count] = d2 # want to save this for labmda optimization
@@ -576,12 +615,13 @@ class NLPAR:
             count += 1
 
         sigma[j,i] = np.sqrt(mind)
+        #if sigma[j,i] > 1e12:
+        #  print(sigma[j,i], dout[j,i,:], nout[i,j,:])
     return sigma,( dout, nout, dij)
 
   @staticmethod
-  @numba.jit(nopython=True,cache=True,fastmath=True,parallel=True)
+  @numba.jit(nopython=True,cache=True,fastmath=False,parallel=True)
   def nlpar_nb(data,lam, sr, dthresh, sigma, nrows,ncols,indices,saturation_protect=True):
-
     def getpairid(idx0, idx1):
       idx0_t = int(idx0)
       idx1_t = int(idx1)

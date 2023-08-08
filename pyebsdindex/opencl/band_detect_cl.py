@@ -91,7 +91,7 @@ class BandDetect(band_detect.BandDetect):
         tic1 = timer()
         nPatsChunk = chnk[1] - chnk[0]
         #rdnNorm, clparams, rdnNorm_gpu = self.calc_rdn(patterns[chnk[0]:chnk[1],:,:], clparams, use_gpu=self.CLOps[0])
-        rdnNorm, clparams = self.radon_fasterCL(patterns[chnk[0]:chnk[1],:,:], self.padding,
+        rdnNorm, clparams = self.radon_fasterCL(patterns[chnk[0]:chnk[1],:,:], padding=self.padding,
                                                                        fixArtifacts=False, background=self.backgroundsub,
                                                                        returnBuff=True, clparams=clparams)
 
@@ -104,7 +104,7 @@ class BandDetect(band_detect.BandDetect):
 
         rdntime += timer() - tic1
         tic1 = timer()
-        rdnConv, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True)
+        rdnConv, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True, separableKernel=True)
         rdnNorm.release()
         convtime += timer()-tic1
         tic1 = timer()
@@ -135,14 +135,15 @@ class BandDetect(band_detect.BandDetect):
           rdnConvarray = rdnConvarray[:,:,0:chnk[1]-chnk[0] ]
 
         rdnConv.release()
+        rdnConv = None
         blabeltime += timer() - tic1
 
       tottime = timer() - tic0
       # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
 
       #if clparams is not None:
-        #clparams.queue.finish()
-        #clparams.queue = None
+      #  clparams.queue.finish()
+      #  clparams.queue = None
 
       if verbose > 0:
         print('Radon Time:',rdntime)
@@ -151,7 +152,6 @@ class BandDetect(band_detect.BandDetect):
         print('Band Label Time:', blabeltime)
         print('Total Band Find Time:',tottime)
       if verbose > 1:
-        plt.clf()
 
         if len(rdnConvarray.shape) == 3:
           im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
@@ -167,23 +167,32 @@ class BandDetect(band_detect.BandDetect):
         im2show += 6
         im2show[0:rhoMaskTrim,:] = 0
         im2show[-rhoMaskTrim:,:] = 0
+
         im2show = np.fliplr(im2show)
-        plt.figure()
-        plt.imshow(im2show, cmap='gray', extent=[0, 180, -self.rhoMax, self.rhoMax],
-                   interpolation='none', zorder=1, aspect='auto')
+        fig = plt.figure(figsize=(12, 4))
+        subrdn = fig.add_subplot(121, xlim=(0, 180), ylim=(-self.rhoMax, self.rhoMax))
+        subrdn.imshow(
+            im2show,
+            cmap='gray',
+            extent=[0, 180, -self.rhoMax, self.rhoMax],
+            interpolation='none',
+            zorder=1,
+            aspect='auto'
+        )
         width = bandData['width'][-1, :]
         width /= width.min()
-        width *= 2
-        xplt = np.squeeze(180.0 - np.interp(bandData['aveloc'][-1,:,1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
-        yplt = np.squeeze( -1.0 * np.interp(bandData['aveloc'][-1,:,0], np.arange(self.radonPlan.nRho), self.radonPlan.rho))
+        width *= 2.0
+        xplt = np.squeeze(180.0 - np.interp(bandData['aveloc'][-1,:,1]+0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
+        yplt = np.squeeze( -1.0 * np.interp(bandData['aveloc'][-1,:,0]-0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
 
-        plt.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
+        subrdn.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
 
         for pt in range(self.nBands):
-          plt.annotate(str(pt + 1),np.squeeze([xplt[pt],yplt[pt]]), color='yellow')
-        plt.xlim(0,180)
-        plt.ylim(-self.rhoMax, self.rhoMax)
-
+          subrdn.annotate(str(pt + 1), np.squeeze([xplt[pt] + 4, yplt[pt]]), color='yellow')
+        #subrdn.xlim(0,180)
+        #subrdn.ylim(-self.rhoMax, self.rhoMax)
+        subpat = fig.add_subplot(122)
+        subpat.imshow(patterns[-1, :, :], cmap='gray')
 
     except Exception as e: # something went wrong - try the CPU
       print(e)
@@ -226,10 +235,7 @@ class BandDetect(band_detect.BandDetect):
 
     clvtypesize = 16 # this is the vector size to be used in the openCL implementation.
     nImCL = np.int32(clvtypesize * (np.int64(np.ceil(nIm/clvtypesize))))
-    # there is something very strange that happens if the number of images
-    # is a exact multiple of the max group size (typically 256)
-    mxGroupSz = gpu[gpu_id].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
-    #nImCL += np.int64(16 * (1 - np.int64(np.mod(nImCL, mxGroupSz ) > 0)))
+
     image_align = np.ones((shapeIm[1], shapeIm[2], nImCL), dtype = np.float32)
     image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()
     shpRdn = np.asarray( ((self.nRho+2*padding[0]), (self.nTheta+2*padding[1]), nImCL),dtype=np.uint64)
@@ -255,7 +261,7 @@ class BandDetect(band_detect.BandDetect):
       imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
       cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
 
-
+    cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(-1.0), 0, radon_gpu.size)
     prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
                   imstep, indxstep,
                  shpRdn[0], shpRdn[1],
@@ -263,7 +269,7 @@ class BandDetect(band_detect.BandDetect):
 
 
     if (fixArtifacts == True):
-       prg.radonFixArt(queue,(nImChunk,self.nRho),None,radon_gpu,
+       prg.radonFixArt(queue,(nImChunk,shpRdn[0]),None,radon_gpu,
                        shpRdn[0],shpRdn[1],padTheta)
 
 
@@ -353,13 +359,13 @@ class BandDetect(band_detect.BandDetect):
     # pad out the radon buffers
     prg.radonPadTheta(queue,(shp[2],shp[0],1),None,rdn_gpu,
                     np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[1]))
-    prg.radonPadRho(queue,(shp[2],shp[1],1),None,rdn_gpu,
-                      np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[0]))
+    prg.radonPadRho2(queue,(shp[2],shp[1],1),None,rdn_gpu,
+                      np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[0]+1))
     kern_gpu = None
     if separableKernel == False:
       # for now I will assume that the kernel(s) can fit in local memory on the GPU
       # also going to assume that there is only one kernel -- this will be something to fix at some point.
-      k0 = self.kernel[0,:,:]
+      k0 = np.array(self.kernel[0,:,:], dtype=np.float32)
       kshp = np.asarray(k0.shape, dtype=np.int32)
       pad = kshp/2
       kern_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0)
@@ -375,7 +381,7 @@ class BandDetect(band_detect.BandDetect):
 
       kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
       pad = kshp
-      k0x = np.require(self.kernel[0, np.int64(kshp[0] / 2), :], requirements=['C', 'A', 'W', 'O'])
+      k0x = np.require(self.kernel[0, np.int64(kshp[0] / 2), :], requirements=['C', 'A', 'W', 'O'], dtype=np.float32)
       k0x *= 1.0 / k0x.sum()
       k0x = (k0x[...,:]).reshape(1,kshp[1])
 
@@ -389,7 +395,7 @@ class BandDetect(band_detect.BandDetect):
                           np.int32(kshp[1]),np.int32(kshp[0]),np.int32(pad[1]),np.int32(pad[0]),tempConvbuff)
 
       kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
-      k0y = np.require(self.kernel[0, :, np.int32(kshp[1] / 2)], requirements=['C', 'A', 'W', 'O'])
+      k0y = np.require(self.kernel[0, :, np.int32(kshp[1] / 2)], requirements=['C', 'A', 'W', 'O'], dtype=np.float32)
       k0y *= 1.0 / k0y.sum()
       k0y = (k0y[...,:]).reshape(kshp[0],1)
       kshp = np.asarray(k0y.shape,dtype=np.int32)
@@ -485,7 +491,7 @@ class BandDetect(band_detect.BandDetect):
       # there is something very strange that happens if the number of images
       # is a exact multiple of the max group size (typically 256)
       mxGroupSz = gpu[gpu_id].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
-      nImCL += np.int(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
+      nImCL += np.int64(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
       radonCL = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
       radonCL[:,:,0:shp[2]] = radon
       rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radonCL)

@@ -29,9 +29,10 @@ from timeit import default_timer as timer
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
-from scipy.ndimage import gaussian_filter
-from scipy.ndimage import grey_dilation as scipy_grey_dilation
-import scipy.optimize as opt
+import scipy.ndimage as scipyndim #import gaussian_filter
+#from scipy.ndimage #import grey_dilation as scipy_grey_dilation
+#from scipy.ndimage #import median_filter
+import scipy.optimize as scipyopt
 
 from pyebsdindex import radon_fast
 
@@ -43,7 +44,7 @@ environ["NUMBA_CACHE_DIR"] = str(tempdir)
 RADEG = 180.0/np.pi
 
 
-class BandDetect:
+class BandDetect():
   def __init__(
     self,
     patterns=None,
@@ -78,7 +79,7 @@ class BandDetect:
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
                     ('pqmax', np.float32), ('width', np.float32), ('theta', np.float32), ('rho', np.float32),
-                    ('valid', np.int8)])
+                    ('valid', np.int8),('band_match_index', np.int32, (2))])
 
 
     if (patterns is None) and (patDim is None):
@@ -163,10 +164,10 @@ class BandDetect:
       ksz = ksz + ((ksz % 2) == 0)
       kernel = np.zeros(ksz, dtype=np.float32)
       kernel[(ksz[0]/2).astype(int),(ksz[1]/2).astype(int) ] = 1
-      kernel = -1.0*gaussian_filter(kernel, [self.rSigma, self.tSigma], order=[2,0])
+      kernel = -1.0*scipyndim.gaussian_filter(kernel, [self.rSigma, self.tSigma], order=[2,0])
       self.kernel = kernel.reshape((1,ksz[0], ksz[1]))
       #self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int64)
-      self.peakPad = np.array(np.around([3 * ksz[0], 4 * ksz[1]]), dtype=np.int64)
+      self.peakPad = np.array(np.around([2 * ksz[0], 2 * ksz[1]]), dtype=np.int64)
       self.peakPad += 1 - np.mod(self.peakPad, 2)  # make sure we have it as odd.
 
     self.padding = np.array([np.max( [self.peakPad[0], self.padding[0]] ), np.max([self.peakPad[1], self.padding[1]])])
@@ -216,21 +217,18 @@ class BandDetect:
       elif method.upper() == 'EVENSTRIDE':
         step = int(npats / nsample) # not great, but maybe good enough.
         stride = np.arange(0,npats, step, dypte = np.uint64)
-      pat1 = fileobj.read_data(convertToFloat=True,patStartCount=[stride[0], 1],returnArrayOnly=True)
+      pat1 = fileobj.read_data(convertToFloat=True,patStartCount=[stride[0], 1],returnArrayOnly=True)[0]
       for i in stride[1:]:
-        pat1 += fileobj.read_data(convertToFloat=True,patStartCount=[i, 1],returnArrayOnly=True)
+        pat1 += fileobj.read_data(convertToFloat=True,patStartCount=[i, 1],returnArrayOnly=True)[0]
       back = pat1 / float(len(stride))
       #pshape = pat1.shape
     # a bit of image processing.
     if back is not None:
-      #if sigma is None:
-       #sigma = 2.0 * float(pshape[-1]) / 80.0
-      #back[0,:,:] = gaussian_filter(back[0,:,:], sigma = sigma )
+      back = np.squeeze(back)
       back = self.backsub_fit(back)
-      #back -= np.mean(back)
     self.backgroundsub = back
 
-  def backsub_fit(self, back):
+  def backsub_fit(self, back, mask = None):
     # This function will fit a 2D gaussian on top of a plane to the averaged set of patterns (data) that is provided.
     # It will automatically use whatever mask is defined for valid data.
     # If the gaussian fit fails to converge, it will fall back to just using the mean set of patterns for the background
@@ -254,24 +252,26 @@ class BandDetect:
     x = (np.broadcast_to(x.reshape(1,nx), (ny, nx))).ravel()
     y = np.arange(ny, dtype=float)
     y = (np.broadcast_to(y, (nx, ny)).T).ravel()
-    # make a circular mask - even if not EDAX, this should work OK.
-    cx = (np.arange(nx) - nx*0.5)**2
-    cy = (np.arange(ny) - ny*0.5)**2
-    cmask = np.sqrt(np.broadcast_to(cx.reshape(1,nx), (ny, nx)) + np.broadcast_to(cy, (nx, ny)).T) < (ny*0.49)
-
+    if mask is None:
+      # make a circular mask - even if not EDAX, this should work OK.
+      cx = (np.arange(nx) - nx*0.5)**2
+      cy = (np.arange(ny) - ny*0.5)**2
+      cmask = np.sqrt(np.broadcast_to(cx.reshape(1,nx), (ny, nx)) + np.broadcast_to(cy, (nx, ny)).T) < (ny*0.49)
+    else:
+      cmask = mask
     # need to grab only the values that are in the mask.
     wh = np.nonzero(cmask.ravel())[0]
     xwh = x[wh]
     ywh = y[wh]
     xywh = np.vstack((xwh, ywh))
-    zwh = (back.ravel())[wh]
+    zwh = (scipyndim.median_filter(np.squeeze(back),3).ravel())[wh]
     whmx = np.unravel_index(back.argmax(), back.shape)
     minz = zwh.min()
     # initialize a guess for the parameters.
     # [gauss amplitude, max loc x, max loc y, sigx, sigy, const offset, slope x, slope y]
     p0 = [(zwh.max() - zwh.min())*0.1, whmx[1], whmx[0], nx/2.355, ny/2.355, minz, 0, 0]
     try:
-      popt, pcov = opt.curve_fit(fit_gauss, xywh, zwh, p0)
+      popt, pcov = scipyopt.curve_fit(fit_gauss, xywh, zwh, p0)
       backfit = (gaussian_surf(x, y, *popt)).reshape(ny, nx)
       #print(p0, popt)
     except RuntimeError:
@@ -302,6 +302,7 @@ class BandDetect:
     nPats = shape[0]
 
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
+    bandData['band_match_index'] = -100
     if chunksize < 0:
       nchunks = 1
       chunksize = nPats
@@ -344,7 +345,6 @@ class BandDetect:
       print('Band Label Time:', blabeltime)
       print('Total Band Find Time:',tottime)
     if verbose > 1:
-      plt.clf()
 
       if len(rdnConv.shape) == 3:
         im2show = rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
@@ -371,14 +371,14 @@ class BandDetect:
       width /= width.min()
       width *= 2
       xplt = np.squeeze(
-        180.0 - np.interp(bandData['aveloc'][-1, :, 1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
+        180.0 - np.interp(bandData['aveloc'][-1, :, 1]+0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
       yplt = np.squeeze(
-        -1.0 * np.interp(bandData['aveloc'][-1, :, 0], np.arange(self.radonPlan.nRho), self.radonPlan.rho))
+        -1.0 * np.interp(bandData['aveloc'][-1, :, 0]-0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
 
       plt.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
 
       for pt in range(self.nBands):
-        plt.annotate(str(pt + 1), np.squeeze([xplt[pt], yplt[pt]]), color='yellow')
+        plt.annotate(str(pt + 1), np.squeeze([xplt[pt]+4, yplt[pt]]), color='yellow')
       plt.xlim(0,180)
       plt.ylim(-self.rhoMax, self.rhoMax)
 
@@ -442,7 +442,7 @@ class BandDetect:
     rdnConv = np.zeros_like(radon)
 
     for i in range(shp[2]):
-      rdnConv[:,:,i] = -1.0 * gaussian_filter(np.squeeze(radon[:,:,i]),[self.rSigma,self.tSigma],order=[2,0])
+      rdnConv[:,:,i] = -1.0 * scipyndim.gaussian_filter(np.squeeze(radon[:,:,i]),[self.rSigma,self.tSigma],order=[2,0])
 
     #print(rdnConv.min(),rdnConv.max())
     mns = (rdnConv[self.padding[0]:shprdn[1]-self.padding[0],self.padding[1]:shprdn[1]-self.padding[1],:]).min(axis=0).min(axis=0)
@@ -458,7 +458,7 @@ class BandDetect:
     # find the local max
     lMaxK = (self.peakPad[0],self.peakPad[1],1)
 
-    lMaxRdn = scipy_grey_dilation(rdn,size=lMaxK)
+    lMaxRdn = scipyndim.grey_dilation(rdn,size=lMaxK)
     #lMaxRdn[:,:,0:self.peakPad[1]] = 0
     #lMaxRdn[:,:,-self.peakPad[1]:] = 0
     #location of the max is where the local max is equal to the original.
@@ -562,8 +562,12 @@ class BandDetect:
         det = (dxx * dyy - dxy * dxy)
         det = det if np.fabs(det) > 1e-12 else 1.0e-12
         det = 1.0/det
-        cnn = c - (dyy * dx - dxy * dy) * det
-        rnn = r - (dxx * dy - dxy * dx) * det
+        dc =  (dyy * dx - dxy * dy) * det
+        rc = (dxx * dy - dxy * dx) * det
+        dc = max(-1.0, dc) ; rc = max(-1.0, rc)
+        dc = min(1.0, dc) ;  rc = min(1.0, rc)
+        cnn = c - dc
+        rnn = r - rc
         bandData_aveloc[q,i,:] = np.array([rnn,cnn])
         bandData_valid[q,i] = 1
 

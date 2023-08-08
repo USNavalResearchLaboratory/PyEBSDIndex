@@ -20,18 +20,17 @@
 # Author: David Rowenhorst;
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
-"""Setup and handling of Hough indexing runs of EBSD patterns."""
+"""Setup and handling of Radon indexing runs of EBSD patterns."""
 
 from pyebsdindex import _ray_installed
 from pyebsdindex._ebsd_index_single import EBSDIndexer, index_pats
 
 if _ray_installed:
-    from pyebsdindex._ebsd_index_parallel import index_pats_distributed, IndexerRay
+    from pyebsdindex._ebsd_index_parallel import index_pats_distributed
 
 
 __all__ = [
     "EBSDIndexer",
-    "IndexerRay",
     "index_pats",
     "index_pats_distributed",
 ]

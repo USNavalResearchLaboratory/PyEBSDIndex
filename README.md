@@ -1,6 +1,6 @@
 # PyEBSDIndex
 
-Python based tool for Hough/Radon based EBSD orientation indexing.
+Python based tool for Radon based EBSD orientation indexing.
 
 [![Build status](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml/badge.svg)](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml)
 [![Documentation status](https://readthedocs.org/projects/pyebsdindex/badge/?version=latest)](https://pyebsdindex.readthedocs.io/en/latest/)

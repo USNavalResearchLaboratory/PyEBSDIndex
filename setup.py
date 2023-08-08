@@ -23,13 +23,14 @@ extra_feature_requirements = {
     "tests": [
         "coverage                       >= 5.0",
         "pytest                         >= 5.4",
-        "pytest-cov                     >= 2.8.1"
+        "pytest-cov                     >= 2.8.1",
     ],
     "gpu": [
         "pyopencl",
     ],
     "parallel": [
         "ray[default]                   >= 1.13",
+        "pydantic                       < 2",
     ]
 }
 # Create a development installation "dev" including "doc" and "tests"
@@ -60,6 +61,7 @@ setup(
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
         "License :: Other/Proprietary License",
@@ -72,7 +74,7 @@ setup(
         "EBSD",
         "electron backscatter diffraction",
         "HI",
-        "Hough indexing",
+        "Radon indexing",
         "NLPAR",
     ],
     zip_safe=True,
@@ -94,7 +96,6 @@ setup(
         "matplotlib",
         "numpy",
         "numba",
-        "pyswarms",
         "scipy",
     ],
     # Files to include when distributing package (see also MANIFEST.in)

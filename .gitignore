@@ -20,7 +20,7 @@ dist/
 *.code-workspace
 
 # Line coverage
-.coverage
+.coverage*
 
 # Sphinx
 doc/build

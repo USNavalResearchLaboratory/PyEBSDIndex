@@ -110,10 +110,11 @@ class Radon:
         indx_x = np.where(indx_x >= self.imDim[1], outofbounds, indx_x)
         indx1D = np.clip(indx_x+self.imDim[1]*n, 0, outofbounds)
         self.indexPlan[:, i, 0:self.imDim[0]] = indx1D
-      self.indexPlan.sort(axis = -1)
+    self.indexPlan.sort(axis = -1)
 
 
-  def radon_fast(self, imageIn, padding = np.array([0,0]), fixArtifacts = False, background = None):
+  def radon_fast(self, imageIn, padding = np.array([0,0]), fixArtifacts = False,
+                 background = None, background_method = 'SUBTRACT'):
     tic = timer()
     shapeIm = np.shape(imageIn)
     if imageIn.ndim == 2:
@@ -127,7 +128,10 @@ class Radon:
     if background is None:
       image = imageIn.reshape(-1)
     else:
-      image = imageIn - background
+      if str.upper(background_method) == 'DIVIDE':
+        image = imageIn / background
+      else:
+        image = imageIn - background
       image = image.reshape(-1)
 
     nPx = shapeIm[-1]*shapeIm[-2]
@@ -226,10 +230,6 @@ class Radon:
     nPats = bandData.shape[0]
     nBands = bandData.shape[1]
 
-    # This translation from the Radon to theta and rho assumes that the first pixel read
-    # in off the detector is in the bottom left corner. -- No longer the assumption --- see below.
-    # theta = self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1], dtype=np.int)]/RADEG
-    # rho = self.radonPlan.rho[np.array(bandData['aveloc'][:, :, 0], dtype=np.int)]
 
     # This translation from the Radon to theta and rho assumes that the first pixel read
     # in off the detector is in the top left corner.
@@ -268,7 +268,9 @@ class Radon:
 
 
     dimf = np.array(self.imDim, dtype=np.float32)
-    if ven in ['EDAX', 'OXFORD']:
+    if ven in ['EDAX']:
+      t *= np.array([dimf[1], dimf[0], -np.min(dimf[0:2])])
+    if ven in ['OXFORD']:
       t *= np.array([dimf[1], dimf[1], -dimf[1]])
     if ven == 'EMSOFT':
       t[:, 0] *= -1.0

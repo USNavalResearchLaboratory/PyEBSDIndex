@@ -20,7 +20,7 @@
 # Author: David Rowenhorst;
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
-"""Setup and handling of Hough indexing runs of EBSD patterns on a
+"""Setup and handling of Radon indexing runs of EBSD patterns on a
 single thread.
 """
 
@@ -29,11 +29,11 @@ from timeit import default_timer as timer
 import numpy as np
 import h5py
 
+from pyebsdindex import tripletvote as bandindexer  # use triplet voting as the default indexer.
+from pyebsdindex.tripletvote import BandIndexer
 from pyebsdindex import (
-    band_vote,
     ebsd_pattern,
     rotlib,
-    tripletlib,
     _pyopencl_installed,
 )
 
@@ -139,7 +139,7 @@ def index_pats(
         OpenCL parameters passed to :mod:`pyopencl` if the package is
         installed.
     verbose : int, optional
-        0 - no output (default), 1 - timings, 2 - timings and the Hough
+        0 - no output (default), 1 - timings, 2 - timings and the Radon
         transform of the first pattern with detected bands highlighted.
     chunksize : int, optional
         Default is 528.
@@ -160,7 +160,22 @@ def index_pats(
         (fit) and Number of Bands Matched (nmatch). There are some other
         metrics reported, but these are mostly for debugging purposes.
     bandData : numpy.ndarray
-        Band identification data from the Radon transform.
+        Band identification data from the Radon transform. Stored
+        as a structured numpy array, of dimensions [npoints, nbands].
+
+        With fields that include:
+            - id: band ID
+            - max: peak max intesensity (used to calculate pattern quality)
+            - maxloc: nearest integer location of the Radon peak
+            - avemax: nearest neighbor average of the max peak intensity
+            - aveloc: sub-pixel location of the Radon peak
+            - width: a metric of the band width
+            - theta: the theta value of the sub-pixel location on the Radon (lower-left origin)
+            - rho: the rho value of the sub-pixel location on the Radon (lower-left origin)
+            - valid: was the peak detected
+            - band_match_index: index for phase number and pole number that indexed to this band
+              (use :meth:`~EBSDIndexer.getmatchedpole`)
+
     indexer : EBSDIndexer
         EBSD indexer, returned if ``return_indexer_obj=True``.
     """
@@ -231,7 +246,7 @@ def index_pats(
 
 
 class EBSDIndexer:
-    """Setup of Hough indexing of EBSD patterns.
+    """Setup of Radon indexing of EBSD patterns.
 
     Parameters
     ----------
@@ -298,6 +313,7 @@ class EBSDIndexer:
         rhoMaskFrac=0.15,
         nBands=9,
         patDim=None,
+        nband_earlyexit=None,
         **kwargs
     ):
         """Create an EBSD indexer."""
@@ -310,7 +326,12 @@ class EBSDIndexer:
         self.phaselist = phaselist
         self.phaseLib = []
         for ph in self.phaselist:
-            self.phaseLib.append(band_vote.BandVote(tripletlib.triplib(libType=ph)))
+            if ph is None:
+                self.phaseLib.append(None)
+            if isinstance(ph, str):
+                self.phaseLib.append(bandindexer.addphase(libtype=ph))
+            if isinstance(ph, BandIndexer):
+                self.phaseLib.append(ph)
 
         self.vendor = "EDAX"
         if vendor is None:
@@ -350,6 +371,7 @@ class EBSDIndexer:
         elif patDim is not None:
             self.bandDetectPlan.band_detect_setup(patDim=patDim)
 
+        self.nband_earlyexit = nband_earlyexit
         self.dataTemplate = np.dtype(
             [
                 ("quat", np.float64, 4),
@@ -359,7 +381,7 @@ class EBSDIndexer:
                 ("phase", np.int32),
                 ("fit", np.float32),
                 ("nmatch", np.int32),
-                ("matchattempts", np.int32, 2),
+                ("matchattempts", np.int32, 4),
                 ("totvotes", np.int32),
             ]
         )
@@ -389,10 +411,11 @@ class EBSDIndexer:
         patsin=None,
         patstart=0,
         npats=-1,
+        xyloc=None,
         clparams=None,
         PC=None,
         verbose=0,
-        chunksize=528,
+        chunksize=512,
     ):
         """Index EBSD patterns.
 
@@ -418,39 +441,138 @@ class EBSDIndexer:
             must be four numbers, the final number being the pixel size.
         verbose : int, optional
             0 - no output (default), 1 - timings, 2 - timings and the
-            Hough transform of the first pattern with detected bands
+            Radon transform of the first pattern with detected bands
             highlighted.
         chunksize : int, optional
-            Default is 528.
+            Default is 512.
 
         Returns
         -------
         indxData : numpy.ndarray
-            Complex numpy array (or array of structured data), that is
-            [nphases + 1, npoints]. The data is stored for each phase
-            used in indexing and the `indxData[-1]` layer uses the best
-            guess on which is the most likely phase, based on the fit,
-            and number of bands matched for each phase. Each data entry
-            contains the orientation expressed as a quaternion (quat)
-            (using `self.vendor`'s convention), Pattern Quality (pq),
-            Confidence Metric (cm), Phase ID (phase), Fit (fit) and
-            Number of Bands Matched (nmatch). There are some other
-            metrics reported, but these are mostly for debugging
-            purposes.
+            Structured numpy array, that is
+            [nphases + 1, npoints]. The data is stored for each phase used
+            in indexing and the ``indxData[-1]`` layer uses the best guess
+            on which is the most likely phase, based on the fit, and number
+            of bands matched for each phase. Each data entry contains the
+            orientation expressed as a quaternion ('quat') (using the
+            convention of ``vendor`` or :attr:`indexer.vendor`), Pattern
+            Quality ('pq'), Confidence Metric ('cm'), Phase ID ('phase'), Fit
+            ('fit') and Number of Bands Matched ('nmatch'). There are some other
+            metrics reported, but these are mostly for debugging purposes.
+            The number and order of fields are not guaranteed to remain the same, but
+            fields listed here are stable.
+            (phase) parameter will be set to -1 for any no-solution point.
         bandData : numpy.ndarray
-            Band identification data from the Radon transform.
+            Band identification data from the Radon transform. Stored
+            as a structured numpy array, of dimensions [npoints, nbands].
+
+            With fields that include:
+                - id: band ID
+                - max: peak max intesensity (used to calculate pattern quality)
+                - maxloc: nearest integer location of the Radon peak
+                - avemax: nearest neighbor average of the max peak intensity
+                - aveloc: sub-pixel location of the Radon peak
+                - width: a metric of the band width
+                - theta: the theta value of the sub-pixel location on the Radon (lower-left origin)
+                - rho: the rho value of the sub-pixel location on the Radon (lower-left origin)
+                - valid: was the peak detected
+                - band_match_index: index for phase number and pole number that indexed to this band
+                  (use :meth:`~EBSDIndexer.getmatchedpole`)
+
         patstart : int
             Starting index of the indexed patterns.
         npats : int
             Number of patterns indexed. This and `patstart` are useful
             for the distributed indexing procedures.
         """
+
+        pats, xyloc = self._getpats(patsin=patsin, patstart=patstart, npats=npats, xyloc=xyloc)
+        # just a check that the band_detect is ready for this size pattern.
+        if self.bandDetectPlan.patDim is None:
+            self.bandDetectPlan.band_detect_setup(patterns=pats)
+
+        npoints = pats.shape[0]
+        if npats == -1:
+            npats = npoints
+
+        banddata, bandnorm = self._detectbands(pats, PC, xyloc=xyloc, clparams=clparams, verbose=verbose,
+                                               chunksize=chunksize)
+        tic = timer()
+
+        indxData, banddata = self._indexbandsphase(banddata, bandnorm, verbose=verbose)
+
+        if verbose > 0:
+            print("Band Vote Time: ", timer() - tic)
+
+        return indxData, banddata, patstart, npats
+
+    def getmatchedpole(self, banddata, float_out=False):
+        """Return the pole from the library that was matched to the
+        detected band.
+
+        Parameters
+        ----------
+        banddata : numpy.ndarray
+            Output structured band data array from
+            :meth:`~pyebsdindex.ebsd_index.index_pats` or
+            :meth:`~pyebsdindex.ebsd_index.index_pats_distributed`.
+        float_out : bool, optional
+            Default (False) is to return an array of ints with Miller
+            indices. If set to True, then floats, with unit length, will
+            be returned in the sample Cartesian reference frame.
+            (Length is only valid for cubic systems).
+
+        Returns
+        -------
+        numpy.ndarray
+            The default is an array [npoints, nbands, 3] that contains
+            the Miller indices (as ints) of the matching pole (note that
+            hexagonal will also return only three-index notation). If
+            the float_out is set to True, then the output will be
+            floating point vectors of length one, within the sample
+            Cartesian reference frame.
+        """
+        nphases = len(self.phaseLib)
+
+        bnddat = banddata
+        shpbdndat = bnddat.shape
+        if len(shpbdndat) == 0:
+            bnddat = np.array(bnddat).reshape(1)
+        shpbdndat = bnddat.shape
+        nbands = shpbdndat[-1]
+        if len(shpbdndat) == 1:
+            bnddat = bnddat.reshape(1, nbands)
+        shpbdndat = bnddat.shape
+        npoints = shpbdndat[0]
+
+        polesout = np.zeros((npoints,nbands,3))
+        if float_out is False:
+            polekey = 'poles'
+        else:
+            polekey = 'polesCart'
+
+        for ph in range(nphases):
+            wh = np.nonzero(bnddat['band_match_index'][:,0,0] == ph)[0]
+            if len(wh) == 0:
+                continue
+            pindex = bnddat['band_match_index'][wh,:, 1]
+            poles = self.phaseLib[ph].completelib[polekey][pindex,:]
+            polesout[wh, :, :] = poles
+
+        if float_out is False:
+            polesout = np.round(polesout).astype(int)
+
+        return polesout
+
+    def _getpats(self, patsin=None, patstart=0, npats=-1, xyloc=None):
         if patsin is None:
-            pats = self.fID.read_data(
+            pats, xylocin = self.fID.read_data(
                 returnArrayOnly=True,
                 patStartCount=[patstart, npats],
                 convertToFloat=True,
             )
+            if xyloc is None:
+                xyloc = xylocin
         else:
             pshape = patsin.shape
             if len(pshape) == 2:
@@ -464,46 +586,66 @@ class EBSDIndexer:
             else:
                 if np.all((np.array(pshape[1:3]) - self.bandDetectPlan.patDim) == 0):
                     self.bandDetectPlan.band_detect_setup(patDim=pshape[1:3])
+        return pats, xyloc
 
-        if self.bandDetectPlan.patDim is None:
-            self.bandDetectPlan.band_detect_setup(patterns=pats)
-
-        npoints = pats.shape[0]
-        if npats == -1:
-            npats = npoints
-
-        bandData = self.bandDetectPlan.find_bands(
+    def _detectbands(self, pats, PC, xyloc=None, clparams=None, verbose=0, chunksize=528):
+        banddata = self.bandDetectPlan.find_bands(
             pats, clparams=clparams, verbose=verbose, chunksize=chunksize
         )
-        shpBandDat = bandData.shape
+        #  shpBandDat = banddata.shape
         if PC is None:
             PC_0 = self.PC
         else:
             PC_0 = PC
-        bandNorm = self.bandDetectPlan.radonPlan.radon2pole(
-            bandData, PC=PC_0, vendor=self.vendor
+        bandnorm = self.bandDetectPlan.radonPlan.radon2pole(
+            banddata, PC=PC_0, vendor=self.vendor
         )
+        return banddata, bandnorm
 
-        # Return bandNorm, patStart, patEnd
-        tic = timer()
+    def _indexbandsphase(self, banddata, bandnorm, verbose=0):
+
+#        rhomax = 1.0e12
+        rhomax = self.bandDetectPlan.rhoMax * (1-self.bandDetectPlan.rhoMaskFrac)
+        shpBandDat = banddata.shape
+        npoints = int(banddata.size/(shpBandDat[-1])+0.1)
         nPhases = len(self.phaseLib)
         q = np.zeros((nPhases, npoints, 4))
         indxData = np.zeros((nPhases + 1, npoints), dtype=self.dataTemplate)
+        bandmatchindex = np.zeros((nPhases, npoints,shpBandDat[-1],2), dtype=np.int32)-100
+        banddataout = banddata.copy()
 
         indxData["phase"] = -1
         indxData["fit"] = 180.0
         indxData["totvotes"] = 0
-        earlyexit = max(7, shpBandDat[1])
+        if self.phaseLib[0] is None:
+            return indxData, banddata
+
+        if self.nband_earlyexit is None:
+            earlyexit = -1
+            for ph in self.phaselist:
+                if hasattr(ph, 'nband_earlyexit'):
+                    earlyexit = max(earlyexit, ph.nband_earlyexit)
+            if earlyexit < 0:
+                earlyexit = shpBandDat[1]  # default to all the poles.
+            self.nband_earlyexit = earlyexit
+        else:
+            earlyexit = self.nband_earlyexit
+
         for i in range(npoints):
-            bandNorm1 = bandNorm[i, :, :]
-            bDat1 = bandData[i, :]
+            bandNorm1 = bandnorm[i, :, :]
+            bDat1 = banddata[i, :]
             whgood = np.nonzero(bDat1["max"] > -1.0e6)[0]
             if whgood.size >= 3:
                 bDat1 = bDat1[whgood]
                 bandNorm1 = bandNorm1[whgood, :]
                 indxData["pq"][0:nPhases, i] = np.sum(bDat1["max"], axis=0)
-
+                adj_intensity = (-1*np.abs(bDat1["rho"]) * 0.5 / rhomax + 1) * bDat1["max"]
+                #adj_intensity = bDat1["avemax"]
+                #print(bDat1["max"])
+                #print(adj_intensity)
                 for j in range(len(self.phaseLib)):
+                    bandmatchindex[j,i, :, 0] = j
+
                     (
                         avequat,
                         fit,
@@ -512,8 +654,8 @@ class EBSDIndexer:
                         nMatch,
                         matchAttempts,
                         totvotes,
-                    ) = self.phaseLib[j].tripvote(
-                        bandNorm1, band_intensity=bDat1["avemax"], verbose=verbose,
+                    ) = self.phaseLib[j].bandindex(
+                        bandNorm1, band_intensity=adj_intensity, band_widths=bDat1["width"], verbose=verbose,
                     )
                     # avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].pairVoteOrientation(bandNorm1,goNumba=True)
                     if nMatch >= 3:
@@ -524,32 +666,34 @@ class EBSDIndexer:
                         indxData["nmatch"][j, i] = nMatch
                         indxData["matchattempts"][j, i] = matchAttempts
                         indxData["totvotes"][j, i] = totvotes
+                        bandmatchindex[j,i, whgood, 1] = bandmatch
+
                     if nMatch >= earlyexit:
                         break
 
-        qref2detect = self._refframe2detector()
+        qref2detect = self._detector2refframe()
         q = q.reshape(nPhases * npoints, 4)
         q = rotlib.quat_multiply(q, qref2detect)
         q = rotlib.quatnorm(q)
         q = q.reshape(nPhases, npoints, 4)
         indxData["quat"][0:nPhases, :, :] = q
+        indxData[-1, :] = indxData[0, :]
+        banddataout['band_match_index'][:,:,:] = bandmatchindex[0,:,:,:].squeeze()
         if nPhases > 1:
-            for j in range(nPhases - 1):
-                indxData[-1, :] = np.where(
-                    (indxData[j, :]["cm"] * indxData[j, :]["nmatch"])
-                    > (indxData[j + 1, :]["cm"] * indxData[j + 1, :]["nmatch"]),
-                    indxData[j, :],
-                    indxData[j + 1, :],
-                )
-        else:
-            indxData[-1, :] = indxData[0, :]
+            for j in range(1, nPhases):
+                # indxData[-1, :] = np.where(
+                #    (indxData[j, :]["cm"] * indxData[j, :]["nmatch"])
+                #    > (indxData[j + 1, :]["cm"] * indxData[j + 1, :]["nmatch"]),
+                #    indxData[j, :],
+                #    indxData[j + 1, :],
+                phasetest = ((3.0 - indxData[j, :]["fit"]) * indxData[j, :]["nmatch"]) \
+                            > ((3.0 - indxData[-1, :]["fit"]) * indxData[-1, :]["nmatch"])
+                whbetter = np.nonzero(phasetest)
+                indxData[-1, whbetter] = indxData[j, whbetter]
+                banddataout['band_match_index'][whbetter,:] =  bandmatchindex[j,whbetter,:,:].squeeze()
+        return indxData, banddataout
 
-        if verbose > 0:
-            print("Band Vote Time: ", timer() - tic)
-
-        return indxData, bandData, patstart, npats
-
-    def _refframe2detector(self):
+    def _detector2refframe(self):
         ven = str.upper(self.vendor)
         if ven in ["EDAX", "EMSOFT", "KIKUCHIPY"]:
             q0 = np.array([np.sqrt(2.0) * 0.5, 0.0, 0.0, -1.0 * np.sqrt(2.0) * 0.5])

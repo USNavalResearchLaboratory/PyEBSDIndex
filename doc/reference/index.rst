@@ -32,3 +32,4 @@ Functionality is inteded to be imported like this:
     ebsd_index
     nlpar
     pcopt
+    tripletvote

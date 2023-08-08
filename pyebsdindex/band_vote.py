@@ -43,7 +43,7 @@ class BandVote:
   def __init__(self, tripLib, angTol=3.0, high_fidelity=True):
     self.tripLib = tripLib
     self.phase_name = self.tripLib.phaseName
-    self.phase_sym = self.tripLib.symmetry_pg
+    self.phase_sym = self.tripLib.pointgroup
     self.lattice_param = self.tripLib.latticeParameter
     self.angTol = angTol
     self.n_band_early_exit = 8
@@ -60,7 +60,7 @@ class BandVote:
 
   def tripvote(self, band_norms, band_intensity = None, goNumba = True, verbose=0):
     tic0 = timer()
-    nfam = self.tripLib.family.shape[0]
+    nfam = self.tripLib.polefamilies.shape[0]
     bandnorms = np.squeeze(band_norms)
     n_bands = np.int64(bandnorms.size/3)
     if band_intensity is None:
@@ -143,13 +143,13 @@ class BandVote:
     sztable = angTable.shape
     famIndx = self.tripLib.completelib['famIndex']
     nFam = self.tripLib.completelib['nFamily']
-    poles = self.tripLib.completelib['polesCart']
+    polesCart = self.tripLib.completelib['polesCart']
     angTol = self.angTol
     n_band_early = np.int64(self.n_band_early_exit)
 
     # this will check the vote, and return the exact band matching to specific poles of the best fitting solution.
     fit, polematch, nMatch, whGood, ij, R, fitb = \
-      self.band_index_nb(poles, bandRank_arg, bandFam,  famIndx, nFam, angTable, bandnorms, angTol, n_band_early)
+      self.band_index_nb(polesCart, bandRank_arg, bandFam, famIndx, nFam, angTable, bandnorms, angTol, n_band_early)
 
     if verbose > 2:
       print('band index: ',timer() - tic)
@@ -163,7 +163,7 @@ class BandVote:
         whgood6 = whGood[srt[0:np.min([8, whGood.shape[0]])]]
 
         weights6 = band_intensity[whgood6]
-        pflt6 = (np.asarray(poles[polematch[whgood6], :], dtype=np.float64))
+        pflt6 = (np.asarray(polesCart[polematch[whgood6], :], dtype=np.float64))
         bndnorm6 = (np.asarray(bandnorms[whgood6, :], dtype=np.float64))
 
         avequat, fit = self.refine_orientation_quest(bndnorm6, pflt6 , weights=weights6)
@@ -279,7 +279,7 @@ class BandVote:
     #print('fitting: ',timer() - tic)
     return avequat, fit
 
-  def refine_orientation_quest(self,bandnorms, polematch, weights = None):
+  def refine_orientation_quest(self, bandnorms, polecartmatch, weights = None):
     tic = timer()
 
 
@@ -288,10 +288,10 @@ class BandVote:
     weightsn = np.asarray(weights, dtype=np.float64)
     weightsn /= np.sum(weightsn)
     #print(weightsn)
-    pflt = np.asarray(polematch, dtype=np.float64)
+    pflt = np.asarray(polecartmatch, dtype=np.float64)
     bndnorm = np.asarray(bandnorms, dtype=np.float64)
 
-    avequat, fit = self.orientation_quest(pflt, bndnorm, weightsn)
+    avequat, fit = self.orientation_quest_nb(pflt, bndnorm, weightsn)
 
     return avequat, fit
 
@@ -373,7 +373,7 @@ class BandVote:
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
-  def band_index_nb(poles, bandRank_arg, familyLabel,  famIndx, nFam, angTable, bandnorms, angTol, n_band_early):
+  def band_index_nb(polesCart, bandRank_arg, familyLabel, famIndx, nFam, angTable, bandnorms, angTol, n_band_early):
     eps = np.float32(1.0e-12)
     nBnds = bandnorms.shape[0]
 
@@ -384,7 +384,7 @@ class BandVote:
     Rout = np.zeros((1,3,3), dtype=np.float32)
     #Rout[0,0,0] = 1.0; Rout[0,1,1] = 1.0; Rout[0,2,2] = 1.0
     polematch_out = np.zeros((nBnds),dtype=np.int64) - 1
-    pflt = np.asarray(poles, dtype=np.float32)
+    pflt = np.asarray(polesCart, dtype=np.float32)
     bndnorm = np.transpose(np.asarray(bandnorms, dtype=np.float32))
 
     fit = np.float32(360.0)
@@ -426,7 +426,7 @@ class BandVote:
           continue
 
         wh01 += famIndx[f1]
-        p0 = poles[famIndx[f0],:]
+        p0 = polesCart[famIndx[f0], :]
 
         n01 = wh01.size
         v0v1c = np.cross(v0,v1)
@@ -450,7 +450,7 @@ class BandVote:
         score = -1.0
 
         for i in range(n01):
-          p1 = poles[wh01[i],:]
+          p1 = polesCart[wh01[i], :]
           ntemp = np.linalg.norm(p1) + 1.0e-35
           p1 = p1 / ntemp
           p0p1c = np.cross(p0,p1)
@@ -690,12 +690,10 @@ class BandVote:
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
-  def orientation_quest(poles, bandnorms, weights):
+  def orientation_quest_nb(polescart, bandnorms, weights):
     # this uses the Quaternion Estimator AKA quest algorithm.
 
-    #pflt = (np.asarray(poles[polematch[whGood], :], dtype=np.float32))
-    #bndnorm = (np.asarray(bandnorms[whGood, :], dtype=np.float32))
-    pflt = np.asarray(poles, dtype=np.float64)
+    pflt = np.asarray(polescart, dtype=np.float64)
     bndnorm = np.asarray(bandnorms, dtype=np.float64)
     npoles = pflt.shape[0]
     wn = (np.asarray(weights, dtype=np.float64)).reshape(npoles, 1)
@@ -750,7 +748,7 @@ class BandVote:
 
   def pairVoteOrientation(self,bandnormsIN,goNumba=True):
     tic0 = timer()
-    nfam = self.tripLib.family.shape[0]
+    nfam = self.tripLib.polefamilies.shape[0]
     bandnorms = np.squeeze(bandnormsIN)
     n_bands = np.int64(bandnorms.size / 3)
 
