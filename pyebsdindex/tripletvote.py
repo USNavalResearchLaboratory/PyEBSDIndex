@@ -189,7 +189,6 @@ class BandIndexer():
     if latticeparameter is not None:
       self.setlatticeparameter(latticeparameter)
 
-
     if spacegroup is not None:
       self.setspacegroup(spacegroup)
 
@@ -213,7 +212,27 @@ class BandIndexer():
     self.qsymops = crystal_sym.laueid2symops(self.lauecode)
 
   def setpolefamilies(self, reflectors):
-    self.polefamilies = np.array(reflectors)
+    # check if any of the poles are length 0
+    poles = np.atleast_2d(np.array(reflectors)).astype(float)
+    mx = np.max(np.abs(poles), axis=1)
+    wh = np.nonzero(mx > 1e-6)[0]
+    if wh.size == 0:
+      return
+    poles = poles[wh, :]
+
+    # check for inversion redundancy
+    npoles = poles / (np.sqrt((poles ** 2).sum(-1))[..., np.newaxis])
+    npoles = np.atleast_2d(npoles)
+    keep = np.ones(npoles.shape[0], dtype = int)
+    dot = np.abs(npoles.dot(npoles.T))
+    for i in range(npoles.shape[0]):
+      wh = np.nonzero(dot[i, i+1:] > 0.999)[0]
+      if len(wh) > 0:
+        keep[i+1+wh] = 0
+
+    whk = np.nonzero(keep)
+    poles = poles[whk,:]
+    self.polefamilies = np.rint(poles * (1.+ 1e-6)).astype(int)
 
   # def build_fcc(self):
   #   if self.phaseName is None:
@@ -332,7 +351,7 @@ class BandIndexer():
         ang = np.clip(ang, -1.0, 1.0)
         #sign = (ang >= 0).astype(np.float32) - (ang < 0).astype(np.float32)
         #sign = np.atleast_1d(sign)
-        ang = np.round(np.arccos(ang)*RADEG*100).astype(np.int32) # get the unique angles between the input
+        ang = np.round(np.arccos(np.abs(ang))*RADEG*100).astype(np.int32) # get the unique angles between the input
         ang = np.atleast_1d(ang)
         # pole, and the family poles. Angles within 0.01 deg are taken as the same.
         unqang, argunq = np.unique(ang, return_index=True)
