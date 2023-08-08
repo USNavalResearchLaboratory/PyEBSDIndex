@@ -82,8 +82,10 @@ class TestAddPhase:
         assert phase.spacegroup == 1
         assert np.allclose(phase.latticeparameter, [2, 3, 4, 70, 100, 120])
         assert phase.nband_earlyexit == 5
-        assert np.allclose(phase.polefamilies, hkl)
+        assert phase.npolefamilies == hkl.shape[0] // 2
+        for hkl_i in phase.polefamilies:
+            assert hkl_i in hkl
 
         angles = phase.angpairs["angles"]
-        assert angles.size == 312
+        assert angles.size == 78
         assert np.unique(angles).size == 77
