@@ -332,7 +332,7 @@ class BandIndexer():
         ang = np.clip(ang, -1.0, 1.0)
         #sign = (ang >= 0).astype(np.float32) - (ang < 0).astype(np.float32)
         #sign = np.atleast_1d(sign)
-        ang = np.round(np.arccos(ang)*RADEG*100).astype(np.int32) # get the unique angles between the input
+        ang = np.round(np.arccos(np.abs(ang))*RADEG*100).astype(np.int32) # get the unique angles between the input
         ang = np.atleast_1d(ang)
         # pole, and the family poles. Angles within 0.01 deg are taken as the same.
         unqang, argunq = np.unique(ang, return_index=True)
