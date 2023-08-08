@@ -220,8 +220,8 @@ def optimize_pso(
         optimization is run for each individual pattern, and an array of
         PC values is returned.
     search_limit : float, optional
-        Default is 0.02 for all PC values, and sets the +/- limit for
-        the optimization search.
+        Default is 0.2 for all PC values, and sets the +/- limit for the
+        optimization search.
     nswarmparticles : int, optional
         Number of particles in a swarm. Default is 30.
     pswarmpar : dict, optional
