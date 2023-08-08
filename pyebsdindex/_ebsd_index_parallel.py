@@ -29,7 +29,6 @@ import os
 import platform
 import logging
 import sys
-import time
 from timeit import default_timer as timer
 
 import numpy as np
@@ -47,7 +46,8 @@ else:
 RAYIPADDRESS = '127.0.0.1'
 OSPLATFORM  = platform.system()
 if OSPLATFORM  == 'Darwin':
-    RAYIPADDRESS = '0.0.0.0' # the localhost address does not work on macOS when on a VPN
+    RAYIPADDRESS = '0.0.0.0'  # the localhost address does not work on macOS when on a VPN
+
 
 def index_pats_distributed(
     patsin=None,
@@ -72,7 +72,7 @@ def index_pats_distributed(
     ebsd_indexer_obj=None,
     keep_log=False,
     gpu_id=None,
-    verbose = 1
+    verbose=0
 ):
     """Index EBSD patterns in parallel.
 
@@ -130,7 +130,8 @@ def index_pats_distributed(
         Number of patterns to index. Default is ``-1``, which will
         index up to the final pattern in ``patsin``.
     chunksize : int, optional
-        If not set. we will make a guess based on the resources available.
+        If not set, we will make a guess based on the resources
+        available.
     ncpu : int, optional
         Number of CPUs to use. Default value is ``-1``, meaning all
         available CPUs will be used.
@@ -144,6 +145,9 @@ def index_pats_distributed(
         Whether to keep the log. Default is ``False``.
     gpu_id : int, optional
         ID of GPU to use if :mod:`pyopencl` is installed.
+    verbose : int, optional
+        0 - no output (default), 1 - timings, 2 - timings and the Radon
+        transform of the first pattern with detected bands highlighted.
 
     Returns
     -------
@@ -164,25 +168,27 @@ def index_pats_distributed(
     bandData : numpy.ndarray
         Band identification data from the Radon transform. Stored
         as a structured numpy array, of dimensions [npoints, nbands].
+
         With fields that include:
-                    band ID ('id'), 
-                    peak max intesensity [used to calculate pattern quality] ('max')
-                    nearest integer location of the Radon peak ('maxloc'),
-                    nearest neighbor average of the max peak intensity('avemax'), 
-                    sub-pixel location of the Radon peak ('aveloc'),
-                    a metric of the band width ('width'), 
-                    the theta value of the sub-pixel location on the Radon [lower-left origin] ('theta'), 
-                    the rho value of the sub-pixel location on the Radon [lower-left origin]('rho'),
-                    was the peak detected ('valid'),
-                    index for phase number and pole number that indexed to this band('band_match_index')
-                    [use the EBSDIndexer method indexer.getmatchedpole(banddata)]
+            - id: band ID
+            - max: peak max intesensity (used to calculate pattern quality)
+            - maxloc: nearest integer location of the Radon peak
+            - avemax: nearest neighbor average of the max peak intensity
+            - aveloc: sub-pixel location of the Radon peak
+            - width: a metric of the band width
+            - theta: the theta value of the sub-pixel location on the Radon (lower-left origin)
+            - rho: the rho value of the sub-pixel location on the Radon (lower-left origin)
+            - valid: was the peak detected
+            - band_match_index: index for phase number and pole number that indexed to this band
+              (use :meth:`~EBSDIndexer.getmatchedpole`)
+
     indexer : EBSDIndexer
         EBSD indexer, returned if ``return_indexer_obj=True``.
 
     Notes
     -----
-    Requires :mod:`ray[default]`. See the :doc:`installation guide
-    </user/installation>` for details.
+    Requires the ``ray[default]`` package. See the :doc:`installation
+    guide </user/installation>` for details.
     """
     starttime = timer()
     pats = None
@@ -613,6 +619,7 @@ def index_pats_distributed(
     else:
         return dataout, banddataout
 
+
 def __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam):
 
 
@@ -745,6 +752,8 @@ class GPUWorker:
         except:
             gpujob.rate = None
             return "Error", (None, None, gpujob)
+
+
 @ray.remote(num_cpus=1, num_gpus=0)
 class CPUWorker:
     def __init__(self, actorid=0):
@@ -766,6 +775,8 @@ class CPUWorker:
             print(e)
             cpujob.rate = None
             return "Error", (None,None, cpujob)
+
+
 class CPUGPUJob:
     def __init__(self,jobid, pstart, pend, extime=0.0):
         self.jobid = jobid

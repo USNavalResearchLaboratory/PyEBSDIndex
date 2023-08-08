@@ -28,7 +28,6 @@ import scipy.optimize as opt
 from timeit import default_timer as timer
 
 
-
 __all__ = [
     "optimize",
     "optimize_pso",
@@ -187,8 +186,17 @@ def optimize(pats, indexer, PC0=None, batch=False):
     return PCoutRet
 
 
-def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
-                 nswarmparticles=30, pswarmpar=None, niter=50, verbose=1):
+def optimize_pso(
+    pats,
+    indexer,
+    PC0=None,
+    batch=False,
+    search_limit=0.2,
+    nswarmparticles=30,
+    pswarmpar=None,
+    niter=50,
+    verbose=1
+):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
     of the :attr:`indexer.vendor` with particle swarms.
 
@@ -212,17 +220,23 @@ def optimize_pso(pats, indexer, PC0=None, batch=False, search_limit = 0.2,
         optimization is run for each individual pattern, and an array of
         PC values is returned.
     search_limit : float, optional
-        Default is 0.05 for all PC values, and sets the +/- limit for the optimization search.
+        Default is 0.2 for all PC values, and sets the +/- limit for the
+        optimization search.
+    nswarmparticles : int, optional
+        Number of particles in a swarm. Default is 30.
+    pswarmpar : dict, optional
+        Particle swarm parameters "c1", "c2", and "w" with defaults 3.5,
+        3.5, and 0.8, respectively.
+    niter : int, optional
+        Number of iterations. Default is 50.
+    verbose : int, optional
+        Whether to print the parameters and progress of the
+        optimization (>= 1) or not (< 1). Default is to print.
 
     Returns
     -------
     numpy.ndarray
         Optimized PC.
-
-    Notes
-    -----
-    :mod:`pyswarms` particle swarm algorithm is used with 50 particles,
-    and parameters c1 = 2.05, c2 = 2.05 and w = 0.8.
     """
     banddat = indexer.bandDetectPlan.find_bands(pats)
     npoints, nbands = banddat.shape[:2]
@@ -515,7 +529,7 @@ class PSOOpt():
 
         with multiprocessing.Pool(min(multiprocessing.cpu_count(), self.n_particles)) as pool:
             if verbose >= 1:
-                print('n_particle:', self.n_particles, 'c1:', self.c1, 'c2:', self.c2, 'w:', self.w )
+                print('n_particles:', self.n_particles, 'c1:', self.c1, 'c2:', self.c2, 'w:', self.w )
 
             self.niter = niter
             for iter in range(niter):

@@ -23,7 +23,7 @@ extra_feature_requirements = {
     "tests": [
         "coverage                       >= 5.0",
         "pytest                         >= 5.4",
-        "pytest-cov                     >= 2.8.1"
+        "pytest-cov                     >= 2.8.1",
     ],
     "gpu": [
         "pyopencl",
@@ -61,6 +61,7 @@ setup(
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
         "License :: Other/Proprietary License",
