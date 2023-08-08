@@ -7,7 +7,7 @@ __credits__ = [
 ]
 __description__ = "Python based tool for Hough/Radon based EBSD indexing"
 __name__ = "pyebsdindex"
-__version__ = "0.2.dev0"
+__version__ = "0.2.dev1"
 
 
 # Try to import only once
