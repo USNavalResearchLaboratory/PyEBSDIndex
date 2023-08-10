@@ -452,9 +452,6 @@ def index_pats_distributed(
 
 
     while ncpudone < njobs:
-        #for i in range(ngpuwrker):
-
-
 
         # initiate the CPU workers.
         #print(len(gpuworkers), len(gputask))
@@ -471,7 +468,7 @@ def index_pats_distributed(
         #print(len(cpuworkers))
 
 
-
+        # check if GPU is working
         if ngpudone < njobs: # check if gpu is done
             donewrker, busy = ray.wait(gputask,num_returns = len(gputask),  timeout=0.01)
             #if len(wrker) > 0:  # trying to catch a hung worker.  Rare, but it happens
@@ -509,6 +506,7 @@ def index_pats_distributed(
                             ngpusubmit += 1
                         else: # no more gpu tasks to submit
                             #del gpuworkers[jid]
+                            ray.kill(gpuworkers[jid])
                             del gpuworkers[jid]
                             del gputask[jid]
                             del gtaskindex[jid]
@@ -578,12 +576,13 @@ def index_pats_distributed(
                         #time.sleep(0.001)
                     if message != 'Error':
                         if ncpudone == njobs:
-                            cpuworkers[jid] = None
-                            cputask[jid] = None
-                            ctaskindex[jid] = None
-                            #del cpuworkers[jid]
-                            #del cputask[jid]
-                            #del ctaskindex[jid]
+                            #cpuworkers[jid] = None
+                            #cputask[jid] = None
+                            #ctaskindex[jid] = None
+                            ray.kill(cpuworkers[jid])
+                            del cpuworkers[jid]
+                            del cputask[jid]
+                            del ctaskindex[jid]
                         elif len(cpujobs) > 0:
                             cjob = cpujobs.pop(0)
                             banddata = banddataout[cjob.pstart - patstart: cjob.pend - patstart, :]
@@ -604,6 +603,7 @@ def index_pats_distributed(
                     print(e)
                     cjob = ctaskindex[jid]
                     print('A CPU death has occured', cjob.pstart,cjob.pend)
+                    ray.kill(cpuworkers[jid])
                     del cpuworkers[jid]
                     del cputask[jid]
                     del ctaskindex[jid]
@@ -611,12 +611,13 @@ def index_pats_distributed(
                     if len(cpuworkers) == 0:
                         cpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
                             # These actors are read/write, thus can initialize the GPU queues
-                            CPUWorker.options(num_cpus=1, num_gpus=0).remote(i))
+                            CPUWorker.options(num_cpus=1, num_gpus=0).remote(0))
                         cputask.append(cpuworkers[0].indexpoles.remote(None, None, None))
                         ctaskindex.append(None)
-
-    ray.shutdown()
     print('\n')
+    print('...')
+    ray.shutdown()
+
     if return_indexer_obj:
         return dataout, banddataout, indexer
     else:
