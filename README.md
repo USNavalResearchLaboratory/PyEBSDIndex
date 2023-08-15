@@ -2,7 +2,7 @@
 
 Python based tool for Radon based EBSD orientation indexing.
 
-[![Build status](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml/badge.svg)](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/build.yml)
+[![Tests status](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/tests.yml/badge.svg)](https://github.com/USNavalResearchLaboratory/PyEBSDIndex/actions/workflows/tests.yml)
 [![Documentation status](https://readthedocs.org/projects/pyebsdindex/badge/?version=latest)](https://pyebsdindex.readthedocs.io/en/latest/)
 [![PyPI version](https://img.shields.io/pypi/v/pyebsdindex.svg)](https://pypi.python.org/pypi/pyebsdindex)
 
@@ -25,5 +25,5 @@ and contributing guide is available at https://pyebsdindex.readthedocs.io.
 
 ## Installation
 
-See [the documentation](https://pyebsdindex.readthedocs.io/en/latest/installation.html)
+See [the documentation](https://pyebsdindex.readthedocs.io/en/stable/installation.html)
 for installation instructions.
