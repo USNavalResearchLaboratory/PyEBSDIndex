@@ -640,7 +640,8 @@ class EBSDIndexer:
                 bandNorm1 = bandNorm1[whgood, :]
                 indxData["pq"][0:nPhases, i] = np.sum(bDat1["max"], axis=0)
                 adj_intensity = (-1*np.abs(bDat1["rho"]) * 0.5 / rhomax + 1) * bDat1["max"]
-                #adj_intensity = bDat1["avemax"]
+                adj_intensity *= ((bDat1["theta"] > (2*np.pi/180)).astype(np.float32)+0.5)/2
+                adj_intensity *= ((bDat1["theta"] < (178.0 * np.pi / 180)).astype(np.float32)+0.5)/2
                 #print(bDat1["max"])
                 #print(adj_intensity)
                 for j in range(len(self.phaseLib)):
