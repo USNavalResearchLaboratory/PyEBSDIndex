@@ -192,6 +192,7 @@ def optimize_pso(
     PC0=None,
     batch=False,
     search_limit=0.2,
+    early_exit = 0.0001,
     nswarmparticles=30,
     pswarmpar=None,
     niter=50,
@@ -222,6 +223,11 @@ def optimize_pso(
     search_limit : float, optional
         Default is 0.2 for all PC values, and sets the +/- limit for the
         optimization search.
+    early_exit: float, optional
+        Default is 0.0001 for all PC values, and sets a value for which
+        the optimum is considered converged before the number of iterations
+        is reached.  The optimiztion will exit early if the velocity and distance
+        of all the swarm particles is less than the early_exit value.
     nswarmparticles : int, optional
         Number of particles in a swarm. Default is 30.
     pswarmpar : dict, optional
@@ -277,7 +283,8 @@ def optimize_pso(
     # )
     optimizer = PSOOpt(dimensions=3, n_particles=nswarmparticles,
                        c1=pswarmpar['c1'],
-                       c2 = pswarmpar['c2'], w = pswarmpar['w'], hyperparammethod='auto')
+                       c2 = pswarmpar['c2'], w = pswarmpar['w'], hyperparammethod='auto',
+                       early_exit=early_exit)
 
     if not batch:
         # cost, PCoutRet = optimizer.optimize(
@@ -373,7 +380,8 @@ class PSOOpt():
                 c2 = 2.05,
                 w = 0.8,
                 hyperparammethod = 'static',
-                boundmethod = 'bounce'):
+                boundmethod = 'bounce',
+                early_exit=None):
         self.n_particles = int(n_particles)
         self.dimensions = int(dimensions)
         self.c1 = c1
@@ -391,6 +399,7 @@ class PSOOpt():
         self.niter = None
         self.pos = None
         self.vel = None
+        self.early_exit = early_exit
 
 
     def initializeswarm(self, start=None, bounds=None):
@@ -526,6 +535,9 @@ class PSOOpt():
     def optimize(self, function, start=None, bounds=None, niter=50, verbose = 1, **kwargs):
 
         self.initializeswarm(start, bounds)
+        early_exit = self.early_exit
+        if early_exit is None:
+           early_exit = -1.0
 
         with multiprocessing.Pool(min(multiprocessing.cpu_count(), self.n_particles)) as pool:
             if verbose >= 1:
@@ -537,7 +549,16 @@ class PSOOpt():
                 self.updateswarmbest(function, pool, **kwargs)
                 if verbose >= 1:
                     self.printprogress(iter)
+                    #print(np.abs(self.vel).max())
                 self.updateswarmvelpos()
+                
+                if np.abs(self.vel).max() < early_exit:
+                    d = abs(self.gbest_loc - self.pos)
+                        #print(d.max())
+                    if d.max() < early_exit:
+                        break
+
+
 
 
         pool.close()
