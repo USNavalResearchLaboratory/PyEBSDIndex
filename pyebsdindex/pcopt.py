@@ -24,6 +24,7 @@
 
 import numpy as np
 import multiprocessing
+import functools
 import scipy.optimize as opt
 from timeit import default_timer as timer
 
@@ -196,6 +197,7 @@ def optimize_pso(
     nswarmparticles=30,
     pswarmpar=None,
     niter=50,
+    return_cost=False,
     verbose=1
 ):
     """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
@@ -235,6 +237,8 @@ def optimize_pso(
         3.5, and 0.8, respectively.
     niter : int, optional
         Number of iterations. Default is 50.
+    return_costs: bool, optional
+        Set to True to return the cost value as well as the optimum fit PC.
     verbose : int, optional
         Whether to print the parameters and progress of the
         optimization (>= 1) or not (< 1). Default is to print.
@@ -293,12 +297,13 @@ def optimize_pso(
         cost, PCoutRet = optimizer.optimize(_optfunction, indexer=indexer, banddat=banddat,
                                             start=PC0, bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
                                             niter=niter, verbose=verbose)
-
+        costout = cost
         #print(cost)
     else:
         PCoutRet = np.zeros((npoints, 3))
         if verbose >= 1:
             print('', end='\n')
+        costout = np.zeros(npoints, dtype=np.float32)
         for i in range(npoints):
             # cost, PCoutRet[i, :] = optimizer.optimize(
             #     _optfunction, niter, indexer=indexer, banddat=banddat[i, :, :]
@@ -311,6 +316,7 @@ def optimize_pso(
                niter=niter, verbose=0)
 
             PCoutRet[i, :] = newPC
+            costout[i] = cost
             progress = int(round(10 * float(i) / npoints))
             if verbose >= 1:
                 print('', end='\r')
@@ -345,9 +351,10 @@ def optimize_pso(
             newout[:3] = PCoutRet
             newout[3] = delta[3]
             PCoutRet = newout
-
-    return PCoutRet
-
+    if return_cost is False:
+        return PCoutRet
+    else:
+        return PCoutRet, costout
 
 def _file_opt(fobj, indexer, stride=200, groupsz = 3):
     nCols = fobj.nCols
@@ -446,7 +453,7 @@ class PSOOpt():
         #print(timer()-tic)
         #pos = self.pos.copy()
         #tic = timer()
-        #results = pool.map(partial(fun2opt, **kwargs),list(pos) )
+        #results = pool.map(functools.partial(fun2opt, **kwargs),list(pos) )
         #print(timer()-tic)
         #print(len(results[0]), type(results[0]))
         #print(len(results))
@@ -539,30 +546,31 @@ class PSOOpt():
         if early_exit is None:
            early_exit = -1.0
 
-        with multiprocessing.Pool(min(multiprocessing.cpu_count(), self.n_particles)) as pool:
+        #with multiprocessing.get_context("spawn").Pool(min(multiprocessing.cpu_count(), self.n_particles)) as pool:
+        pool = None
+        if verbose >= 1:
+            print('n_particles:', self.n_particles, 'c1:', self.c1, 'c2:', self.c2, 'w:', self.w )
+
+        self.niter = niter
+        for iter in range(niter):
+            self.updatehyperparam(iter)
+            self.updateswarmbest(function, pool, **kwargs)
             if verbose >= 1:
-                print('n_particles:', self.n_particles, 'c1:', self.c1, 'c2:', self.c2, 'w:', self.w )
+                self.printprogress(iter)
+                #print(np.abs(self.vel).max())
+            self.updateswarmvelpos()
 
-            self.niter = niter
-            for iter in range(niter):
-                self.updatehyperparam(iter)
-                self.updateswarmbest(function, pool, **kwargs)
-                if verbose >= 1:
-                    self.printprogress(iter)
-                    #print(np.abs(self.vel).max())
-                self.updateswarmvelpos()
-                
-                if np.abs(self.vel).max() < early_exit:
-                    d = abs(self.gbest_loc - self.pos)
-                        #print(d.max())
-                    if d.max() < early_exit:
-                        break
+            if np.abs(self.vel).max() < early_exit:
+                d = abs(self.gbest_loc - self.pos)
+                    #print(d.max())
+                if d.max() < early_exit:
+                    break
 
 
 
 
-        pool.close()
-        pool.terminate()
+        #pool.close()
+        #pool.terminate()
         final_best = self.gbest
         final_loc = self.gbest_loc
         if verbose >= 1:
