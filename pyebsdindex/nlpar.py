@@ -288,6 +288,7 @@ class NLPAR:
       self.lam = np.median(np.mean(lamopt_values, axis = 0))
     if self.sigma is None:
       self.sigma = sigma
+    return np.mean(lamopt_values, axis = 0).flatten()
 
   def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
                 filename=None, fileout=None, reset_sigma=True, backsub = False, rescale = False):
