@@ -431,7 +431,7 @@ class NLPAR:
       #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
 
     numba.set_num_threads(nthreadpos)
-
+    return str(patternfile.filepath)
 
   def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True):
 
