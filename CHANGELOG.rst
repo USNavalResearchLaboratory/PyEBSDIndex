@@ -19,9 +19,6 @@ Changed
 - ``nlpar.NLPAR.calcnlpar()`` will now return a string of the new file
   that was made with the NLPARed patterns. Previous return was ``None``
 
-- Small alternations in the Radon peak detection that detect double
-  detection of nearly vertical bands.
-  No significant change in performance was noticed.
 
 Removed
 -------
