@@ -91,11 +91,10 @@ def misorientcubic_quicknb(q1In,q2In):
     i1 = i % n1
     i2 = i % n2
 
+    q1i = q1In[i1, :].copy().reshape(4)
     q2i = q2In[i2,:].copy()
     q2i = q2i.reshape(4)
-    q2i[1:4] *= -1.0
-
-    q1i = q1In[i1,:].copy().reshape(4)
+    q2i[1:4] *= -1.0 # take the conjugate/inverse of q2
 
     qAB = np.abs(rotlib.quat_multiply1(q1i, q2i))
 

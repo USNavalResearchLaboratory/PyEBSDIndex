@@ -52,7 +52,7 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
     xsize = int(xsize)
     if ysize is None:
       ysize = int(npoints // xsize + np.int64((npoints % xsize) > 0))
-      print(ysize)
+      #print(ysize)
   else:
     xsize = int(npoints)
     ysize = 1

@@ -193,6 +193,9 @@ def writeoh5(filename, indexer, data,
             xstep = np.array([np.float32(indexer.fID.xStep)])
             ystep = np.array([np.float32(indexer.fID.yStep)])
 
+      xstep = np.atleast_1d(np.array([np.float32(xstep)]).squeeze())
+      ystep = np.atleast_1d(np.array([np.float32(ystep)]).squeeze())
+
       f.create_dataset(datasetname + '/EBSD/Header/Step X',
                        data=xstep)
       f.create_dataset(datasetname + '/EBSD/Header/Step Y',
@@ -209,8 +212,8 @@ def writeoh5(filename, indexer, data,
           if nrows is None:
             nrows = np.ceil(data.shape[-1] / ncols)
 
-      ncols = np.array([np.int32(ncols)]).squeeze()
-      nrows = np.array([np.int32(nrows)]).squeeze()
+      ncols = np.atleast_1d(np.array([np.int32(ncols)]).squeeze())
+      nrows = np.atleast_1d(np.array([np.int32(nrows)]).squeeze())
 
       f.create_dataset(datasetname + '/EBSD/Header/nColumns',
                        data=ncols)

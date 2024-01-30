@@ -275,7 +275,7 @@ class BandDetect():
       backfit = (gaussian_surf(x, y, *popt)).reshape(ny, nx)
       #print(p0, popt)
     except RuntimeError:
-      print('Warning: no convergence on back subtract ... using mean of the patterns.')
+      print('Warning: no convergence on background gaussian fit ... using mean of the patterns.')
       print('This may not be ideal for scans with few grains across the width of the scan.')
       backfit = back
     backfit -= np.mean(backfit)

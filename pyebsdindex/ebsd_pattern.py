@@ -81,14 +81,20 @@ def get_pattern_file_obj(path,file_type=str('')):
       print("File Not Found:",str(Path(pathtemp[0])))
       return -1
 
-    if 'Manufacture' in f.keys():
-      vendor = str(f['Manufacture'][()][0])
+    if 'Manufacturer' in f.keys():
+      vendor = f['Manufacturer'][()]
+      if type(vendor) is np.ndarray:
+        vendor = vendor[0]
+      vendor = str(vendor.decode(encoding='UTF-8'))
       if vendor.upper() == 'EDAX':
         ebsdfileobj = EDAXOH5(path)
-      if vendor.upper() >= 'BRUKER NANO':
+      if vendor.upper() == 'BRUKER NANO':
         ebsdfileobj = BRUKERH5(path)
     if 'manufacturer' in f.keys():
-      vendor = str((f['manufacturer'][()][0]).decode('UTF-8'))
+      vendor = f['manufacturer'][()]
+      if type(vendor) is np.ndarray:
+        vendor = vendor[0]
+      vendor = str(vendor.decode('UTF-8'))
       if vendor >= 'kikuchipy':
         ebsdfileobj = KIKUCHIPYH5(path)
     if ebsdfileobj.h5patdatpth is None: #automatically chose the first data group
@@ -1262,7 +1268,7 @@ class EDAXOH5(HDF5PatFile):
       print("File Not Found:",str(Path(self.filepath)))
       return -1
 
-    self.version = str(f['Version'][()][0])
+    self.version = str(f['Version'][()][0].decode('UTF-8'))
 
     if self.version  >= 'OIM Analysis 8.6.00':
       ngrp = self.get_data_paths()
@@ -1372,7 +1378,7 @@ class BRUKERH5(HDF5PatFile):
       print("File Not Found:",str(Path(self.filepath)))
       return -1
 
-    self.version = str(f['Version'][()][0])
+    self.version = str(f['Version'][()].decode('UTF-8'))
 
     if self.version.upper()  >= 'ESPIRT 2.X':
       ngrp = self.get_data_paths()
@@ -1389,12 +1395,12 @@ class BRUKERH5(HDF5PatFile):
       self.nPatterns = shp[-3]
       self.filedatatype = dset.dtype.type
       headerpath = (f[self.h5patdatpth].parent.parent)["Header"]
-      self.nCols = np.uint32(headerpath['NCOLS'][()][0])
-      self.nRows = np.uint32(headerpath['NROWS'][()][0])
+      self.nCols = np.uint32(headerpath['NCOLS'][()])
+      self.nRows = np.uint32(headerpath['NROWS'][()])
       #self.hexflag = np.int32(f[headerpath+'Grid Type'][()][0] == 'HexGrid')
 
-      self.xStep = np.float32(headerpath['XSTEP'][()][0])
-      self.yStep = np.float32(headerpath['YSTEP'][()][0])
+      self.xStep = np.float32(headerpath['XSTEP'][()])
+      self.yStep = np.float32(headerpath['YSTEP'][()])
 
     return 0 #note this function uses multiple returns
 
@@ -1460,7 +1466,7 @@ class OXFORDOINA(HDF5PatFile):
       print("File Not Found:",str(Path(self.filepath)))
       return -1
 
-    self.version = str(f['Format Version'][()][0])
+    self.version = str(f['Format Version'][()][0].decode('UTF-8'))
 
     if self.version >= '5.0':
       ngrp = self.get_data_paths()
