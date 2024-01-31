@@ -5,9 +5,9 @@ __credits__ = [
     "Dave Rowenhorst",
     "Håkon Wiik Ånes",
 ]
-__description__ = "Python based tool for Hough/Radon based EBSD indexing"
+__description__ = "Python based tool for Radon based EBSD indexing"
 __name__ = "pyebsdindex"
-__version__ = "0.2.dev1"
+__version__ = "0.2.1"
 
 
 # Try to import only once

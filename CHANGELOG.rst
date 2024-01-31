@@ -5,20 +5,30 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
-0.2.dev1
+0.2.1 (2024-01-29)
 ==================
 Added
 -----
 
+
 Changed
 -------
+- ``nlpar.NLPAR.opt_lambda()`` method will now return the array of
+  the three optimal lambdas [less, medium, more] smoothing. The
+  defualt lambda is still set to [medium].  Previous return was ``None``
+- ``nlpar.NLPAR.calcnlpar()`` will now return a string of the new file
+  that was made with the NLPARed patterns. Previous return was ``None``
+
 
 Removed
 -------
 
 Fixed
 -----
-
+- ``ebsd_pattern``: Reading HDF5 manufacturing strings, and proper identification of
+  the vendors within get_pattern_file_obj
+- ``ebsd_pattern``:Proper reading of parameters from Bruker HDF5 files.
+- Corrected writing of oh5 files with ``ebsdfile``
 
 0.2.0 (2023-08-08)
 ==================
