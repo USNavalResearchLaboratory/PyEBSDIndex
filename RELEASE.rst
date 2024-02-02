@@ -25,6 +25,6 @@ Post-release action
 - Monitor the `documentation build
   <https://readthedocs.org/projects/pyebsdindex/builds>`_ to ensure that the new stable
   documentation is successfully built from the release.
-- Make a post-release PR to ``main`` with ``__version__`` updated (or reverted), e.g. to
-  "0.4.dev0", and any updates to this guide if necessary.
+- Make a post-release PR to ``main`` with ``__version__`` in ``__init__.py`` updated (or reverted),
+  and in ``CHANGELOG.rst`` e.g. to "0.4.dev0", and any updates to this guide if necessary
 - Tidy up GitHub issues.
