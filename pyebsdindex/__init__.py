@@ -7,7 +7,7 @@ __credits__ = [
 ]
 __description__ = "Python based tool for Radon based EBSD indexing"
 __name__ = "pyebsdindex"
-__version__ = "0.2.1"
+__version__ = "0.2.2dev"
 
 
 # Try to import only once
