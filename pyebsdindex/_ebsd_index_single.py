@@ -60,6 +60,8 @@ def index_pats(
     tSigma=None,
     rSigma=None,
     rhoMaskFrac=0.1,
+    patternmask = None,
+    patternmaskindex = None,
     nBands=9,
     backgroundSub=False,
     patstart=0,
@@ -210,6 +212,8 @@ def index_pats(
             bandDetectPlan=bandDetectPlan,
             nRho=nRho,
             nTheta=nTheta,
+            patternmask = patternmask,
+            patternmaskindex = patternmaskindex,
             tSigma=tSigma,
             rSigma=rSigma,
             rhoMaskFrac=rhoMaskFrac,
@@ -222,13 +226,16 @@ def index_pats(
 
     if filename is not None:
         indexer.update_file(filename)
-    if pats is not None and not np.all(indexer.bandDetectPlan.patDim == np.array(pdim)):
-        indexer.update_file(patDim=pats.shape[-2:])
+    if pats is not None:
+        if not np.all(indexer.bandDetectPlan.patDim == np.array(pdim)):
+            indexer.update_file(patDim=pats.shape[-2:])
 
     if backgroundSub:
         indexer.bandDetectPlan.collect_background(
             fileobj=indexer.fID, patsIn=pats, nsample=1000
         )
+
+    #indexer.bandDetectPlan.radonPlan.masksetup(mask=patternmask, maskindex=patternmaskindex)
 
     dataout, banddata, indxstart, indxend = indexer.index_pats(
         patsin=pats,
@@ -308,6 +315,8 @@ class EBSDIndexer:
         bandDetectPlan=None,
         nRho=90,
         nTheta=180,
+        patternmask = None,
+        patternmaskindex=None,
         tSigma=1.0,
         rSigma=1.2,
         rhoMaskFrac=0.15,
@@ -366,10 +375,14 @@ class EBSDIndexer:
 
         if self.fID is not None:
             self.bandDetectPlan.band_detect_setup(
-                patDim=[self.fID.patternW, self.fID.patternH]
+                patDim=[self.fID.patternW, self.fID.patternH],
+                patternmask=patternmask, patternmaskindex=patternmaskindex
             )
         elif patDim is not None:
-            self.bandDetectPlan.band_detect_setup(patDim=patDim)
+            self.bandDetectPlan.band_detect_setup(
+                patDim=patDim,
+                patternmask=patternmask, patternmaskindex=patternmaskindex
+            )
 
         self.nband_earlyexit = nband_earlyexit
         self.dataTemplate = np.dtype(
@@ -584,7 +597,7 @@ class EBSDIndexer:
             if self.bandDetectPlan.patDim is None:
                 self.bandDetectPlan.band_detect_setup(patDim=pshape[1:3])
             else:
-                if np.all((np.array(pshape[1:3]) - self.bandDetectPlan.patDim) == 0):
+                if np.all((np.array(pshape[1:3]) == self.bandDetectPlan.patDim)) == False:
                     self.bandDetectPlan.band_detect_setup(patDim=pshape[1:3])
         return pats, xyloc
 

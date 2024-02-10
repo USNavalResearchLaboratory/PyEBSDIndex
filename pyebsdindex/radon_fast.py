@@ -32,11 +32,14 @@ DEGRAD = np.pi/180.0
 
 
 class Radon:
-  def __init__(self, image=None, imageDim=None, nTheta=180, nRho=90, rhoMax=None):
+  def __init__(self, image=None, imageDim=None, nTheta=180, nRho=90, rhoMax=None,
+               mask=None, maskindex = None, missingval = -1.0):
     self.nTheta = nTheta
     self.nRho = nRho
     self.rhoMax = rhoMax
-    self.indexPlan = None
+    self.mask = mask
+    self.maskindex = maskindex
+    self.missingval = missingval
     if (image is None) and (imageDim is None):
       self.theta = None
       self.rho = None
@@ -46,21 +49,26 @@ class Radon:
         self.imDim = np.asarray(image.shape[-2:])
       else:
         self.imDim = np.asarray(imageDim[-2:])
-      self.radon_plan_setup(imageDim=self.imDim, nTheta=self.nTheta, nRho=self.nRho, rhoMax=self.rhoMax)
+      self.masksetup()
+      #self.radon_plan_setup(imageDim=self.imDim, nTheta=self.nTheta, nRho=self.nRho, rhoMax=self.rhoMax)
 
   def radon_plan_setup(self, image=None, imageDim=None, nTheta=None, nRho=None, rhoMax=None):
     if (image is None) and (imageDim is not None):
-      imDim = np.asarray(imageDim, dtype=np.int64)
+      self.imDim = np.asarray(imageDim, dtype=np.int64)
     elif (image is not None):
-      imDim =  np.shape(image)[-2:] # this will catch if someone sends in a [1 x N x M] image
-    else:
+      self.imDim =  np.asarray(np.shape(image)[-2:]) # this will catch if someone sends in a [1 x N x M] image
+
+    if self.imDim is None:
       return -1
-    imDim = np.asarray(imDim)
-    self.imDim = imDim
+    imDim = self.imDim
+
+
+
     if (nTheta is not None) : self.nTheta = nTheta
     if (nRho is not None): self.nRho = nRho
     #self.rhoMax = rhoMax if (rhoMax is not None) else np.round(np.linalg.norm(imDim)*0.5)
-    self.rhoMax = rhoMax if (rhoMax is not None) else (np.linalg.norm(imDim) * 0.5)
+    if (rhoMax is not None): self.rhoMax = rhoMax
+    if (self.rhoMax is None): self.rhoMax = (np.linalg.norm(imDim) * 0.5)
 
     deltaRho = float(2 * self.rhoMax) / (self.nRho)
     self.theta = np.arange(self.nTheta, dtype = np.float32)*180.0/self.nTheta
@@ -97,6 +105,17 @@ class Radon:
         indx_y = np.where(indx_y >= self.imDim[0], outofbounds, indx_y)
         #indx_y = np.clip(indx_y, 0, self.imDim[1])
         indx1D = np.clip(m+self.imDim[1]*indx_y, 0, outofbounds)
+        # for j in range(self.nRho):
+        #   indx_good = indx1D[j,:].flatten()
+        #   whgood = np.nonzero(indx_good < outofbounds)[0]
+        #   if whgood.size > 0:
+        #     maskval = self.mask.flatten()[indx_good[whgood]]
+        #     newindex = self.maskindex.flatten()[indx_good[whgood]]
+        #
+        #     whmask = np.nonzero((maskval > 0) & (newindex >= 0))[0]
+        #     indx1D[j,:] = outofbounds
+        #     if (whmask.size > 0):
+        #       indx1D[j, 0:whmask.size] = newindex[whmask]
         self.indexPlan[:,i, 0:self.imDim[1]] = indx1D
       else:
         b1 /= cTheta[i]
@@ -109,9 +128,54 @@ class Radon:
         indx_x = np.where(indx_x < 0, outofbounds, indx_x)
         indx_x = np.where(indx_x >= self.imDim[1], outofbounds, indx_x)
         indx1D = np.clip(indx_x+self.imDim[1]*n, 0, outofbounds)
+        # for j in range(self.nRho):
+        #   indx_good = indx1D[j,:].flatten()
+        #   whgood = np.nonzero(indx_good < outofbounds)[0]
+        #   if whgood.size > 0:
+        #
+        #     maskval = (self.mask.flatten())[indx_good[whgood]]
+        #     newindex = (self.maskindex.flatten())[indx_good[whgood]]
+        #
+        #     whmask = np.nonzero( (maskval > 0) & (newindex >= 0) )[0]
+        #     indx1D[j,:] = outofbounds
+        #     if (whmask.size > 0):
+        #       indx1D[j, 0:whmask.size] = newindex[whmask]
+
         self.indexPlan[:, i, 0:self.imDim[0]] = indx1D
+    tempindx = self.indexPlan.flatten()
+    mask = np.concatenate( (self.mask.flatten(), np.array([0,0])))
+    tempindx = np.where(mask[tempindx] > 0, tempindx, outofbounds)
+    maskindex = np.concatenate((self.maskindex.flatten(), np.array([-1,-1])))
+    tempindx = np.where(maskindex[tempindx] >= 0, maskindex[tempindx], outofbounds)
+    self.indexPlan = tempindx.reshape([self.nRho,self.nTheta,self.imDim.max()])
     self.indexPlan.sort(axis = -1)
 
+
+  def masksetup(self,mask=None, maskindex=None):
+    if mask is not None:
+      self.mask = np.array(mask).astype(int)
+    if maskindex is not None:
+      self.maskindex = np.array(maskindex).astype(np.int64)
+
+    nPx = int(self.imDim[0]) * int(self.imDim[1])
+
+    if self.mask is None:
+      self.mask = np.ones(self.imDim)
+    if self.maskindex is None:
+      self.maskindex = np.arange(nPx, dtype = np.int64)
+      self.maskindex = self.maskindex.reshape(self.imDim)
+
+    #if (self.mask.shape != self.imDim).all():
+    #  raise Exception("mask and image must have same size")
+    #  #return -1
+    #if (self.maskindex.shape != self.imDim).all():
+    #  raise Exception("mask index array and image must have same size")
+    #  #return -2
+    if self.maskindex.max() >= nPx:
+      raise Exception("max of index array must be less than the total number of pixel in the array")
+      #return -3
+
+    self.radon_plan_setup()
 
   def radon_fast(self, imageIn, padding = np.array([0,0]), fixArtifacts = False,
                  background = None, background_method = 'SUBTRACT'):
@@ -122,27 +186,31 @@ class Radon:
       image = imageIn[np.newaxis, : ,:]
       reform = True
     else:
+      image = imageIn
       nIm = shapeIm[0]
       reform = False
 
     if background is None:
-      image = imageIn.reshape(-1)
+      pass
+      #image = image.reshape(-1)
     else:
       if str.upper(background_method) == 'DIVIDE':
         image = imageIn / background
       else:
         image = imageIn - background
-      image = image.reshape(-1)
+      #image = image.reshape(-1)
 
     nPx = shapeIm[-1]*shapeIm[-2]
-    im = np.zeros(nPx+1, dtype=np.float32)
+    im = np.zeros(nPx+2, dtype=np.float32)
     #radon = np.zeros([nIm, self.nRho, self.nTheta], dtype=np.float32)
-    radon = np.zeros([nIm,self.nRho + 2 * padding[0],self.nTheta + 2 * padding[1]],dtype=np.float32)
+    radon = np.full([nIm,self.nRho + 2 * padding[0],self.nTheta + 2 * padding[1]], self.missingval, dtype=np.float32)
     shpRdn = radon.shape
     norm = np.sum(self.indexPlan < nPx, axis = 2 ) + 1.0e-12
     for i in np.arange(nIm):
-      im[:-1] = image[i,:,:].flatten()
-      radon[i, padding[0]:shpRdn[1]-padding[0], padding[1]:shpRdn[2]-padding[1]] = np.sum(im.take(self.indexPlan.astype(np.int64)), axis=2) / norm
+      im[:-2] = image[i,:,:].flatten()
+      radon[i, padding[0]:shpRdn[1]-padding[0], padding[1]:shpRdn[2]-padding[1]] = (
+          np.sum(im.take(self.indexPlan.astype(np.int64)), axis=2) / norm)
+      radon[i, padding[0]:shpRdn[1]-padding[0], padding[1]:shpRdn[2]-padding[1]] += -1.0*(norm < 1.0).astype(float)
 
     if (fixArtifacts == True):
       radon[:,:,0] = radon[:,:,1]
@@ -156,7 +224,7 @@ class Radon:
     #print(timer()-tic)
     return radon
 
-  def radon_faster(self,imageIn,padding = np.array([0,0]), fixArtifacts = False, background = None):
+  def radon_faster(self,imageIn,padding = np.array([0,0]), fixArtifacts = False, background = None, normalization=True):
     tic = timer()
     shapeIm = np.shape(imageIn)
     if imageIn.ndim == 2:
@@ -176,10 +244,11 @@ class Radon:
     nPx = shapeIm[-1]*shapeIm[-2]
     indxDim = np.asarray(self.indexPlan.shape)
     #radon = np.zeros([nIm, self.nRho+2*padding[0], self.nTheta+2*padding[1]], dtype=np.float32)
-    radon = np.zeros([self.nRho + 2 * padding[0],self.nTheta + 2 * padding[1], nIm],dtype=np.float32)
+    radon = np.full([self.nRho + 2 * padding[0],self.nTheta + 2 * padding[1], nIm],self.missingval,dtype=np.float32)
     shp = radon.shape
 
-    counter = self.rdn_loops(image,self.indexPlan,nIm,nPx,indxDim,radon, np.asarray(padding))
+    counter = self.rdn_loops(image,self.indexPlan,nIm,nPx,indxDim,radon,
+                             np.asarray(padding), np.float32(normalization > 0))
 
     if (fixArtifacts == True):
       radon[:,padding[1],:] = radon[:,padding[1]+1,:]
@@ -193,7 +262,7 @@ class Radon:
 
   @staticmethod
   @jit(nopython=True, fastmath=True, cache=True, parallel=False)
-  def rdn_loops(images,index,nIm,nPx,indxdim,radon, padding):
+  def rdn_loops(images,index,nIm,nPx,indxdim,radon, padding, norm):
     nRho = indxdim[0]
     nTheta = indxdim[1]
     nIndex = indxdim[2]
@@ -216,9 +285,12 @@ class Radon:
             #radon[q, i, j] += images[imstart+indx1]
             sum += images[imstart + indx1]
             count += 1.0
-          #if count >= 1.0:
+          if count >= 1.0:
+            if norm < 0.001:
+              count =1.0
             #counter[ip,jp, q] = count
-          radon[ip,jp,q] = sum/(count + 1.0e-12)
+            radon[ip,jp,q] = sum/count
+
     #return counter
 
   def radon2pole(self,bandData,PC=None,vendor='EDAX'):

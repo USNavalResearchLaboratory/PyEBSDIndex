@@ -122,6 +122,32 @@ __kernel void radonFixArt(
     //}
   }
 
+
+// // Makes a mask based on if the Radon has missing values -- returns byte array.
+// // There is NOT ability to include padding in x and y ... yet.  
+// __kernel void maskrdn( __global const float *im1, __global uchar *out, const float misval)
+// {
+//   // IDs of work-item represent x and y coordinates in image
+//   //const unsigned long int x = get_global_id(0)+padx;
+//   //const unsigned long int y = get_global_id(1)+pady;
+//   const unsigned long x = get_global_id(0);
+//   const unsigned long int imszx = get_global_size(0);
+//   const unsigned long y = get_global_id(1);
+//   const unsigned long int z = get_global_id(2);
+//   const unsigned long int nImChunk = get_global_size(2);
+//   //const int16 yes = (int16)(1);
+//   //const int16 no = (int16)(0);
+
+//   const unsigned long int indx = (x + imszx*y)*nImChunk + z;
+//   const float im1val = im1[indx];
+  
+//   const float diff = fabs(im1val - misval);
+//   //out[indx] = (diff < 1.0e-6f) ? yes: no;
+//   out[indx] = (diff < 1.0e-5f) ? 0: 1;
+// }
+
+
+
 // Padding of the radon Theta -- 0 and 180* are symmetric with a vertical flip.
 __kernel void radonPadTheta(
       __global float *radon,
@@ -170,33 +196,40 @@ __kernel void radonPadTheta(
 
   }
 
-// Padding of the radon Rho -- copy the previous line to the next row ...
+
+  // Padding of the radon Rho -- copy the previous line to the next row ...
   __kernel void radonPadRho2(
       __global float *radon,
       const unsigned long int nRho, const unsigned long int nTheta,
       const unsigned long int rhoPad)
   {
-    const unsigned long int gid_im = get_global_id(0);
+    const unsigned long int z = get_global_id(0);
     const unsigned long int nImChunk = get_global_size(0);
     const unsigned long int gid_theta = get_global_id(1);
     unsigned long int i, gid_rdn1, gid_rdn2;
-    //indxim = nTheta * nRho * gid_im;
+    //indxim = nTheta * nRho * z;
     //rd1p =  radon[indxim + (nTheta * rhoPad) + gid_theta] ;
     //rd2p =  radon[ indxim + (nTheta * (nRho -1 - rhoPad)) + gid_theta] ;
-    float rd1p =  radon[((nTheta * rhoPad) + gid_theta)*nImChunk + gid_im] ;
-    float rd2p =  radon[((nTheta * (nRho -1 - rhoPad)) + gid_theta)*nImChunk+gid_im];
+    
+    gid_rdn1 = ((nTheta*rhoPad) + gid_theta)*nImChunk + z;
+    gid_rdn2 = ((nTheta* (nRho-1-rhoPad)) + gid_theta)*nImChunk + z;
+
+    float rd1p =  radon[gid_rdn1];
+    float rd2p =  radon[gid_rdn2];
+    
 
     for (i = 0; i <= rhoPad; ++i){
 
         //gid_rdn1 = indxim + (nTheta*i) + gid_theta;
         //gid_rdn2 = indxim + (nTheta* (nRho-1-rhoPad+i)) + gid_theta;
         
-        gid_rdn1 = ((nTheta*i) + gid_theta)*nImChunk + gid_im;
-        gid_rdn2 = ((nTheta* (nRho-1-rhoPad+i)) + gid_theta)*nImChunk + gid_im;
+        gid_rdn1 = ( (nTheta* (rhoPad - i)) + gid_theta)*nImChunk + z;
+        gid_rdn2 = ((nTheta* (nRho-1-rhoPad+i)) + gid_theta)*nImChunk + z;
         
         if (radon[gid_rdn1] < 0){
           radon[gid_rdn1] = rd1p;
         }
+
         if (radon[gid_rdn2] < 0){
           radon[gid_rdn2] = rd2p;
         }
@@ -372,6 +405,64 @@ __kernel void im1EQim2( __global const float *im1, __global const float *im2, __
   
   
 }
+
+// Is image1 (can be a stack of images) EQ to image2 (can be a stack) -- returns byte array.
+// There is ability to include padding in x and y
+__kernel void maskrdn( __global float16 *im1, __global const uchar *mask,
+                        const unsigned long imszx, const unsigned long nImChunk,
+                        const unsigned long padx, const unsigned long pady)
+{
+  // IDs of work-item represent x and y coordinates in image
+  //const unsigned long int x = get_global_id(0)+padx;
+  //const unsigned long int y = get_global_id(1)+pady;
+  const unsigned long x = get_global_id(0) + padx;
+  const unsigned long y = get_global_id(1) + pady;
+  unsigned long int indx_z,i;
+  
+
+  //const unsigned long int indx = (x + imszx*y)*nImChunk + z;
+  const unsigned long int indx = (x + imszx*y);
+  const uchar test = mask[indx];
+  if (test < 1){
+    for (i=0; i<nImChunk; ++i){
+      indx_z = indx*nImChunk + i;
+      im1[indx_z] = -1.0;
+    }
+    
+  }
+  
+  
+}
+
+
+// Is image1 (can be a stack of images) EQ to image2 (can be a stack) -- returns byte array.
+// There is ability to include padding in x and y
+__kernel void maxmask( __global uchar16 *im1, __global const uchar *mask,
+                        const unsigned long imszx, const unsigned long imszz, 
+                        const unsigned long padx, const unsigned long pady)
+{
+  // IDs of work-item represent x and y coordinates in image
+  //const unsigned long int x = get_global_id(0)+padx;
+  //const unsigned long int y = get_global_id(1)+pady;
+  const unsigned long x = get_global_id(0) + padx;
+  const unsigned long y = get_global_id(1) + pady;
+  unsigned long int indx_z,i;
+  
+
+  //const unsigned long int indx = (x + imszx*y)*nImChunk + z;
+  const unsigned long int indx = (x + imszx*y);
+  const uchar test = mask[indx];
+  if (test < 1){
+    for (i=0; i<imszz; ++i){
+      indx_z = indx*imszz + i;
+      im1[indx_z] = 0;
+    }
+    
+  }
+  
+  
+}
+
 
 //this is a dirty little sort for getting the max locations ordered.  Will order accending.  
 // Keeping only the top nmax points.  Need to have maxval1d primed so that maxval1d[nmax] is larger 

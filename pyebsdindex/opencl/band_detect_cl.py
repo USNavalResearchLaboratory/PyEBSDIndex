@@ -32,6 +32,7 @@ import pyopencl as cl
 
 from pyebsdindex import band_detect
 from pyebsdindex.opencl import openclparam
+import scipy
 
 #from os import environ
 #environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
@@ -95,6 +96,8 @@ class BandDetect(band_detect.BandDetect):
                                                                        fixArtifacts=False, background=self.backgroundsub,
                                                                        returnBuff=True, clparams=clparams)
 
+        #rdnNorm, clparams = self.rdn_mask(rdnNorm, clparams=clparams, returnBuff=False)
+
         #if (self.EDAXIQ == True): # I think EDAX actually uses the convolved radon for IQ
           #nTp = self.nTheta + 2 * self.padding[1]
           #nRp = self.nRho + 2 * self.padding[0]
@@ -106,6 +109,7 @@ class BandDetect(band_detect.BandDetect):
         tic1 = timer()
         rdnConv, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True, separableKernel=True)
         rdnNorm.release()
+
         convtime += timer()-tic1
         tic1 = timer()
         lMaxRdn, clparams =  self.rdn_local_maxCL(rdnConv, clparams=clparams, returnBuff=True)
@@ -131,10 +135,14 @@ class BandDetect(band_detect.BandDetect):
           nRp = self.nRho + 2 * self.padding[0]
           nImCL = int(rdnConv.size / (nTp * nRp * 4))
           rdnConvarray = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
+
           cl.enqueue_copy(clparams.queue,rdnConvarray,rdnConv,is_blocking=True)
+
           rdnConvarray = rdnConvarray[:,:,0:chnk[1]-chnk[0] ]
+          #plt.imshow(rdnConvarray.squeeze())
 
         rdnConv.release()
+
         rdnConv = None
         blabeltime += timer() - tic1
 
@@ -152,47 +160,47 @@ class BandDetect(band_detect.BandDetect):
         print('Band Label Time:', blabeltime)
         print('Total Band Find Time:',tottime)
       if verbose > 1:
-
-        if len(rdnConvarray.shape) == 3:
-          im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
-        else:
-          im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1]]
-
-        rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
-        mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
-        stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
-        im2show -= mean
-        im2show /= stdv
-        im2show = im2show.clip(-4, None)
-        im2show += 6
-        im2show[0:rhoMaskTrim,:] = 0
-        im2show[-rhoMaskTrim:,:] = 0
-
-        im2show = np.fliplr(im2show)
-        fig = plt.figure(figsize=(12, 4))
-        subrdn = fig.add_subplot(121, xlim=(0, 180), ylim=(-self.rhoMax, self.rhoMax))
-        subrdn.imshow(
-            im2show,
-            cmap='gray',
-            extent=[0, 180, -self.rhoMax, self.rhoMax],
-            interpolation='none',
-            zorder=1,
-            aspect='auto'
-        )
-        width = bandData['width'][-1, :]
-        width /= width.min()
-        width *= 2.0
-        xplt = np.squeeze(180.0 - np.interp(bandData['aveloc'][-1,:,1]+0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
-        yplt = np.squeeze( -1.0 * np.interp(bandData['aveloc'][-1,:,0]-0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
-
-        subrdn.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
-
-        for pt in range(self.nBands):
-          subrdn.annotate(str(pt + 1), np.squeeze([xplt[pt] + 4, yplt[pt]]), color='yellow')
-        #subrdn.xlim(0,180)
-        #subrdn.ylim(-self.rhoMax, self.rhoMax)
-        subpat = fig.add_subplot(122)
-        subpat.imshow(patterns[-1, :, :], cmap='gray')
+        self._display_radon_pattern(rdnConvarray, bandData, patterns)
+        # if len(rdnConvarray.shape) == 3:
+        #   im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
+        # else:
+        #   im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1]]
+        #
+        # rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
+        # mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+        # stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+        # im2show -= mean
+        # im2show /= stdv
+        # im2show = im2show.clip(-4, None)
+        # im2show += 6
+        # im2show[0:rhoMaskTrim,:] = 0
+        # im2show[-rhoMaskTrim:,:] = 0
+        #
+        # im2show = np.fliplr(im2show)
+        # fig = plt.figure(figsize=(12, 4))
+        # subrdn = fig.add_subplot(121, xlim=(0, 180), ylim=(-self.rhoMax, self.rhoMax))
+        # subrdn.imshow(
+        #     im2show,
+        #     cmap='gray',
+        #     extent=[0, 180, -self.rhoMax, self.rhoMax],
+        #     interpolation='none',
+        #     zorder=1,
+        #     aspect='auto'
+        # )
+        # width = bandData['width'][-1, :]
+        # width /= width.min()
+        # width *= 2.0
+        # xplt = np.squeeze(180.0 - np.interp(bandData['aveloc'][-1,:,1]+0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
+        # yplt = np.squeeze( -1.0 * np.interp(bandData['aveloc'][-1,:,0]-0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
+        #
+        # subrdn.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
+        #
+        # for pt in range(self.nBands):
+        #   subrdn.annotate(str(pt + 1), np.squeeze([xplt[pt] + 4, yplt[pt]]), color='yellow')
+        # #subrdn.xlim(0,180)
+        # #subrdn.ylim(-self.rhoMax, self.rhoMax)
+        # subpat = fig.add_subplot(122)
+        # subpat.imshow(patterns[-1, :, :], cmap='gray')
 
     except Exception as e: # something went wrong - try the CPU
       print(e)
@@ -240,6 +248,7 @@ class BandDetect(band_detect.BandDetect):
     image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()
     shpRdn = np.asarray( ((self.nRho+2*padding[0]), (self.nTheta+2*padding[1]), nImCL),dtype=np.uint64)
     radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=int((self.nRho+2*padding[0])*(self.nTheta+2*padding[1])*nImCL*4))
+
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=radon.nbytes)
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
     image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image_align)
@@ -261,7 +270,7 @@ class BandDetect(band_detect.BandDetect):
       imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
       cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
 
-    cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(-1.0), 0, radon_gpu.size)
+    cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(self.radonPlan.missingval), 0, radon_gpu.size)
     prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
                   imstep, indxstep,
                  shpRdn[0], shpRdn[1],
@@ -356,11 +365,27 @@ class BandDetect(band_detect.BandDetect):
     resultConv = np.full(shp,0.0,dtype=np.float32)
 
     rdnConv_gpu = cl.Buffer(ctx,mf.WRITE_ONLY ,size=resultConv.nbytes)
-    # pad out the radon buffers
-    prg.radonPadTheta(queue,(shp[2],shp[0],1),None,rdn_gpu,
-                    np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[1]))
-    prg.radonPadRho2(queue,(shp[2],shp[1],1),None,rdn_gpu,
-                      np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[0]+1))
+
+    # maskrnd = np.zeros((self.nRho + 2 * self.padding[0], self.nTheta + 2 * self.padding[1]), dtype=np.ubyte)
+    # maskrnd[self.padding[0]:-self.padding[0], self.padding[1]:-self.padding[1]] = self.rhomask1
+    #
+    # maskrnd = maskrnd.astype(np.ubyte)
+    # maskrnd_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=maskrnd)
+    #
+    # prg.maskrdn(queue, (np.uint32(nT), np.uint32(nR)), None, rdn_gpu, maskrnd_gpu,
+    #             np.uint64(shp[1]), np.uint64(nImChunk),
+    #             np.uint64(self.padding[1]), np.uint64(self.padding[0]))
+
+    # # pad out the radon buffers
+    # prg.radonPadTheta(queue,(shp[2],shp[0],1),None,rdn_gpu,
+    #                 np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[1]))
+
+    #prg.radonPadRho2(queue,(shp[2],shp[1],1),None,rdn_gpu,
+    #                  np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[0]+1))
+
+    prg.radonPadRho2(queue, (shp[2], shp[1], 1), None, rdn_gpu,
+                 np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(shp[0]//2-1))
+
     kern_gpu = None
     if separableKernel == False:
       # for now I will assume that the kernel(s) can fit in local memory on the GPU
@@ -439,7 +464,7 @@ class BandDetect(band_detect.BandDetect):
 
 
 
-  def rdn_local_maxCL(self,radonIn,clparams=None,  returnBuff = True):
+  def rdn_local_maxCL(self,radonIn, clparams=None,  returnBuff = True):
     # this will run a morphological max kernel over the convolved radon array
     # the local max identifies the location of the peak max within
     # the window size.
@@ -491,11 +516,12 @@ class BandDetect(band_detect.BandDetect):
       # there is something very strange that happens if the number of images
       # is a exact multiple of the max group size (typically 256)
       mxGroupSz = gpu[gpu_id].get_info(cl.device_info.MAX_WORK_GROUP_SIZE)
-      nImCL += np.int64(16 * (1 - np.int(np.mod(nImCL,mxGroupSz) > 0)))
+      nImCL += np.int64(16 * (1 - np.int64(np.mod(nImCL,mxGroupSz) > 0)))
       radonCL = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
       radonCL[:,:,0:shp[2]] = radon
       rdn_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=radonCL)
       shp = (nRp,nTp,nImCL)
+
 
     nImChunk = np.uint64(nImCL / clvtypesize)
     #out = np.zeros((shp), dtype = np.int32)
@@ -521,12 +547,12 @@ class BandDetect(band_detect.BandDetect):
     #                         np.int64(shp[1]),np.int64(shp[0]),
     #                         np.int64(self.padding[1]),np.int64(self.padding[0]),
     #                         np.int64(self.peakPad[1]),np.int64(1))
-
+    # calculate the max in the x direction
     prg.morphDilateKernelBF(queue, (np.uint32(shp[1]), np.uint32(nR), nImChunk), None, rdn_gpu, lmaxX,
                             np.int64(shp[1]), np.int64(shp[0]),
                             np.int64(0), np.int64(self.padding[0]),
                             np.int64(self.peakPad[1]), np.int64(1))
-
+    # take the max in the x output, use as input, and calculate in the y direction
     prg.morphDilateKernelBF(queue, (np.uint32(nT), np.uint32(nR), nImChunk), None, lmaxX, lmaxXY,
                             np.int64(shp[1]), np.int64(shp[0]),
                             np.int64(self.padding[1]), np.int64(self.padding[0]),
@@ -538,6 +564,16 @@ class BandDetect(band_detect.BandDetect):
     prg.im1EQim2(queue,(np.uint32(nT),np.uint32(nR),nImCL),None, lmaxXY, rdn_gpu, local_max_gpu,
                  np.uint64(shp[1]),np.uint64(shp[0]),
                  np.uint64(self.padding[1]),np.uint64(self.padding[0]))
+
+    maskrnd = np.zeros((self.nRho + 2 * self.padding[0] , self.nTheta + 2 * self.padding[1]), dtype=np.ubyte)
+    maskrnd[self.padding[0]:-self.padding[0], self.padding[1]:-self.padding[1]] = self.rdnmask.astype(np.ubyte)
+
+    maskrnd = maskrnd.astype(np.ubyte)
+    maskrnd_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=maskrnd)
+
+    prg.maxmask(queue, (np.uint32(nT), np.uint32(nR)), None, local_max_gpu, maskrnd_gpu,
+                 np.uint64(shp[1]), np.uint64(nImChunk),
+                 np.uint64(self.padding[1]), np.uint64(self.padding[0]))
 
     queue.flush()
 
@@ -643,8 +679,8 @@ class BandDetect(band_detect.BandDetect):
     width_gpu = cl.Buffer(ctx, mf.WRITE_ONLY, size=width.nbytes)
     aveloc = np.zeros((nIm,self.nBands,2),dtype=np.float32)
     aveloc_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=aveloc.nbytes)
-    rhoMaskTrim = np.int64((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
-
+    #rhoMaskTrim = np.int64((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
+    rhoMaskTrim = np.int64(self.padding[0])
 
     prg.maxlabel(queue,(nIm, 1,1),(1,1,1),
                  lMaxRdn_gpu,rdnConv_gpu,
@@ -653,6 +689,7 @@ class BandDetect(band_detect.BandDetect):
                  width_gpu,
                  np.int64(shp[1]),np.int64(shp[0]),
                  np.int64(self.padding[1]),rhoMaskTrim,np.int64(self.nBands) )
+
 
     queue.finish()
     cl.enqueue_copy(queue,maxval,maxval_gpu,is_blocking=False)

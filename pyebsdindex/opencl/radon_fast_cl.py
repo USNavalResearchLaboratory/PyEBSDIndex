@@ -117,7 +117,7 @@ class Radon(radon_fast.Radon):
         #imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
         #cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
 
-    cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(0.0), 0, radon_gpu.size)
+    cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(self.missingval), 0, radon_gpu.size)
     prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
                   imstep, indxstep,
                  shpRdn[0], shpRdn[1],
