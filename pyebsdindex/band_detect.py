@@ -545,7 +545,7 @@ class BandDetect():
     #print("Traditional:",timer() - tic)
     maskrnd = np.zeros((self.nRho + 2 * self.padding[0], self.nTheta + 2 * self.padding[1]), dtype=np.ubyte)
     maskrnd[self.padding[0]:-self.padding[0], self.padding[1]:-self.padding[1]] = self.rdnmask.astype(np.ubyte)
-    lMaxRdn *= maskrnd
+    lMaxRdn *= maskrnd.astype(bool)
     return lMaxRdn
 
 
