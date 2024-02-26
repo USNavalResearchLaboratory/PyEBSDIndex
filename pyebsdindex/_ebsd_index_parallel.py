@@ -30,6 +30,7 @@ import platform
 import logging
 import sys
 from timeit import default_timer as timer
+import time
 
 import numpy as np
 import h5py
@@ -352,8 +353,8 @@ def index_pats_distributed(
                       }},
         logging_level=logging.WARNING,
     )  # Supress INFO messages from ray.
-
-    print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize, ngpuwrker, ncpuwrker)
+    if verbose > 1:
+        print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize, ngpuwrker, ncpuwrker)
     #print(rayclust)
     # Place indexer obj in shared memory store so all workers can use it - this is read only.
     remote_indexer = ray.put(indexer)
@@ -450,6 +451,8 @@ def index_pats_distributed(
         gtaskindex.append(gjob)
         #gpu_launched += 1
 
+    gpuwrker_cycles = 0
+    cpuwrker_cycles = 0
 
     while ncpudone < njobs:
 
@@ -470,7 +473,9 @@ def index_pats_distributed(
 
         # check if GPU is working
         if ngpudone < njobs: # check if gpu is done
-            donewrker, busy = ray.wait(gputask,num_returns = len(gputask),  timeout=0.01)
+
+            gpuwrker_cycles +=1
+            donewrker, busy = ray.wait(gputask,num_returns = len(gputask),  timeout=1.0)
             #if len(wrker) > 0:  # trying to catch a hung worker.  Rare, but it happens
             #print(len(donewrker))
             #else:
@@ -479,6 +484,7 @@ def index_pats_distributed(
                 #wrker.append(busy[0])
                 #ray.kill(gputask[jid])
             for wrker in donewrker:
+                gpuwrker_cycles = 0
                 jid = gputask.index(wrker)
                 try:
                     message, (banddata, bandnorm, gjob) = ray.get(wrker)
@@ -490,28 +496,29 @@ def index_pats_distributed(
                         cpujobs.append(CPUGPUJob(gjob.jobid, gjob.pstart, gjob.pend, extime=gjob.extime))
                         ngpudone += 1
 
-                        if len(gpujobs) > 0: # still more gpu work to do
-                            gjob = gpujobs.pop(0)
-                            if inputmode == "filemode":
-                                gputask[jid] = gpuworkers[jid].findbands.remote(gjob,
-                                        pats=None,
-                                        indexer=remote_indexer
-                                )
-                            else:
-                                gputask[jid] = gpuworkers[jid].findbands.remote(gjob,
-                                    pats=pats[gjob.pstart:gjob.pend, :, :],
-                                    indexer=remote_indexer,
-                               )
-                            gtaskindex[jid] = gjob
-                            ngpusubmit += 1
-                        else: # no more gpu tasks to submit
-                            #del gpuworkers[jid]
-                            ray.kill(gpuworkers[jid])
-                            del gpuworkers[jid]
-                            del gputask[jid]
-                            del gtaskindex[jid]
-                    else:
-                        raise Exception("Error in GPU processing patterns: ", gtaskindex[jid].pstart, gtaskindex[jid].pend)
+                    if len(gpujobs) > 0: # still more gpu work to do
+                        gjob = gpujobs.pop(0)
+                        if inputmode == "filemode":
+                            gputask[jid] = gpuworkers[jid].findbands.remote(gjob,
+                                    pats=None,
+                                    indexer=remote_indexer
+                            )
+                        else:
+                            gputask[jid] = gpuworkers[jid].findbands.remote(gjob,
+                                pats=pats[gjob.pstart:gjob.pend, :, :],
+                                indexer=remote_indexer,
+                           )
+                        gtaskindex[jid] = gjob
+                        ngpusubmit += 1
+                    else: # no more gpu tasks to submit
+                        #del gpuworkers[jid]
+                        ray.kill(gpuworkers[jid])
+                        del gpuworkers[jid]
+                        del gputask[jid]
+                        del gtaskindex[jid]
+                        time.sleep(0.1)
+                    #else:
+                    #    raise Exception("Error in GPU processing patterns: ", gtaskindex[jid].pstart, gtaskindex[jid].pend)
 
 
                 except:
@@ -522,10 +529,17 @@ def index_pats_distributed(
                     del gtaskindex[jid]
                     gpujobs.append(gjob)
                     if len(gpuworkers) == 0:
+                        gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
+                            # These actors are read/write, thus can initialize the GPU queues
+                            # GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+                            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+                                actorid=0, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cudagpuvis
+                            )
+                        )
+                        gjob = gpujobs.pop(0)
                         if inputmode == "filemode":
                             gputask.append(
-                                gpuworkers[0].findbands.remote(gjob,
-                                   pats=None,
+                                gpuworkers[0].findbands.remote(gjob, pats=None,
                                    indexer=remote_indexer
                                 )
                             )
@@ -538,11 +552,48 @@ def index_pats_distributed(
                             )
                         gtaskindex.append(gjob)
             # toc = timer()
-            if (ngpudone >= njobs) and (verbose >1 ):
-                print('\n GPU Done')
+
+            if gpuwrker_cycles > 10: # a gpu worker got stuck -- see if I can unstick it.
+                wrker = busy[0]
+                gpuwrker_cycles = 0
+                jid = gputask.index(wrker)
+                gjob = gtaskindex[jid]
+                print('A GPU death has occured. Attempting to restart.', gjob.pstart, gjob.pend)
+                ray.kill(gpuworkers[jid])
+                del gpuworkers[jid]
+                del gputask[jid]
+                del gtaskindex[jid]
+                gpujobs.append(gjob)
+                if len(gpuworkers) == 0:
+                    gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
+                        # These actors are read/write, thus can initialize the GPU queues
+                        # GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+                        GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+                            actorid=0, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cudagpuvis
+                        )
+                    )
+                    if inputmode == "filemode":
+                        gputask.append(
+                            gpuworkers[0].findbands.remote(gjob,
+                                                           pats=None,
+                                                           indexer=remote_indexer
+                                                           )
+                        )
+                    else:
+                        gputask.append(
+                            gpuworkers[0].findbands.remote(gjob,
+                                                           pats=pats[gjob.pstart:gjob.pend, :, :],
+                                                           indexer=remote_indexer,
+                                                           )
+                        )
+                    gtaskindex.append(gjob)
+
+            if (ngpudone >= njobs) and (verbose > 1 ):
+                print('\nGPU Done')
         if ncpudone < njobs:
-            donewrker, busy = ray.wait(cputask, num_returns = len(cputask),  timeout=0.01)
+            donewrker, busy = ray.wait(cputask, num_returns = len(cputask),  timeout=1.0)
             for wrker in donewrker:
+
                 jid = cputask.index(wrker)
                 try:
                     message, (indexdata,bnddata, cjob) = ray.get(wrker)
@@ -583,26 +634,30 @@ def index_pats_distributed(
                             del cpuworkers[jid]
                             del cputask[jid]
                             del ctaskindex[jid]
+                            time.sleep(0.1)
                         elif len(cpujobs) > 0:
                             cjob = cpujobs.pop(0)
-                            banddata = banddataout[cjob.pstart - patstart: cjob.pend - patstart, :]
-                            bandnorm = bandnormsout[cjob.pstart - patstart: cjob.pend - patstart, :, :]
-                            cputask[jid] = cpuworkers[jid].indexpoles.remote(cjob,banddata, bandnorm, indexer=remote_indexer)
-                            ctaskindex[jid] = cjob
-
+                            if cjob is not None:
+                                banddata = banddataout[cjob.pstart - patstart: cjob.pend - patstart, :]
+                                bandnorm = bandnormsout[cjob.pstart - patstart: cjob.pend - patstart, :, :]
+                                cputask[jid] = cpuworkers[jid].indexpoles.remote(cjob,banddata, bandnorm, indexer=remote_indexer)
+                                ctaskindex[jid] = cjob
+                            else:
+                                cputask[jid] = cpuworkers[jid].indexpoles.remote(None, None, None)
+                                ctaskindex[jid] = None
 
                         else: # there should be more to do, but waiting for work.
                             cputask[jid] = cpuworkers[jid].indexpoles.remote(None, None, None)
                             ctaskindex[jid] = None
 
                     else:
-                        raise Exception("Error in indexing bands: ", ctaskindex[jid].pstart,ctaskindex[jid].pend)
+                        raise Exception("Error in indexing bands")#, ctaskindex[jid].pstart,ctaskindex[jid].pend)
 
 
                 except Exception as e:
                     print(e)
                     cjob = ctaskindex[jid]
-                    print('A CPU death has occured', cjob.pstart,cjob.pend)
+                    print('A CPU death has occured')
                     ray.kill(cpuworkers[jid])
                     del cpuworkers[jid]
                     del cputask[jid]
@@ -614,8 +669,8 @@ def index_pats_distributed(
                             CPUWorker.options(num_cpus=1, num_gpus=0).remote(0))
                         cputask.append(cpuworkers[0].indexpoles.remote(None, None, None))
                         ctaskindex.append(None)
-    print('\n')
-    print('...')
+    if verbose > 0:
+        print('\n...')
     ray.shutdown()
 
     if return_indexer_obj:
@@ -726,6 +781,7 @@ class GPUWorker:
 
     def findbands(self, gpujob, pats=None, xyloc=None, PC = None, indexer=None):
         if gpujob is None:
+            time.sleep(0.01)
             return 'Bored', (None, None, None)
         try:
             # print(type(self.openCLParams.ctx))
@@ -765,6 +821,7 @@ class CPUWorker:
 
     def indexpoles(self, cpujob, banddata, bandnorm, indexer=None):
         if cpujob is None:
+            time.sleep(0.01)
             return 'Bored', (None, None, None)
         try:
             # print(type(self.openCLParams.ctx))
