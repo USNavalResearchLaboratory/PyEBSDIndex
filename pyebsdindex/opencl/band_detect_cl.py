@@ -66,9 +66,9 @@ class BandDetect(band_detect.BandDetect):
       tic = timer()
       ndim = patternsIn.ndim
       if ndim == 2:
-        patterns = np.expand_dims(patternsIn, axis=0)
+        patterns = (np.expand_dims(patternsIn, axis=0)).copy()
       else:
-        patterns = patternsIn
+        patterns = (patternsIn).copy()
 
       pscale = np.array([0.0, 1.0])
 
@@ -79,6 +79,7 @@ class BandDetect(band_detect.BandDetect):
         patterns *= (2**16-2.0)/(mxp - mnp)
         pscale[:] = np.array([mnp,(mxp - mnp) ])
         patterns = patterns.astype(np.uint16)
+
 
       shape = patterns.shape
       nPats = shape[0]
