@@ -34,7 +34,10 @@ import time
 
 import numpy as np
 import h5py
+
 import ray
+import random
+
 
 from pyebsdindex import ebsd_pattern, _pyopencl_installed
 from pyebsdindex._ebsd_index_single import EBSDIndexer, index_pats
@@ -46,8 +49,8 @@ else:
 
 RAYIPADDRESS = '127.0.0.1'
 OSPLATFORM  = platform.system()
-if OSPLATFORM  == 'Darwin':
-    RAYIPADDRESS = '0.0.0.0'  # the localhost address does not work on macOS when on a VPN
+#if OSPLATFORM  == 'Darwin':
+#    RAYIPADDRESS = '0.0.0.0'  # the localhost address does not work on macOS when on a VPN
 
 
 def index_pats_distributed(
@@ -305,7 +308,8 @@ def index_pats_distributed(
 
 
     if ngpu > 0:
-        ngpupro = max(12, ngpu*8)  # number of processes that will serve data to the gpu
+        ngpupro = max(12, ngpu*6)  # number of processes that will serve data to the gpu
+        #ngpupro = 8
         if n_cpu_nodes < 8:
             ngpupro = min(ngpupro,8)
         if n_cpu_nodes < 2:
@@ -343,6 +347,7 @@ def index_pats_distributed(
     # ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
     # Need to append path for installs from source ... otherwise the ray
     # workers do not know where to find the PyEBSDIndex module.
+
     rayclust = ray.init(
         num_cpus=int(np.round(n_cpu_nodes)),
         num_gpus=ngpu*ngpuwrker,
@@ -423,7 +428,7 @@ def index_pats_distributed(
     #gpu_launched = 0
     #cpu_launched = 0
     while (len(gpuworkers) < ngpuwrker) and (len(gpujobs) > 0):
-        # if (gpu_launched < ngpuwrker) and (len(gpujobs) > 0):
+    #if (len(gpuworkers) < ngpuwrker) and (len(gpujobs) > 0):
 
         i = len(gpuworkers)
         gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
@@ -449,12 +454,14 @@ def index_pats_distributed(
                                                )
             )
         gtaskindex.append(gjob)
+
         #gpu_launched += 1
 
     gpuwrker_cycles = 0
     cpuwrker_cycles = 0
 
     while ncpudone < njobs:
+
 
         # initiate the CPU workers.
         #print(len(gpuworkers), len(gputask))
@@ -475,7 +482,13 @@ def index_pats_distributed(
         if ngpudone < njobs: # check if gpu is done
 
             gpuwrker_cycles +=1
-            donewrker, busy = ray.wait(gputask,num_returns = len(gputask),  timeout=1.0)
+            nret = max(1, len(gputask) // ngpu)
+            #nret =len(gputask)
+            donewrker, busy = ray.wait(gputask,num_returns = nret,  timeout=1.0)
+            #print(len(donewrker), nret)
+            #print()
+            #nret = max(1,len(gputask)//2)
+            #donewrker, busy = ray.wait(gputask, num_returns=nret, timeout=1.0)
             #if len(wrker) > 0:  # trying to catch a hung worker.  Rare, but it happens
             #print(len(donewrker))
             #else:
@@ -510,13 +523,15 @@ def index_pats_distributed(
                            )
                         gtaskindex[jid] = gjob
                         ngpusubmit += 1
+
+
                     else: # no more gpu tasks to submit
                         #del gpuworkers[jid]
-                        ray.kill(gpuworkers[jid])
+                        #ray.kill(gpuworkers[jid])
                         del gpuworkers[jid]
                         del gputask[jid]
                         del gtaskindex[jid]
-                        time.sleep(0.1)
+                        time.sleep(0.001)
                     #else:
                     #    raise Exception("Error in GPU processing patterns: ", gtaskindex[jid].pstart, gtaskindex[jid].pend)
 
@@ -591,7 +606,8 @@ def index_pats_distributed(
             if (ngpudone >= njobs) and (verbose > 1 ):
                 print('\nGPU Done')
         if ncpudone < njobs:
-            donewrker, busy = ray.wait(cputask, num_returns = len(cputask),  timeout=1.0)
+            donewrker, busy = ray.wait(cputask, num_returns = len(cputask),  timeout=0.01)
+            #donewrker, busy = ray.wait(cputask, num_returns=1, timeout=1.0)
             for wrker in donewrker:
 
                 jid = cputask.index(wrker)
@@ -606,6 +622,7 @@ def index_pats_distributed(
                         currenttime = timer() - starttime
                         #print(cjob.rate * n_cpu_nodes)
                         if verbose > 0:
+                            #print()
                             print(
                                 "Completed: ",
                                 str(cjob.pstart),
@@ -630,7 +647,7 @@ def index_pats_distributed(
                             #cpuworkers[jid] = None
                             #cputask[jid] = None
                             #ctaskindex[jid] = None
-                            ray.kill(cpuworkers[jid])
+                            #ray.kill(cpuworkers[jid])
                             del cpuworkers[jid]
                             del cputask[jid]
                             del ctaskindex[jid]
@@ -732,10 +749,12 @@ def __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam):
     twocheck = np.log2(float(chunk))
     if np.abs((twocheck) - np.round(twocheck)) < 0.2:
         chunk = int(2**int(np.round(twocheck)))
+        if OSPLATFORM == 'Darwin': # I don't know why, but AMD/Intel macOS does not like powers of two.
+            chunk = max(48, chunk-16)
 
     # finally - I am unsure how to check for integrated graphics that report system memory, so I am going
     # throw an arbitrary cap on this:
-    chunk = min(2048, chunk)
+    chunk = min(2032, chunk)
 
     return chunk
 
@@ -780,18 +799,20 @@ class GPUWorker:
                 self.openCLParams = None
 
     def findbands(self, gpujob, pats=None, xyloc=None, PC = None, indexer=None):
+
         if gpujob is None:
-            time.sleep(0.01)
+            #time.sleep(0.001)
             return 'Bored', (None, None, None)
         try:
             # print(type(self.openCLParams.ctx))
             gpujob._starttime()
+            #time.sleep(random.uniform(0, 1.0))
             if PC is None:
                 PC = indexer.PC
 
-
             if self.openCLParams is not None:
                 self.openCLParams.get_queue()
+
             pats, xyloc = indexer._getpats(
                 patsin=pats,
                 patstart=gpujob.pstart,
@@ -808,6 +829,8 @@ class GPUWorker:
                 self.openCLParams.queue.finish()
                 self.openCLParams.queue = None
             gpujob._endtime()
+            #print(gpujob.endtime - gpujob.starttime )
+
             return 'Done', (banddata, bandnorm, gpujob)
         except:
             gpujob.rate = None
@@ -821,7 +844,7 @@ class CPUWorker:
 
     def indexpoles(self, cpujob, banddata, bandnorm, indexer=None):
         if cpujob is None:
-            time.sleep(0.01)
+            #time.sleep(0.01)
             return 'Bored', (None, None, None)
         try:
             # print(type(self.openCLParams.ctx))
