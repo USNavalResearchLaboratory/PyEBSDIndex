@@ -449,7 +449,8 @@ class PSOOpt():
 
         #tic = timer()
         for part_i in range(self.n_particles):
-            val[part_i] = fun2opt(self.pos[part_i, :], **kwargs)
+            temp = self.pos[part_i, :]
+            val[part_i] = fun2opt(temp, **kwargs)
         #print(timer()-tic)
         #pos = self.pos.copy()
         #tic = timer()

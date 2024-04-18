@@ -29,6 +29,7 @@ from pathlib import PurePath
 import platform
 import tempfile
 from timeit import default_timer as timer
+import math
 
 import numpy as np
 import numba
@@ -384,7 +385,7 @@ class BandIndexer():
     #print(indx0FID)
     #This completely over previsions the arrays, this is essentially 
     #N Choose K with N = number of angles and K = 3
-    nlib = npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))/np.compat.long(np.math.factorial(3))
+    nlib = npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))/np.compat.long(math.factorial(3))
     nlib = nlib.astype(int)
 
     libANG = np.zeros((nlib, 3))

@@ -70,6 +70,16 @@ class BandDetect(band_detect.BandDetect):
       else:
         patterns = patternsIn
 
+      pscale = np.array([0.0, 1.0])
+
+      if patterns.dtype.kind =='f':
+        mxp = patterns.max()
+        mnp = patterns.min()
+        patterns -= mnp
+        patterns *= (2**16-2.0)/(mxp - mnp)
+        pscale[:] = np.array([mnp,(mxp - mnp) ])
+        patterns = patterns.astype(np.uint16)
+
       shape = patterns.shape
       nPats = shape[0]
 
@@ -142,10 +152,14 @@ class BandDetect(band_detect.BandDetect):
           #plt.imshow(rdnConvarray.squeeze())
 
         rdnConv.release()
-
         rdnConv = None
+
         blabeltime += timer() - tic1
 
+      bandData['avemax'] *= pscale[1]
+      bandData['avemax'] += pscale[0]
+      bandData['max'] *= pscale[1]
+      bandData['max'] += pscale[0]
       tottime = timer() - tic0
       # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
 
@@ -243,8 +257,10 @@ class BandDetect(band_detect.BandDetect):
 
     clvtypesize = 16 # this is the vector size to be used in the openCL implementation.
     nImCL = np.int32(clvtypesize * (np.int64(np.ceil(nIm/clvtypesize))))
+    imtype = image.dtype
 
-    image_align = np.ones((shapeIm[1], shapeIm[2], nImCL), dtype = np.float32)
+
+    image_align = np.ones((shapeIm[1], shapeIm[2], nImCL), dtype = imtype)
     image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()
     shpRdn = np.asarray( ((self.nRho+2*padding[0]), (self.nTheta+2*padding[1]), nImCL),dtype=np.uint64)
     radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=int((self.nRho+2*padding[0])*(self.nTheta+2*padding[1])*nImCL*4))
@@ -252,7 +268,7 @@ class BandDetect(band_detect.BandDetect):
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=radon.nbytes)
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
     image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image_align)
-    rdnIndx_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=self.radonPlan.indexPlan)
+
 
     imstep = np.uint64(np.product(shapeIm[-2:]))
     indxstep = np.uint64(self.radonPlan.indexPlan.shape[-1])
@@ -264,14 +280,30 @@ class BandDetect(band_detect.BandDetect):
 
     nImChunk = np.uint64(nImCL/clvtypesize)
 
+    if image.dtype.kind == 'f':
+      image_gpuflt = image_gpu
+    else:
+      image_gpuflt = cl.Buffer(ctx, mf.READ_WRITE, size=image_align.size * 4)  # 32-bit float
+
+      if image_align.dtype.type is np.ubyte:
+        prg.loadubyte8(queue, (imstep, 1, 1), None, image_gpu, image_gpuflt, nImChunk)
+      if image_align.dtype.type is np.uint16:
+        prg.loaduint16(queue, (imstep, 1, 1), None, image_gpu, image_gpuflt, nImChunk)
+      queue.flush()
+      image_gpu.release()
+      image_gpu = None
+
+
+
     if background is not None:
       back_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=background.astype(np.float32))
-      prg.backSub(queue,(imstep, 1, 1),None,image_gpu,back_gpu,nImChunk)
-      imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
-      cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
+      prg.backSub(queue,(imstep, 1, 1),None,image_gpuflt,back_gpu,nImChunk)
+      #imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
+      #cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
 
+    rdnIndx_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.radonPlan.indexPlan)
     cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(self.radonPlan.missingval), 0, radon_gpu.size)
-    prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
+    prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpuflt,radon_gpu,
                   imstep, indxstep,
                  shpRdn[0], shpRdn[1],
                  padRho, padTheta, np.uint64(self.nTheta))
@@ -281,7 +313,8 @@ class BandDetect(band_detect.BandDetect):
        prg.radonFixArt(queue,(nImChunk,shpRdn[0]),None,radon_gpu,
                        shpRdn[0],shpRdn[1],padTheta)
 
-
+    rdnIndx_gpu.release()
+    rdnIndx_gpu = None
 
 
     if returnBuff == False:
@@ -291,16 +324,7 @@ class BandDetect(band_detect.BandDetect):
       radon = radon[:,:, 0:nIm]
       radon_gpu = None
       #clparams = None
-      rdnIndx_gpu.release()
-      rdnIndx_gpu = None
-      image_gpu.release()
-      image_gpu = None
       return radon, clparams
-    else:
-      rdnIndx_gpu.release()
-      rdnIndx_gpu = None
-      image_gpu.release()
-      image_gpu = None
 
     return radon_gpu, clparams
 

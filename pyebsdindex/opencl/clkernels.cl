@@ -22,6 +22,44 @@ Author: David Rowenhorst;
 The US Naval Research Laboratory Date: 21 Aug 2020
 */
 
+// simple program to convert a 8-bit byte to float
+__kernel void loadubyte8( const __global uchar16 *im1, __global float16 *im1flt,
+                        const unsigned long int nImChunk)
+  {
+  const unsigned long int xy = get_global_id(0);
+  //const unsigned long int szim = get_global_size(0);
+  unsigned long i;
+  uchar16 imVal;
+  float16 imValflt;
+
+  const unsigned long indx = nImChunk * xy;
+  for(i = 0; i< nImChunk; ++i){
+    imVal =  im1[indx+i];
+    imValflt = convert_float16(imVal);
+    im1flt[indx+i] = imValflt;
+  }
+  
+}
+
+// simple program to convert a 16-bit int to float
+__kernel void loaduint16( const __global ushort16 *im1, __global float16 *im1flt,
+                        const unsigned long int nImChunk)
+  {
+  const unsigned long int xy = get_global_id(0);
+  //const unsigned long int szim = get_global_size(0);
+  unsigned long i;
+  ushort16 imVal;
+  float16 imValflt;
+
+  const unsigned long indx = nImChunk * xy;
+  for(i = 0; i< nImChunk; ++i){
+    imVal =  im1[indx+i];
+    imValflt = convert_float16(imVal);
+    im1flt[indx+i] = imValflt;
+  }
+  
+}
+
 
 //Do a background subtract on the pattern
 __kernel void backSub( __global float16 *im1, __global const float *back,

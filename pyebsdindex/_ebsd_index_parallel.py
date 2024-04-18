@@ -308,7 +308,7 @@ def index_pats_distributed(
 
 
     if ngpu > 0:
-        ngpupro = max(12, ngpu*6)  # number of processes that will serve data to the gpu
+        ngpupro = max(12, ngpu*8)  # number of processes that will serve data to the gpu
         #ngpupro = 8
         if n_cpu_nodes < 8:
             ngpupro = min(ngpupro,8)
@@ -482,9 +482,9 @@ def index_pats_distributed(
         if ngpudone < njobs: # check if gpu is done
 
             gpuwrker_cycles +=1
-            nret = max(1, len(gputask) // ngpu)
-            #nret =len(gputask)
-            donewrker, busy = ray.wait(gputask,num_returns = nret,  timeout=1.0)
+
+            donewrker, busy = ray.wait(gputask,num_returns=len(gputask),  timeout=0.1)
+
             #print(len(donewrker), nret)
             #print()
             #nret = max(1,len(gputask)//2)
@@ -497,6 +497,7 @@ def index_pats_distributed(
                 #wrker.append(busy[0])
                 #ray.kill(gputask[jid])
             for wrker in donewrker:
+                
                 gpuwrker_cycles = 0
                 jid = gputask.index(wrker)
                 try:
@@ -536,6 +537,7 @@ def index_pats_distributed(
                     #    raise Exception("Error in GPU processing patterns: ", gtaskindex[jid].pstart, gtaskindex[jid].pend)
 
 
+
                 except:
                     gjob = gtaskindex[jid]
                     print('A GPU death has occured', gjob.pstart, gjob.pend)
@@ -568,7 +570,7 @@ def index_pats_distributed(
                         gtaskindex.append(gjob)
             # toc = timer()
 
-            if gpuwrker_cycles > 10: # a gpu worker got stuck -- see if I can unstick it.
+            if gpuwrker_cycles > 100: # a gpu worker got stuck -- see if I can unstick it.
                 wrker = busy[0]
                 gpuwrker_cycles = 0
                 jid = gputask.index(wrker)

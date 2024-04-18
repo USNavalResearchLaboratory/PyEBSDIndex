@@ -207,7 +207,7 @@ class Radon:
     shpRdn = radon.shape
     norm = np.sum(self.indexPlan < nPx, axis = 2 ) + 1.0e-12
     for i in np.arange(nIm):
-      im[:-2] = image[i,:,:].flatten()
+      im[:-2] = (image[i,:,:].flatten()).astype(np.float32)
       radon[i, padding[0]:shpRdn[1]-padding[0], padding[1]:shpRdn[2]-padding[1]] = (
           np.sum(im.take(self.indexPlan.astype(np.int64)), axis=2) / norm)
       radon[i, padding[0]:shpRdn[1]-padding[0], padding[1]:shpRdn[2]-padding[1]] += -1.0*(norm < 1.0).astype(float)
@@ -236,10 +236,10 @@ class Radon:
     #  reform = False
 
     if background is None:
-      image = imageIn.reshape(-1)
+      image = (imageIn.reshape(-1)).astype(np.float32)
     else:
       image = imageIn - background
-      image = image.reshape(-1)
+      image = (image.reshape(-1)).astype(np.float32)
 
     nPx = shapeIm[-1]*shapeIm[-2]
     indxDim = np.asarray(self.indexPlan.shape)

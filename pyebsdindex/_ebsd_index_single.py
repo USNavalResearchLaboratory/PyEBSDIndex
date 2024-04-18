@@ -582,7 +582,7 @@ class EBSDIndexer:
             pats, xylocin = self.fID.read_data(
                 returnArrayOnly=True,
                 patStartCount=[patstart, npats],
-                convertToFloat=True,
+                convertToFloat=False,
             )
             if xyloc is None:
                 xyloc = xylocin
