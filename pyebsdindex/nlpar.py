@@ -238,6 +238,7 @@ class NLPAR:
     if self.mask is None:
       self.mask = np.ones((pheight,pwidth),dtype=np.uint8)
 
+    self.mask = (self.mask).astype(np.uint8)
     indices = np.asarray((self.mask.flatten().nonzero())[0],np.uint64)
 
     sigma = np.zeros((nrows,ncols),dtype=np.float32)+1e24

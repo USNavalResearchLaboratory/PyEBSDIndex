@@ -29,7 +29,8 @@ from timeit import default_timer as timer
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
-import scipy.ndimage as scipyndim #import gaussian_filter
+
+import scipy.ndimage as scipyndim #import gaussian_filter, dilation ...
 #from scipy.ndimage #import grey_dilation as scipy_grey_dilation
 #from scipy.ndimage #import median_filter
 import scipy.optimize as scipyopt
@@ -72,9 +73,13 @@ class BandDetect():
     self.padding = np.array([11, 11])
     self.rhoMaskFrac = rhoMaskFrac
 
+    self.rhomask1thresh = None
+    self.rhomask1 = None
+
     self.nBands = nBands
     self.EDAXIQ = False
     self.backgroundsub = None
+    self.patternmask = None
 
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
@@ -89,11 +94,22 @@ class BandDetect():
         self.patDim = np.asarray(patterns.shape[-2:])
       else:
         self.patDim = np.asarray(patDim)
+      patternmask = None
+      if 'patternmask' in kwargs :
+        patternmask = kwargs.get('patternmask')
+
+      patternmaskindex = None
+      if 'patternmaskindex' in kwargs:
+        patternmaskindex = kwargs.get('patternmaskindex')
+      #print(patternmask)
       self.band_detect_setup(patterns, self.patDim,self.nTheta,self.nRho,\
-                self.tSigma, self.rSigma,self.rhoMaskFrac,self.nBands)
+                             self.tSigma, self.rSigma,self.rhoMaskFrac,self.nBands,
+                             patternmask = patternmask,patternmaskindex = patternmaskindex,
+                             **kwargs)
 
   def band_detect_setup(self, patterns=None,patDim=None,nTheta=None,nRho=None,\
-                      tSigma=None, rSigma=None,rhoMaskFrac=None,nBands=None):
+                      tSigma=None, rSigma=None,rhoMaskFrac=None,nBands=None,
+                      patternmask=None, patternmaskindex=None, **kwargs):
     p_dim = None
     recalc_radon = False
     recalc_masks = False
@@ -127,15 +143,72 @@ class BandDetect():
     if self.dRho is None:
       recalc_radon = True
 
+    #recalc_radon = True
     if recalc_radon == True:
-      #self.rhoMax = 0.5 * np.float32(np.sqrt(np.float32(self.patDim[0])**2  + np.float32(self.patDim[1])**2))
-      self.rhoMax = 0.5 * np.float32(self.patDim.min())
+      if (self.rhoMaskFrac < 1) and (self.rhoMaskFrac > 0):
+        self.rhoMax = 0.5 * np.float32(self.patDim.min())
+      else:
+        self.rhoMax = 0.5 * np.float32(np.sqrt(np.float32(self.patDim[-2])**2  + np.float32(self.patDim[-1])**2))
+
+      self.rhomask1thresh = np.float32(self.patDim.min())*0.1
+
       self.dRho = self.rhoMax/np.float32(self.nRho)
-      self.radonPlan = radon_fast.Radon(imageDim=self.patDim, nTheta=self.nTheta, nRho=self.nRho, rhoMax=self.rhoMax)
-      temp = np.ones(self.patDim[-2:], dtype=np.float32)
-      back = self.radonPlan.radon_faster(temp,fixArtifacts=True)
-      back = (back > 0).astype(np.float32) / (back + 1.0e-12)
-      self.rdnNorm = back
+      self.radonPlan = radon_fast.Radon(imageDim=self.patDim,
+                                        nTheta=self.nTheta, nRho=self.nRho,
+                                        rhoMax=self.rhoMax,
+                                        mask=patternmask, maskindex=patternmaskindex)
+
+      if patternmask is not None:
+        back = np.array(patternmask > 0).astype(np.float32)
+      else:
+        back = np.ones(self.patDim[-2:], dtype=np.float32)
+
+
+
+      rdnmask = self.radonPlan.radon_faster(back,fixArtifacts=False, normalization=False)
+      #plt.imshow(rdnmask >= self.rhomask1thresh)
+      self.rhomask1 = (rdnmask[:,:,0] >= self.rhomask1thresh).astype(np.ubyte)
+
+      rdnmask = rdnmask > 0
+      rdnmask = rdnmask.squeeze()
+
+      if self.rhoMaskFrac >= 1:
+        s = np.ones(( 3, 1))
+        rdnmask = scipyndim.binary_erosion(rdnmask, structure=s, iterations = int(self.rhoMaskFrac) )
+      else:
+        cmask = self._circmask(back)
+        rdncmask = rdnmask.copy()
+        if self.rhoMaskFrac > 0:
+          mskinx = int(self.nRho*self.rhoMaskFrac)
+          if mskinx == 0:
+            mskinx = 1
+          rdncmask[0:mskinx, :] = 0
+          rdncmask[-mskinx:, :] = 0
+
+          #thresh = 0.5 * (np.min(back.shape[-2:]) * (1.0 - self.rhoMaskFrac))
+          #cmask = (cmask < thresh).astype(np.float32)
+        elif self.rhoMaskFrac < 0:
+          mskinx = int(-1*self.nRho * self.rhoMaskFrac)
+          #rdncmask[0:mskinx, :] = 0
+          #rdncmask[-mskinx:, :] = 0
+
+          cmask = (cmask < self.rhoMax * (1.0 + self.rhoMaskFrac)).astype(np.float32)
+          rdncmask = (self.radonPlan.radon_faster(cmask, fixArtifacts=False) > 0).squeeze()
+          #plt.imshow(cmask); print(thresh)
+        else:
+          pass
+          #cmask[:,...] = (cmask > -1).astype(np.float32)
+
+
+        #rdncmask = (self.radonPlan.radon_faster(cmask, fixArtifacts=False) > 0).squeeze()
+
+        rdnmask *= (rdncmask > 0).astype(bool)
+
+
+
+      self.rdnmask = rdnmask > 0
+      #back = (back > 0).astype(np.float32) / (back + 1.0e-12)
+      #self.rdnNorm = back
 
 
     if tSigma is not None:
@@ -345,42 +418,42 @@ class BandDetect():
       print('Band Label Time:', blabeltime)
       print('Total Band Find Time:',tottime)
     if verbose > 1:
-
-      if len(rdnConv.shape) == 3:
-        im2show = rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
-      else:
-        im2show = rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1]]
-
-      rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
-      mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
-      stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
-
-      im2show -= mean
-      im2show /= stdv
-      im2show = im2show.clip(-4, None)
-      im2show += 6
-      im2show[0:rhoMaskTrim,:] = 0
-      im2show[-rhoMaskTrim:,:] = 0
-      im2show = np.fliplr(im2show)
-
-      plt.figure()
-      plt.imshow(im2show, cmap='gray', extent=[self.radonPlan.theta.min(), self.radonPlan.theta.max(),
-                                               self.radonPlan.rho.min(), self.radonPlan.rho.max()],
-                 interpolation='none', zorder=1, aspect='auto')
-      width = bandData['width'][-1, :]
-      width /= width.min()
-      width *= 2
-      xplt = np.squeeze(
-        180.0 - np.interp(bandData['aveloc'][-1, :, 1]+0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
-      yplt = np.squeeze(
-        -1.0 * np.interp(bandData['aveloc'][-1, :, 0]-0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
-
-      plt.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
-
-      for pt in range(self.nBands):
-        plt.annotate(str(pt + 1), np.squeeze([xplt[pt]+4, yplt[pt]]), color='yellow')
-      plt.xlim(0,180)
-      plt.ylim(-self.rhoMax, self.rhoMax)
+      self._display_radon_pattern(rdnConv, bandData, patterns)
+      # if len(rdnConv.shape) == 3:
+      #   im2show = rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
+      # else:
+      #   im2show = rdnConv[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1]]
+      #
+      # rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
+      # mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+      # stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+      #
+      # im2show -= mean
+      # im2show /= stdv
+      # im2show = im2show.clip(-4, None)
+      # im2show += 6
+      # im2show[0:rhoMaskTrim,:] = 0
+      # im2show[-rhoMaskTrim:,:] = 0
+      # im2show = np.fliplr(im2show)
+      #
+      # plt.figure()
+      # plt.imshow(im2show, cmap='gray', extent=[self.radonPlan.theta.min(), self.radonPlan.theta.max(),
+      #                                          self.radonPlan.rho.min(), self.radonPlan.rho.max()],
+      #            interpolation='none', zorder=1, aspect='auto')
+      # width = bandData['width'][-1, :]
+      # width /= width.min()
+      # width *= 2
+      # xplt = np.squeeze(
+      #   180.0 - np.interp(bandData['aveloc'][-1, :, 1]+0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
+      # yplt = np.squeeze(
+      #   -1.0 * np.interp(bandData['aveloc'][-1, :, 0]-0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
+      #
+      # plt.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
+      #
+      # for pt in range(self.nBands):
+      #   plt.annotate(str(pt + 1), np.squeeze([xplt[pt]+4, yplt[pt]]), color='yellow')
+      # plt.xlim(0,180)
+      # plt.ylim(-self.rhoMax, self.rhoMax)
 
 
     return bandData
@@ -464,12 +537,15 @@ class BandDetect():
     #location of the max is where the local max is equal to the original.
     lMaxRdn = lMaxRdn == rdn
 
-    rhoMaskTrim = np.int32((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
-    lMaxRdn[0:rhoMaskTrim,:,:] = 0
-    lMaxRdn[-rhoMaskTrim:,:,:] = 0
-    lMaxRdn[:,0:self.padding[1],:] = 0
-    lMaxRdn[:,-self.padding[1]:,:] = 0
+    #rhoMaskTrim = np.int32((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
+    #lMaxRdn[0:rhoMaskTrim,:,:] = 0
+    #lMaxRdn[-rhoMaskTrim:,:,:] = 0
+    #lMaxRdn[:,0:self.padding[1],:] = 0
+    #lMaxRdn[:,-self.padding[1]:,:] = 0
     #print("Traditional:",timer() - tic)
+    maskrnd = np.zeros((self.nRho + 2 * self.padding[0], self.nTheta + 2 * self.padding[1],1), dtype=np.ubyte)
+    maskrnd[self.padding[0]:-self.padding[0], self.padding[1]:-self.padding[1],0] = self.rdnmask.astype(np.ubyte)
+    lMaxRdn *= maskrnd.astype(bool)
     return lMaxRdn
 
 
@@ -572,7 +648,81 @@ class BandDetect():
         bandData_valid[q,i] = 1
 
     return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc, bandData_valid, bandData_width
+  def _display_radon_pattern(self, rdnConvarray, bandData, patterns):
+    if len(rdnConvarray.shape) == 3:
+      im2show = rdnConvarray[self.padding[0]:-self.padding[0], self.padding[1]:-self.padding[1], -1]
+    else:
+      im2show = rdnConvarray[self.padding[0]:-self.padding[0], self.padding[1]:-self.padding[1]]
 
+    im2show *= self.rdnmask
+    #rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
+    #mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+    #stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
+    mean = np.mean(im2show, where=(self.rdnmask >0))
+    stdv = np.std(im2show, where=(self.rdnmask >0))
+
+
+    im2show -= mean
+    im2show /= stdv
+    im2show = im2show.clip(-4, None)
+    im2show += 6
+    #im2show[0:rhoMaskTrim, :] = 0
+    #im2show[-rhoMaskTrim:, :] = 0
+
+    im2show = np.fliplr(im2show)
+    fig = plt.figure(figsize=(12, 4))
+    subrdn = fig.add_subplot(121, xlim=(0, 180), ylim=(-self.rhoMax, self.rhoMax))
+    subrdn.imshow(
+      im2show,
+      cmap='gray',
+      extent=[0, 180, -self.rhoMax, self.rhoMax],
+      interpolation='none',
+      zorder=1,
+      aspect='auto'
+    )
+    width = bandData['width'][-1, :]
+    width /= width.min()
+    width *= 2.0
+    xplt = np.squeeze(
+      180.0 - np.interp(bandData['aveloc'][-1, :, 1] + 0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
+    yplt = np.squeeze(
+      -1.0 * np.interp(bandData['aveloc'][-1, :, 0] - 0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
+
+    subrdn.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
+
+    for pt in range(self.nBands):
+      subrdn.annotate(str(pt + 1), np.squeeze([xplt[pt] + 4, yplt[pt]]), color='yellow')
+    # subrdn.xlim(0,180)
+    # subrdn.ylim(-self.rhoMax, self.rhoMax)
+    subpat = fig.add_subplot(122)
+    pat1 = patterns[-1, :, :].copy().squeeze().astype(float)
+    minpat = pat1.min()
+    pdim = pat1.shape
+    pat1 = np.concatenate((pat1.flatten(), [minpat]))
+    patmask = np.copy(self.radonPlan.mask).astype(int)
+
+    #patdisplay = np.zeros(patmask.size)
+    patdisplay = pat1[[self.radonPlan.maskindex.flatten().clip(-1,).astype(int)]]
+    patdisplay = patdisplay.reshape(self.radonPlan.maskindex.shape)
+
+    patdisplay *= (patmask != 0).astype(int)
+    patdisplay += minpat*(patmask ==0).astype(float)
+
+    subpat.imshow(patdisplay, cmap='gray')
+  def _circmask(self, im):
+    nx = im.shape[-1]
+    ny = im.shape[-2]
+    # plt.imshow(back)
+    x = np.arange(nx, dtype=float)
+    x = (np.broadcast_to(x.reshape(1, nx), (ny, nx))).ravel()
+    y = np.arange(ny, dtype=float)
+    y = (np.broadcast_to(y, (nx, ny)).T).ravel()
+
+      # make a circular mask - even if not EDAX, this should work OK.
+    cx = (np.arange(nx) - nx * 0.5) ** 2
+    cy = (np.arange(ny) - ny * 0.5) ** 2
+    cmask = np.sqrt(np.broadcast_to(cx.reshape(1, nx), (ny, nx)) + np.broadcast_to(cy, (nx, ny)).T) #< (ny * 0.49)
+    return cmask
 def getopenclparam(**kwargs): # dummy function to maintain compatability with openCL version
   return None
 
