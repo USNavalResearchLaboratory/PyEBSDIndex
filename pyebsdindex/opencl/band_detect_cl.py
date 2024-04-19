@@ -257,42 +257,35 @@ class BandDetect(band_detect.BandDetect):
     #  reform = False
 
     clvtypesize = 16 # this is the vector size to be used in the openCL implementation.
-    nImCL = np.int32(clvtypesize * (np.int64(np.ceil(nIm/clvtypesize))))
+    nImCL = np.uint64(clvtypesize * (np.int64(np.ceil(nIm/clvtypesize))))
     imtype = image.dtype
 
+    tict = timer()
+    #image_align = np.ones((shapeIm[1], shapeIm[2], nImCL), dtype = imtype)
+    #image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()
+    toct = timer()
 
-    image_align = np.ones((shapeIm[1], shapeIm[2], nImCL), dtype = imtype)
-    image_align[:,:,0:nIm] = np.transpose(image, [1,2,0]).copy()
-    shpRdn = np.asarray( ((self.nRho+2*padding[0]), (self.nTheta+2*padding[1]), nImCL),dtype=np.uint64)
-    radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=int((self.nRho+2*padding[0])*(self.nTheta+2*padding[1])*nImCL*4))
+
 
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=radon.nbytes)
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
-    image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image_align)
-
-
+    image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image)
     imstep = np.uint64(np.product(shapeIm[-2:]))
-    indxstep = np.uint64(self.radonPlan.indexPlan.shape[-1])
-    rdnstep = np.uint64(self.nRho * self.nTheta)
-
-    padRho = np.uint64(padding[0])
-    padTheta = np.uint64(padding[1])
     tic = timer()
 
     nImChunk = np.uint64(nImCL/clvtypesize)
+    image_gpuflt = cl.Buffer(ctx, mf.READ_WRITE, size=int(int(shapeIm[1])*int(shapeIm[2])*int(nImCL) * int(4)))  # 32-bit float
 
-    if image.dtype.kind == 'f':
-      image_gpuflt = image_gpu
-    else:
-      image_gpuflt = cl.Buffer(ctx, mf.READ_WRITE, size=image_align.size * 4)  # 32-bit float
 
-      if image_align.dtype.type is np.ubyte:
-        prg.loadubyte8(queue, (imstep, 1, 1), None, image_gpu, image_gpuflt, nImChunk)
-      if image_align.dtype.type is np.uint16:
-        prg.loaduint16(queue, (imstep, 1, 1), None, image_gpu, image_gpuflt, nImChunk)
-      queue.flush()
-      image_gpu.release()
-      image_gpu = None
+    if image.dtype.type is np.float32:
+      prg.loadfloat32(queue, (shapeIm[2], shapeIm[1], nIm), None, image_gpu, image_gpuflt, nImCL)
+    if image.dtype.type is np.ubyte:
+      prg.loadubyte8(queue, (shapeIm[2], shapeIm[1], nIm), None, image_gpu, image_gpuflt, nImCL)
+    if image.dtype.type is np.uint16:
+      prg.loaduint16(queue, (shapeIm[2], shapeIm[1], nIm), None, image_gpu, image_gpuflt, nImCL)
+    queue.flush()
+    image_gpu.release()
+    image_gpu = None
 
 
 
@@ -301,6 +294,14 @@ class BandDetect(band_detect.BandDetect):
       prg.backSub(queue,(imstep, 1, 1),None,image_gpuflt,back_gpu,nImChunk)
       #imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
       #cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
+
+    indxstep = np.uint64(self.radonPlan.indexPlan.shape[-1])
+    rdnstep = np.uint64(self.nRho * self.nTheta)
+    padRho = np.uint64(padding[0])
+    padTheta = np.uint64(padding[1])
+    shpRdn = np.asarray(((self.nRho + 2 * padding[0]), (self.nTheta + 2 * padding[1]), nImCL), dtype=np.uint64)
+    radon_gpu = cl.Buffer(ctx, mf.READ_WRITE,
+                          size=int((self.nRho + 2 * padding[0]) * (self.nTheta + 2 * padding[1]) * nImCL * 4))
 
     rdnIndx_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.radonPlan.indexPlan)
     cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(self.radonPlan.missingval), 0, radon_gpu.size)

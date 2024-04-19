@@ -22,41 +22,70 @@ Author: David Rowenhorst;
 The US Naval Research Laboratory Date: 21 Aug 2020
 */
 
-// simple program to convert a 8-bit byte to float
-__kernel void loadubyte8( const __global uchar16 *im1, __global float16 *im1flt,
-                        const unsigned long int nImChunk)
+// simple program to convert a 8-bit byte to float and transpose array
+__kernel void loadubyte8( const __global uchar *im1, __global float *im1flt, const unsigned long int nImCL)
   {
-  const unsigned long int xy = get_global_id(0);
-  //const unsigned long int szim = get_global_size(0);
-  unsigned long i;
-  uchar16 imVal;
-  float16 imValflt;
+  const unsigned long int x = get_global_id(0);
+  const unsigned long int y = get_global_id(1);
+  const unsigned long int z = get_global_id(2);
+  const unsigned long int nx = get_global_size(0);
+  const unsigned long int ny = get_global_size(1);
+  //const unsigned long int nz = get_global_size(2);
+  
+  const unsigned long int indx1 = x + nx*y + nx*ny*z;
+  const unsigned long int indx2 = z + nImCL*(x + nx*y); // transpose z->x, x->y, y->z 
+  uchar imVal;
+  float imValflt;
 
-  const unsigned long indx = nImChunk * xy;
-  for(i = 0; i< nImChunk; ++i){
-    imVal =  im1[indx+i];
-    imValflt = convert_float16(imVal);
-    im1flt[indx+i] = imValflt;
-  }
+  imVal =  im1[indx1];
+  imValflt = convert_float(imVal);
+  im1flt[indx2] = imValflt;
+  
   
 }
 
-// simple program to convert a 16-bit int to float
-__kernel void loaduint16( const __global ushort16 *im1, __global float16 *im1flt,
-                        const unsigned long int nImChunk)
-  {
-  const unsigned long int xy = get_global_id(0);
-  //const unsigned long int szim = get_global_size(0);
-  unsigned long i;
-  ushort16 imVal;
-  float16 imValflt;
 
-  const unsigned long indx = nImChunk * xy;
-  for(i = 0; i< nImChunk; ++i){
-    imVal =  im1[indx+i];
-    imValflt = convert_float16(imVal);
-    im1flt[indx+i] = imValflt;
-  }
+// simple program to convert a 8-bit byte to float and transpose array
+__kernel void loaduuint16( const __global ushort *im1, __global float *im1flt, const unsigned long int nImCL)
+  {
+  const unsigned long int x = get_global_id(0);
+  const unsigned long int y = get_global_id(1);
+  const unsigned long int z = get_global_id(2);
+  const unsigned long int nx = get_global_size(0);
+  const unsigned long int ny = get_global_size(1);
+  //const unsigned long int nz = get_global_size(2);
+  
+  const unsigned long int indx1 = x + nx*y + nx*ny*z;
+  const unsigned long int indx2 = z + nImCL*(x + nx*y); // transpose z->x, x->y, y->z 
+  ushort imVal;
+  float imValflt;
+
+  imVal =  im1[indx1];
+  imValflt = convert_float(imVal);
+  im1flt[indx2] = imValflt;
+  
+  
+}
+
+
+
+// simple program to convert a float to float and transpose array
+__kernel void loaduufloat32( const __global float *im1, __global float *im1flt, const unsigned long int nImCL)
+  {
+  const unsigned long int x = get_global_id(0);
+  const unsigned long int y = get_global_id(1);
+  const unsigned long int z = get_global_id(2);
+  const unsigned long int nx = get_global_size(0);
+  const unsigned long int ny = get_global_size(1);
+  //const unsigned long int nz = get_global_size(2);
+  
+  const unsigned long int indx1 = x + nx*y + nx*ny*z;
+  const unsigned long int indx2 = z + nImCL*(x + nx*y); // transpose z->x, x->y, y->z 
+  float imVal;
+
+  imVal =  im1[indx1];
+  im1flt[indx2] = imVal;
+  
   
 }
 
