@@ -412,6 +412,12 @@ class EBSDIndexer:
         if filename is None:
             self.filein = None
             self.bandDetectPlan.band_detect_setup(patDim=patDim)
+        elif isinstance(filename, ebsd_pattern.EBSDPatternFile):
+            self.fID = filename  
+            self.bandDetectPlan.band_detect_setup(
+                patDim=[self.fID.patternH, self.fID.patternW]
+            )       
+            self.filein = filename.filepath   
         else:
             self.filein = filename
             self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
