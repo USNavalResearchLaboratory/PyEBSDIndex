@@ -46,7 +46,7 @@ __kernel void loadubyte8( const __global uchar *im1, __global float *im1flt, con
 
 
 // simple program to convert a 8-bit byte to float and transpose array
-__kernel void loaduuint16( const __global ushort *im1, __global float *im1flt, const unsigned long int nImCL)
+__kernel void loaduint16( const __global ushort *im1, __global float *im1flt, const unsigned long int nImCL)
   {
   const unsigned long int x = get_global_id(0);
   const unsigned long int y = get_global_id(1);
