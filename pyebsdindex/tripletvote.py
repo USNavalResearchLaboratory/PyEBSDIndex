@@ -524,7 +524,7 @@ class BandIndexer():
     whGood = -1
 
     libAngTable = self.completelib['angTable']
-    sztable = angTable.shape
+    sztable = libAngTable.shape
     libFamIndx = self.completelib['famIndex']
     nFam = self.completelib['nFamily']
     libPolesCart = self.completelib['polesCart']
