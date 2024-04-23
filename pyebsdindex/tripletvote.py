@@ -462,14 +462,21 @@ class BandIndexer():
   def bandindex(self, band_norms, band_intensity = None, band_widths=None, verbose=0):
     tic0 = timer()
     nfam = self.polefamilies.shape[0]
-    bandnorms = np.squeeze(band_norms)
-    n_bands = np.reshape(bandnorms, (-1,3)).shape[0] #np.int64(bandnorms.size/3)
+    #bandnorms = np.squeeze(band_norms)
+    if band_norms.ndim == 2:
+      bandnorms = band_norms[np.newaxis, ...]
+    else:
+      bandnorms = band_norms
+
+
+    n_bands = bandnorms.shape[1]
+    npats = bandnorms.shape[0]
     if band_intensity is None:
-      band_intensity = np.ones((n_bands))
+      band_intensity = np.ones((npats, n_bands))
     tic = timer()
-    bandangs = np.abs(bandnorms.dot(bandnorms.T))
-    bandangs = np.clip(bandangs, -1.0, 1.0)
-    bandangs  = np.arccos(bandangs)*RADEG
+    #bandangs = np.abs(bandnorms.dot(bandnorms.T))
+    #bandangs = np.clip(bandangs, -1.0, 1.0)
+    #bandangs  = np.arccos(bandangs)*RADEG
 
 
     tripangs = self.angtriplets['angles']
@@ -477,9 +484,22 @@ class BandIndexer():
     pairangs = self.angpairs['angles']
     pairfam = self.angpairs['familyid']
 
-    accumulator, bandFam, bandRank, band_cm, accumulator_nw = self._tripvote_numba(bandangs, self.lut, self.angTol, tripangs, tripid, nfam, n_bands)
+    accumulator, bandFam, bandRank, band_cm, accumulator_nw = self._tripvote_numba(bandnorms, self.lut, self.angTol, tripangs, tripid, nfam)
     #accumulator, bandFam, bandRank, band_cm = self._pairvote_numba(bandangs, self.angTol, pairangs, pairfam,
     #                                                               nfam, n_bands)
+
+    bandRank_arg = np.argsort(bandRank, axis=1).astype(np.int64)
+
+
+    accumulator = accumulator[0, ...]
+    bandFam = bandFam[0, ...]
+    bandRank = bandRank[0, ...]
+    band_cm = band_cm[0, ...]
+    accumulator_nw = accumulator_nw[0, ...]
+    bandnorms = bandnorms[0,...]
+    bandRank_arg = bandRank_arg[0,...]
+
+
     if verbose > 2:
       print('band Vote time:',timer() - tic)
       if verbose > 3:
@@ -494,7 +514,7 @@ class BandIndexer():
 
 
     sumaccum = np.sum(accumulator)
-    bandRank_arg = np.argsort(bandRank).astype(np.int64) # n_bands - np.arange(n_bands, dtype=np.int64) #
+    #bandRank_arg = np.argsort(bandRank).astype(np.int64) # n_bands - np.arange(n_bands, dtype=np.int64) #
     test  = 0
     fit = 1000.0
     nMatch = -1
@@ -503,17 +523,17 @@ class BandIndexer():
     polematch = np.zeros([n_bands], dtype = int)-1
     whGood = -1
 
-    angTable = self.completelib['angTable']
+    libAngTable = self.completelib['angTable']
     sztable = angTable.shape
-    famIndx = self.completelib['famIndex']
+    libFamIndx = self.completelib['famIndex']
     nFam = self.completelib['nFamily']
-    polesCart = self.completelib['polesCart']
+    libPolesCart = self.completelib['polesCart']
     angTol = self.angTol
     n_band_early = np.int64(self.nband_earlyexit)
 
     # this will check the vote, and return the exact band matching to specific poles of the best fitting solution.
     fit, polematch, nMatch, whGood, ij, R, fitb = \
-      self._assign_bands_nb(polesCart, bandRank_arg, bandFam, famIndx, nFam, angTable, bandnorms, angTol, n_band_early)
+      self._assign_bands_nb(libPolesCart, bandRank_arg, bandFam, libFamIndx, nFam,libAngTable, bandnorms, angTol, n_band_early)
 
     if verbose > 3:
       #print(rotlib.om2qu(R))
@@ -879,131 +899,139 @@ class BandIndexer():
 
   @staticmethod
   @numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
-  def _tripvote_numba(bandangs, LUT, angTol, tripAngles, tripID, nfam, n_bands):
+  def _tripvote_numba(bandnorms, LUT, angTol, tripAngles, tripID, nfam):
+    npats = bandnorms.shape[0]
+    n_bands = bandnorms.shape[1]
     LUTTemp = np.asarray(LUT).copy()
-    accumulator = np.zeros((nfam, n_bands), dtype=np.float32)
-    accumulatorW = np.zeros((nfam, n_bands), dtype=np.float32)
+
     tshape = np.shape(tripAngles)
     ntrip = int(tshape[0])
+
+    accumulator = np.zeros((npats, nfam, n_bands), dtype=np.float32)
+    accumulatorW = np.zeros((npats, nfam, n_bands), dtype=np.float32)
+    mxvote = np.zeros((npats,n_bands), dtype=np.int32)
+    tvotes = np.zeros((npats,n_bands), dtype=np.int32)
+    band_cm = np.zeros((npats,n_bands), dtype=np.float32)
+    bandRank = np.zeros((npats,n_bands), dtype=np.float32)
+    bandFam = np.zeros((npats,n_bands), dtype=np.int32)
+
     #count  = 0.0
     #angTest2 = np.zeros(ntrip, dtype=numba.boolean)
     #angTest2 = np.empty(ntrip,dtype=numba.boolean)
-    angTest0 = np.zeros((3), dtype=np.float32)
-    for i in range(n_bands):
-      for j in range(i + 1,n_bands):
-        for k in range(j + 1,n_bands):
-          angtri = np.array([bandangs[i,j],bandangs[i,k],bandangs[j,k]], dtype=np.float32)
-          srt = angtri.argsort(kind='quicksort') #np.array(np.argsort(angtri), dtype=numba.int64)
-          srt2 = np.asarray(LUTTemp[:,srt[0],srt[1],srt[2]], dtype=np.int64).copy()
-          unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
-          angtriSRT = np.asarray(angtri[srt])
+    for p in range(npats):
+      bandangs = np.abs(bandnorms[p,...].dot(bandnorms[p,...].T))
+      bandangs = np.clip(bandangs, -1.0, 1.0)
+      bandangs = np.arccos(bandangs) * RADEG
+      angTest0 = np.zeros((3), dtype=np.float32)
+      for i in range(n_bands):
+        for j in range(i + 1,n_bands):
+          for k in range(j + 1,n_bands):
+            angtri = np.array([bandangs[i,j],bandangs[i,k],bandangs[j,k]], dtype=np.float32)
+            srt = angtri.argsort(kind='quicksort') #np.array(np.argsort(angtri), dtype=numba.int64)
+            srt2 = np.asarray(LUTTemp[:,srt[0],srt[1],srt[2]], dtype=np.int64).copy()
+            unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
+            angtriSRT = np.asarray(angtri[srt])
 
-          #angTest0 = (np.abs(tripAngles - angtriSRT)).astype(np.float32)
-          #print(angTest0.shape)
-          #angTest = (angTest0 <= angTol)#.astype(np.int)
+            #angTest0 = (np.abs(tripAngles - angtriSRT)).astype(np.float32)
+            #print(angTest0.shape)
+            #angTest = (angTest0 <= angTol)#.astype(np.int)
 
-          for q in range(ntrip):
-            #print('____')
-            #print(tripAngles[q,:], angtriSRT)
+            for q in range(ntrip):
+              #print('____')
+              #print(tripAngles[q,:], angtriSRT)
 
-            test1 = np.abs(tripAngles[q,0] - angtriSRT[0])
-            if test1 > angTol:
-              continue
-            else:
-              angTest0[0] = test1
+              test1 = np.abs(tripAngles[q,0] - angtriSRT[0])
+              if test1 > angTol:
+                continue
+              else:
+                angTest0[0] = test1
 
-            test2 = np.abs(tripAngles[q, 1] - angtriSRT[1])
-            if test2 > angTol:
-              continue
-            else:
-              angTest0[1] = test2
+              test2 = np.abs(tripAngles[q, 1] - angtriSRT[1])
+              if test2 > angTol:
+                continue
+              else:
+                angTest0[1] = test2
 
-            test3 = np.abs(tripAngles[q, 2] - angtriSRT[2])
-            if test3 > angTol:
-              continue
-            else:
-              angTest0[2] = test3
+              test3 = np.abs(tripAngles[q, 2] - angtriSRT[2])
+              if test3 > angTol:
+                continue
+              else:
+                angTest0[2] = test3
 
-            #print('here')
-            #angTest2 = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
-            #if angTest2:
-            f = tripID[q,:]
-            f = f[unsrtFID]
-            #print(angTest0[q,:])
-            w1 = ( angTol - 0.5*(angTest0[0] + angTest0[1]) )
-            w2 = ( angTol - 0.5*(angTest0[0] + angTest0[2]) )
-            w3 = ( angTol - 0.5*(angTest0[1] + angTest0[2]) )
-            #print(w1, w2, w3)
-            accumulatorW[f[0],i] += w1
-            accumulatorW[f[1],j] += w2
-            accumulatorW[f[2],k] += w3
-            accumulator[f[0], i] += 1
-            accumulator[f[1], j] += 1
-            accumulator[f[2], k] += 1
-            t1 = False
-            t2 = False
-            t3 = False
-            if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
-              accumulatorW[f[0],j] += w1
-              accumulatorW[f[1],i] += w2
-              accumulatorW[f[2],k] += w3
-              accumulator[f[0], j] += 1
-              accumulator[f[1], i] += 1
-              accumulator[f[2], k] += 1
-              t1 = True
-            if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
-              accumulatorW[f[0],i] += w1
-              accumulatorW[f[1],k] += w2
-              accumulatorW[f[2],j] += w3
-              accumulator[f[0], i] += 1
-              accumulator[f[1], k] += 1
-              accumulator[f[2], j] += 1
-              t2 = True
-            if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
-              accumulatorW[f[0],k] += w1
-              accumulatorW[f[1],j] += w2
-              accumulatorW[f[2],i] += w3
-              accumulator[f[0], k] += 1
-              accumulator[f[1], j] += 1
-              accumulator[f[2], i] += 1
-              t3 = True
-            if (t1 and t2 and t3):
-              accumulatorW[f[0],k] += w1
-              accumulatorW[f[1],i] += w2
-              accumulatorW[f[2],j] += w3
+              #print('here')
+              #angTest2 = (angTest[q,0] + angTest[q,1] + angTest[q,2]) == 3
+              #if angTest2:
+              f = tripID[q,:]
+              f = f[unsrtFID]
+              #print(angTest0[q,:])
+              w1 = ( angTol - 0.5*(angTest0[0] + angTest0[1]) )
+              w2 = ( angTol - 0.5*(angTest0[0] + angTest0[2]) )
+              w3 = ( angTol - 0.5*(angTest0[1] + angTest0[2]) )
+              #print(w1, w2, w3)
+              accumulatorW[p,f[0],i] += w1
+              accumulatorW[p,f[1],j] += w2
+              accumulatorW[p,f[2],k] += w3
+              accumulator[p,f[0], i] += 1
+              accumulator[p,f[1], j] += 1
+              accumulator[p,f[2], k] += 1
+              t1 = False
+              t2 = False
+              t3 = False
+              if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
+                accumulatorW[p,f[0],j] += w1
+                accumulatorW[p,f[1],i] += w2
+                accumulatorW[p,f[2],k] += w3
+                accumulator[p,f[0], j] += 1
+                accumulator[p,f[1], i] += 1
+                accumulator[p,f[2], k] += 1
+                t1 = True
+              if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
+                accumulatorW[p,f[0],i] += w1
+                accumulatorW[p,f[1],k] += w2
+                accumulatorW[p,f[2],j] += w3
+                accumulator[p,f[0], i] += 1
+                accumulator[p,f[1], k] += 1
+                accumulator[p,f[2], j] += 1
+                t2 = True
+              if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
+                accumulatorW[p,f[0],k] += w1
+                accumulatorW[p,f[1],j] += w2
+                accumulatorW[p,f[2],i] += w3
+                accumulator[p,f[0], k] += 1
+                accumulator[p,f[1], j] += 1
+                accumulator[p,f[2], i] += 1
+                t3 = True
+              if (t1 and t2 and t3):
+                accumulatorW[p,f[0],k] += w1
+                accumulatorW[p,f[1],i] += w2
+                accumulatorW[p,f[2],j] += w3
 
-              accumulatorW[f[0], j] += w1
-              accumulatorW[f[1], k] += w2
-              accumulatorW[f[2], i] += w3
+                accumulatorW[p,f[0], j] += w1
+                accumulatorW[p,f[1], k] += w2
+                accumulatorW[p,f[2], i] += w3
 
-              accumulator[f[0], k] += 1
-              accumulator[f[1], i] += 1
-              accumulator[f[2], j] += 1
+                accumulator[p,f[0], k] += 1
+                accumulator[p,f[1], i] += 1
+                accumulator[p,f[2], j] += 1
 
-              accumulator[f[0], j] += 1
-              accumulator[f[1], k] += 1
-              accumulator[f[2], i] += 1
+                accumulator[p,f[0], j] += 1
+                accumulator[p,f[1], k] += 1
+                accumulator[p,f[2], i] += 1
 
 
-    mxvote = np.zeros(n_bands, dtype=np.int32)
-    tvotes = np.zeros(n_bands, dtype=np.int32)
-    band_cm = np.zeros(n_bands, dtype=np.float32)
-    for q in range(n_bands):
-      mxvote[q] = np.amax(accumulatorW[:,q])
-      tvotes[q] = np.sum(accumulatorW[:,q])
 
-    for i in range(n_bands):
-      if tvotes[i] < 1:
-        band_cm[i] = 0.0
-      else:
-        srt = np.argsort(accumulatorW[:,i])
-        band_cm[i] = (accumulatorW[srt[-1],i] - accumulatorW[srt[-2],i]) / tvotes[i]
-
-    bandRank = np.zeros(n_bands, dtype=np.float32)
-    bandFam = np.zeros(n_bands, dtype=np.int32)
-    for q in range(n_bands):
-      bandFam[q] = np.argmax(accumulatorW[:,q])
-    bandRank = (n_bands - np.arange(n_bands)) / n_bands * band_cm * mxvote
+      for q in range(n_bands):
+        mxvote[p,q] = np.amax(accumulatorW[p,:,q])
+        tvotes[p,q] = np.sum(accumulatorW[p,:,q])
+      #for i in range(n_bands):
+        if tvotes[p,q] < 1:
+          band_cm[p,q] = 0.0
+        else:
+          srt = np.argsort(accumulatorW[p,:,q])
+          band_cm[p,q] = (accumulatorW[p,srt[-1],q] - accumulatorW[p,srt[-2],q]) / (tvotes[p,q])
+      #for q in range(n_bands):
+        bandFam[p,q] = np.argmax(accumulatorW[p,:,q])
+      bandRank[p,:] = (n_bands - np.arange(n_bands)) / n_bands * band_cm[p,:] * mxvote[p,:]
 
     return accumulatorW, bandFam, bandRank, band_cm, accumulator
 
