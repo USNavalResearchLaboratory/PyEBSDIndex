@@ -490,7 +490,8 @@ class BandIndexer():
     pairangs = self.angpairs['angles']
     pairfam = self.angpairs['familyid']
 
-    accumulator, bandFam, bandRank, band_cm, accumulator_nw = self._tripvote_numba(bandnorms, self.lut, self.angTol, tripangs, tripid, nfam)
+    accumulator, bandFam, bandRank, band_cm, accumulator_nw \
+      = self._tripvote_numba(bandnorms, band_intensity, self.lut, self.angTol, tripangs, tripid, nfam)
     #accumulator, bandFam, bandRank, band_cm = self._pairvote_numba(bandangs, self.angTol, pairangs, pairfam,
     #                                                               nfam, n_bands)
 
@@ -585,13 +586,13 @@ class BandIndexer():
       print('refinement: ', timer() - tic)
       print('all: ',timer() - tic0)
 
-    avequat = avequat[0,...]
-    fit = fit[0]
-    cm2 = cm2[0]
-    polematch = polematch[0,...]
-    nMatch = nMatch[0]
-    ij = ij[0,...]
-    acc_correct = acc_correct[0,...]
+    # avequat = avequat[0,...]
+    # fit = fit[0]
+    # cm2 = cm2[0]
+    # polematch = polematch[0,...]
+    # nMatch = nMatch[0]
+    # ij = ij[0,...]
+    # acc_correct = acc_correct[0,...]
     return avequat, fit, cm2, polematch, nMatch, ij, acc_correct #sumaccum
 
   def _symrotpoles(self, pole, crystalmats):
@@ -855,7 +856,7 @@ class BandIndexer():
       weights *= (polesmatch > 0).astype(np.float32)
 
     weightsn = np.asarray(weights, dtype=np.float64)
-    weightsn /= np.minimum(np.sum(weightsn, axis=1), 1e-12).reshape(-1, 1)
+    weightsn /= np.maximum(np.sum(weightsn, axis=1), 1e-12).reshape(-1, 1)
     #print(weightsn)
     pflt = np.asarray(libpolecart[polesmatch, :], dtype=np.float64)
     bndnorm = np.asarray(bandnorms, dtype=np.float64)
@@ -951,7 +952,7 @@ class BandIndexer():
 
   @staticmethod
   @numba.jit(nopython=True, cache=True,fastmath=True,parallel=False)
-  def _tripvote_numba(bandnorms, LUT, angTol, tripAngles, tripID, nfam):
+  def _tripvote_numba(bandnorms, band_intensity, LUT, angTol, tripAngles, tripID, nfam):
     npats = bandnorms.shape[0]
     n_bands = bandnorms.shape[1]
     LUTTemp = np.asarray(LUT).copy()
@@ -974,6 +975,11 @@ class BandIndexer():
       bandangs = np.abs(bandnorms[p,...].dot(bandnorms[p,...].T))
       bandangs = np.clip(bandangs, -1.0, 1.0)
       bandangs = np.arccos(bandangs) * RADEG
+      for i in range(n_bands):
+        if band_intensity[p,i] < 1e-6: # invalid band
+          bandangs[i,:] = 10000.0
+          bandangs[:, i] = 10000.0
+
       angTest0 = np.zeros((3), dtype=np.float32)
       for i in range(n_bands):
         for j in range(i + 1,n_bands):
