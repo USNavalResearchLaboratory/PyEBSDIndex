@@ -20,10 +20,11 @@ some notice that they have been modified.
 Author: David Rowenhorst;
 The US Naval Research Laboratory Date: 21 Aug 2020"""
 
-from os import environ
-from pathlib import PurePath
+#from os import environ
+import os
+from pathlib import PurePath, Path
 import platform
-import tempfile
+# import tempfile
 from timeit import default_timer as timer
 
 import matplotlib.pyplot as plt
@@ -37,10 +38,12 @@ import scipy.optimize as scipyopt
 
 from pyebsdindex import radon_fast
 
-
-tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
-tempdir = tempdir.joinpath('numba')
-environ["NUMBA_CACHE_DIR"] = str(tempdir)
+tempdir = PurePath(Path.home())
+#tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
+#tempdir = tempdir.joinpath('numbacache')
+tempdir = tempdir.joinpath('.pyebsdindex').joinpath('numbacache')
+Path(tempdir).mkdir(parents=True, exist_ok=True)
+os.environ["NUMBA_CACHE_DIR"] = str(tempdir)+str(os.sep)
 
 RADEG = 180.0/np.pi
 

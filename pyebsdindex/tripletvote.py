@@ -24,10 +24,10 @@
 indexing.
 """
 
-from os import environ
-from pathlib import PurePath
+import os
+from pathlib import PurePath, Path
 import platform
-import tempfile
+#import tempfile
 from timeit import default_timer as timer
 import math
 
@@ -60,9 +60,12 @@ __all__ = ["addphase", "BandIndexer"]
 
 RADEG = 180.0/np.pi
 
-tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
-tempdir = tempdir.joinpath('numba')
-environ["NUMBA_CACHE_DIR"] = str(tempdir)
+tempdir = PurePath(Path.home())
+#tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
+tempdir = tempdir.joinpath('.pyebsdindex').joinpath('numbacache')
+#tempdir = tempdir.joinpath('numbacache')
+Path(tempdir).mkdir(parents=True, exist_ok=True)
+os.environ["NUMBA_CACHE_DIR"] = str(tempdir)+str(os.sep)
 
 def addphase(libtype=None, phasename=None,
              spacegroup=None,

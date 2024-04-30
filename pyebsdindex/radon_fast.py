@@ -20,11 +20,20 @@ some notice that they have been modified.
 Author: David Rowenhorst;
 The US Naval Research Laboratory Date: 21 Aug 2020"""
 
-from os import environ
+#from os import environ
+import os
+from pathlib import PurePath, Path
 from timeit import default_timer as timer
 
 from numba import jit, prange
 import numpy as np
+
+tempdir = PurePath(Path.home())
+#tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
+tempdir = tempdir.joinpath('.pyebsdindex').joinpath('numbacache')
+#tempdir = tempdir.joinpath('numbacache')
+Path(tempdir).mkdir(parents=True, exist_ok=True)
+os.environ["NUMBA_CACHE_DIR"] = str(tempdir)+str(os.sep)
 
 RADEG = 180.0/np.pi
 DEGRAD = np.pi/180.0
