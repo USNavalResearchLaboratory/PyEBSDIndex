@@ -18,7 +18,7 @@ class NLPAR(nlpar.NLPAR):
   def calcsigmacl(self,chunksize=0,nn=1,saturation_protect=True,automask=True):
     pass
 
-  def _calcchunks(patdim, ncol, nrow, target_bytes=4e9, col_overlap=0, row_overlap=0, col_offset=0, row_offset=0):
+  def _calcchunks(self, patdim, ncol, nrow, target_bytes=4e9, col_overlap=0, row_overlap=0, col_offset=0, row_offset=0):
 
     col_overlap = min(col_overlap, ncol - 1)
     row_overlap = min(row_overlap, nrow - 1)
@@ -27,7 +27,7 @@ class NLPAR(nlpar.NLPAR):
     byteperdataset = byteperpat * ncol * nrow
     nchunks = int(np.ceil(byteperdataset / target_bytes))
 
-    print(nchunks)
+    #print(nchunks)
 
     ncolchunks = (max(np.round(np.sqrt(nchunks * float(ncol) / nrow)), 1))
     colstep = max((ncol / ncolchunks), 1)
@@ -37,7 +37,7 @@ class NLPAR(nlpar.NLPAR):
     colstep = max(int(np.round(colstep)), 1)
     colstepov = min(colstep + 2 * col_overlap, ncol)
 
-    nrowchunks = max(np.round(nchunks / ncolchunks), 1)
+    nrowchunks = max(np.ceil(nchunks / ncolchunks), 1)
     rowstep = max((nrow / nrowchunks), 1)
     nrowchunks = max(nrow / rowstep, 1)
     rowstepov = min(rowstep + 2 * row_overlap, nrow)
