@@ -44,7 +44,7 @@ __all__ = [
 
 
 class NLPAR:
-  def __init__(self, filename=None,  lam=0.7, searchradius=3,dthresh=0.0, nrows = None, ncols = None):
+  def __init__(self, filename=None,  lam=0.7, searchradius=3,dthresh=0.0, nrows = None, ncols = None, **kwargs):
     self.lam = lam
     self.searchradius = searchradius
     self.dthresh = dthresh
