@@ -33,26 +33,24 @@ __kernel void calcsigma( __global const float16 *data, __global float *sigma, co
   
   long i, j, z, indx_y, indx_x;
   unsigned long indxyz, indx0, count; 
-  //unsigned long nnn = (2*nn+1) * (2*nn+1); 
+  long nnn = (2*nn+1) * (2*nn+1); 
   
   float16 d1, d0; 
   float16 mask0, mask1;
-  
+  float dd; 
 
 
   __local float d[128];
   __local float n[128]; 
-  count = 0; 
-  for(j=0; j<nn; ++j){
-    for (i=0; i<nn; ++i){
-      d[count] = 0.0;
-      n[count] = 0.0; 
-    }
+  
+  for(j=0; j < nnn; ++j){
+      d[j] = 0.0;
+      n[j] = 0.0; 
   }
 
 
 
-  for(z = 0; z<ndatchunk; z++){
+  for(z = 0; z<ndatchunk; ++z){
       count = 0; 
       indx0 = z + ndatchunk * (x + ncol * y);
       d0 =  data[indx0]; 
@@ -79,15 +77,33 @@ __kernel void calcsigma( __global const float16 *data, __global float *sigma, co
               d1 = (d0-d1);
               d1 = d1 * d1; 
               
-              d[count] += sum16(d1);
-              n[count] += sum16(mask1);
+              dd = sum16(d1);
+              dd = (indxyz == indx0) ? -1*dd:dd; // mark the center point 
+               
+
+              d[count] += dd;
+              n[count] += dd;
               
               
               count += 1; 
           }
       }
   }
-      
+
+
+  float mind = 1e24; 
+  float s0;  
+  for(j=0; j<nnn; ++j){
+    if (d[j] > 1e-3){ //sometimes EDAX collects the same pattern twice & catch the pixel of interest.
+      s0 = d[j]/(2.0*n[j]); 
+      if (s0<mind){
+        mind = s0; 
+      }
+    } 
+  }
+
+  sigma[x+ncol*y] = sqrt(mind);
+
 }
   
   
