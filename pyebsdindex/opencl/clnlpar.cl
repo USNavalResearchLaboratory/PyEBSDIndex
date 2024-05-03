@@ -40,8 +40,17 @@ __kernel void calcsigma( __global const float16 *data, __global float *sigma, co
   
 
 
-  float d = 0.0;
-  float n = 0.0; 
+  __local float d[128];
+  __local float n[128]; 
+  count = 0; 
+  for(j=0; j<nn; ++j){
+    for (i=0; i<nn; ++i){
+      d[count] = 0.0;
+      n[count] = 0.0; 
+    }
+  }
+
+
 
   for(z = 0; z<ndatchunk; z++){
       count = 0; 
@@ -70,8 +79,8 @@ __kernel void calcsigma( __global const float16 *data, __global float *sigma, co
               d1 = (d0-d1);
               d1 = d1 * d1; 
               
-              d += sum16(d1);
-              n += sum16(mask1);
+              d[count] += sum16(d1);
+              n[count] += sum16(mask1);
               
               
               count += 1; 
