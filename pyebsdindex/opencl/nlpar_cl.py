@@ -16,7 +16,76 @@ class NLPAR(nlpar.NLPAR):
 
 
   def calcsigmacl(self,chunksize=0,nn=1,saturation_protect=True,automask=True):
-    pass
+
+    clparams = openclparam.OpenClParam()
+    clparams.get_gpu()
+    target_mem = 0
+    gpuid = 0
+    count = 0
+    for gpu in clparams.gpu:
+        gmem = gpu.global_mem_size
+        if target_mem < gmem:
+          gpuid = count
+          target_mem = gmem
+
+    clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
+    clparams.get_queue()
+    clvectlen = 16
+
+    target_mem = target_mem // 2
+    patternfile = self.getinfileobj()
+
+    nrows = np.int64(self.nrows)  # np.uint64(patternfile.nRows)
+    ncols = np.int64(self.ncols)  # np.uint64(patternfile.nCols)
+
+    pwidth = np.uint64(patternfile.patternW)
+    pheight = np.uint64(patternfile.patternH)
+    npat_point = int(pwidth * pheight)
+    chunks = self._calcchunks(self, [pwidth, pheight], ncols, nrows, target_bytes=target_mem,
+                              col_overlap=1, row_overlap=1)
+
+
+
+    if (automask is True) and (self.mask is None):
+      self.mask = (self.automask(pheight, pwidth))
+    if self.mask is None:
+      self.mask = np.ones((pheight, pwidth), dytype=np.uint8)
+
+    indices = np.asarray((self.mask.flatten().nonzero())[0], np.uint64)
+    nindices = np.uint64(indices.size)
+    nindicespad =  np.uint64(clvectlen * int(np.ceil(nindices/clvectlen)))
+
+    sigma = np.zeros((nrows, ncols), dtype=np.float32) + 1e18
+
+    for colchunk in range(chunks[0]):
+      cstart = chunks[2][colchunk, 0]
+      cend = chunks[2][colchunk, 1]
+      ncolchunk = cend - cstart
+      for rowchunk in range(chunks[1]):
+        rstart = chunks[3][rowchunk, 0]
+        rend = chunks[3][rowchunk, 1]
+        nrowchunk = rend - rstart
+        data, xyloc = patternfile.read_data(patStartCount=[[cstart, rend], [ncolchunk, nrowchunk]],
+                                          convertToFloat=False, returnArrayOnly=True)
+
+        shp = data.shape
+        data = data.reshape(data.shape[0], npat_point)
+        mxval = np.max(data)
+        if saturation_protect == False:
+          mxval += 1.0
+        else:
+          mxval *= 0.9961
+
+        datapad = np.zeros(data.shape[0], nindicespad, np.float32)
+        datapad[:,0:nindices] = data[:, [indices]]
+        sigmachunk = np.zeros((nrowchunk,ncolchunk )) + 1e18
+
+
+
+
+
+
+    return sigma
 
   def _calcchunks(self, patdim, ncol, nrow, target_bytes=4e9, col_overlap=0, row_overlap=0, col_offset=0, row_offset=0):
 
@@ -61,12 +130,12 @@ class NLPAR(nlpar.NLPAR):
 
     colchunks += col_offset
 
-    colproc = np.zeros((ncolchunks, 2), dtype=int)
-    if ncolchunks > 1:
-      colproc[1:, 0] = col_overlap
-    if ncolchunks > 1:
-      colproc[0:, 1] = colchunks[:, 1] - colchunks[:, 0] - col_overlap
-    colproc[-1, 1] = colchunks[-1, 1] - colchunks[-1, 0]
+    # colproc = np.zeros((ncolchunks, 2), dtype=int)
+    # if ncolchunks > 1:
+    #   colproc[1:, 0] = col_overlap
+    # if ncolchunks > 1:
+    #   colproc[0:, 1] = colchunks[:, 1] - colchunks[:, 0] - col_overlap
+    # colproc[-1, 1] = colchunks[-1, 1] - colchunks[-1, 0]
 
     # rowchunks = np.round(np.arange(nrowchunks + 1) * nrow / nrowchunks).astype(int)
     rowchunks = np.zeros((nrowchunks, 2), dtype=int)
@@ -84,13 +153,13 @@ class NLPAR(nlpar.NLPAR):
 
     rowchunks += row_offset
 
-    rowproc = np.zeros((nrowchunks, 2), dtype=int)
-    if nrowchunks > 1:
-      rowproc[1:, 0] = row_overlap
-    if nrowchunks > 1:
-      rowproc[0:, 1] = rowchunks[:, 1] - rowchunks[:, 0] - row_overlap
-    rowproc[-1, 1] = rowchunks[-1, 1] - rowchunks[-1, 0]
+    # rowproc = np.zeros((nrowchunks, 2), dtype=int)
+    # if nrowchunks > 1:
+    #   rowproc[1:, 0] = row_overlap
+    # if nrowchunks > 1:
+    #   rowproc[0:, 1] = rowchunks[:, 1] - rowchunks[:, 0] - row_overlap
+    # rowproc[-1, 1] = rowchunks[-1, 1] - rowchunks[-1, 0]
 
-    return ncolchunks, nrowchunks, colchunks, rowchunks, colproc, rowproc
+    return ncolchunks, nrowchunks, colchunks, rowchunks
 
 

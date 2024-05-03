@@ -65,7 +65,7 @@ class OpenClParam():
     if len(self.gpu)-1 < self.gpu_id:
       self.gpu_id = len(self.gpu)-1
 
-  def get_context(self, gpu_id=None):
+  def get_context(self, gpu_id=None, kfile = 'clkernels.cl' ):
     if self.gpu is None:
       self.get_gpu()
 
@@ -77,7 +77,7 @@ class OpenClParam():
     self.ctx = cl.Context(devices = [self.gpu[self.gpu_id]])
 
     kernel_location = path.dirname(__file__)
-    self.prg = cl.Program(self.ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+    self.prg = cl.Program(self.ctx,open(path.join(kernel_location,kfile)).read()).build()
     #print('ctx', self.gpu_id)
   def get_queue(self, gpu_id=None):
     if self.ctx is None:
