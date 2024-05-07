@@ -628,7 +628,7 @@ class BandDetect(band_detect.BandDetect):
 
   def band_labelCL(self,rdnConvIn, lMaxRdnIn,clparams=None):
 
-    # an attempt to to run the band label on the GPU
+    # an attempt to run the band label on the GPU
 
     tic = timer()
 
