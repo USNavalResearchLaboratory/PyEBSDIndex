@@ -273,6 +273,8 @@ class NLPAR:
 
 
       d2norm(d2, n2, dij, sigchunk)
+      
+
       lamopt_values_chnk = []
       for tw in target_weights:
         lam = 1.0
@@ -458,7 +460,7 @@ class NLPAR:
     if (automask is True) and (self.mask is None):
       self.mask = (self.automask(pheight,pwidth))
     if self.mask is None:
-      self.mask = np.ones((pheight,pwidth), dytype=np.uint8)
+      self.mask = np.ones((pheight,pwidth), dtype=np.uint8)
 
     indices = np.asarray( (self.mask.flatten().nonzero())[0], np.uint64)
 

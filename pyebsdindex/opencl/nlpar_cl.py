@@ -4,6 +4,8 @@ import numpy as np
 import pyopencl as cl
 import pyopencl.array as cl_array
 
+import numba
+import scipy.optimize as sp_opt
 from pyebsdindex import nlpar
 from pyebsdindex.opencl import openclparam
 from time import time as timer
@@ -17,10 +19,84 @@ class NLPAR(nlpar.NLPAR):
     return self.calcsigma_cl(nn=nn,
                             saturation_protect=saturation_protect,
                             automask=automask, **kwargs)[0]
+
+
+
   def calcsigma_cpu(self,nn=1, saturation_protect=True,automask=True, **kwargs):
     return nlpar.NLPAR.calcsigma(self, nn=nn,
-                            saturation_protect=saturation_protect,
-                            automask=automask, **kwargs)
+                            saturation_protect=saturation_protect,automask=automask, **kwargs)
+
+  def opt_lambda_cl(self, saturation_protect=True, automask=True, backsub=False,
+                 target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True):
+
+    target_weights = np.asarray(target_weights)
+
+    def loptfunc(lam, d2, tw, dthresh):
+      temp = (d2 > dthresh).choose(dthresh, d2)
+      dw = np.exp(-(temp) / lam ** 2)
+      w = np.sum(dw, axis=2) + 1e-12
+
+      metric = np.mean(np.abs(tw - 1.0 / w))
+      return metric
+
+    @numba.njit(fastmath=True, cache=True, parallel=True)
+    def d2normcl(d2, n2, sigmapad):
+      sftpat = np.array([[-1,-1], [-1, 0], [-1, 1],
+                [0, -1], [0, 0], [0, 1],
+                [1, -1], [1, 0], [1, 1]], dtype = np.int64)
+      #sftpat = sftpat.reshape(-1)
+      shp = d2.shape
+      s2 = sigmapad ** 2
+      for j in numba.prange(shp[0]):
+        for i in range(shp[1]):
+          s_ij = s2[j+1, i+1]
+          for q in range(shp[2]):
+            if n2[j, i, q] > 0:
+              jj = np.int64(j+1+sftpat[q,0])
+              ii = np.int64(i+1+sftpat[q, 1])
+              s_q =s2[jj,ii ]
+              s2_12 = (s_ij + s_q)
+              d2[j, i, q] -= n2[j, i, q] * s2_12
+              d2[j, i, q] /= s2_12 * np.sqrt(2.0 * n2[j, i, q])
+
+    patternfile = self.getinfileobj()
+    patternfile.read_header()
+    nrows = np.uint64(self.nrows)  # np.uint64(patternfile.nRows)
+    ncols = np.uint64(self.ncols)  # np.uint64(patternfile.nCols)
+
+    pwidth = np.uint64(patternfile.patternW)
+    pheight = np.uint64(patternfile.patternH)
+    phw = pheight * pwidth
+
+    dthresh = np.float32(dthresh)
+    lamopt_values = []
+
+    sigma, d2, n2 = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask)
+
+    sigmapad = np.pad(sigma, 1, mode='reflect')
+
+
+    d2normcl(d2, n2, sigmapad)
+
+
+    lamopt_values_chnk = []
+    for tw in target_weights:
+      lam = 1.0
+      lambopt1 = sp_opt.minimize(loptfunc, lam, args=(d2, tw, dthresh), method='Nelder-Mead',
+                              bounds=[[0.001, 10.0]], options={'fatol': 0.0001})
+      lamopt_values.append(lambopt1['x'])
+
+    #lamopt_values.append(lamopt_values_chnk)
+    lamopt_values = np.asarray(lamopt_values)
+    print("Range of lambda values: ", lamopt_values.flatten())
+    print("Optimal Choice: ", np.median(lamopt_values))
+    if autoupdate == True:
+      self.lam = np.median(np.mean(lamopt_values, axis=0))
+    if self.sigma is None:
+      self.sigma = sigma
+    return lamopt_values.flatten()
+
+
   def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True, gpuid = None, **kwargs):
 
     if gpuid is None:
@@ -67,7 +143,7 @@ class NLPAR(nlpar.NLPAR):
     if (automask is True) and (self.mask is None):
       self.mask = (self.automask(pheight, pwidth))
     if self.mask is None:
-      self.mask = np.ones((pheight, pwidth), dytype=np.uint8)
+      self.mask = np.ones((pheight, pwidth), dtype=np.uint8)
 
     #indices = np.asarray((self.mask.flatten().nonzero())[0], np.uint64)
     #nindices = np.uint64(indices.size)
@@ -96,12 +172,14 @@ class NLPAR(nlpar.NLPAR):
 
     sigma = np.zeros((nrows, ncols), dtype=np.float32) + 1e18
     dist = np.zeros((nrows, ncols, nnn), dtype=np.float32)
+    countnn = np.zeros((nrows, ncols, nnn), dtype=np.float32)
 
     #dist_local = cl.LocalMemory(nnn*npadmx*4)
     dist_local = cl.Buffer(ctx, mf.READ_WRITE, size=int(mxchunk*nnn*4))
     distchunk = np.zeros((mxchunk, nnn), dtype=np.float32)
     #count_local = cl.LocalMemory(nnn*npadmx*4)
     count_local = cl.Buffer(ctx, mf.READ_WRITE, size=int(mxchunk * nnn * 4))
+    countchunk = np.zeros((mxchunk, nnn), dtype=np.float32)
 
     for colchunk in range(chunks[0]):
       cstart = chunks[2][colchunk, 0]
@@ -151,16 +229,18 @@ class NLPAR(nlpar.NLPAR):
         queue.finish()
 
         cl.enqueue_copy(queue, distchunk, dist_local)
+        cl.enqueue_copy(queue, countchunk, count_local)
         cl.enqueue_copy(queue, sigmachunk, sigmachunk_gpu).wait()
 
         sigmachunk_gpu.release()
+        countnn[rstart:rend, cstart:cend] = countchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
         dist[rstart:rend, cstart:cend] = distchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
         sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigmachunk)
 
     dist_local.release()
     count_local.release()
     datapad_gpu.release()
-    return sigma, dist
+    return sigma, dist, countnn
 
   def calcnlpar_cl(self,chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
                 filename=None, fileout=None, reset_sigma=True, backsub = False, rescale = False, gpuid = None, **kwargs):
@@ -217,7 +297,7 @@ class NLPAR(nlpar.NLPAR):
     if (automask is True) and (self.mask is None):
       self.mask = (self.automask(pheight, pwidth))
     if self.mask is None:
-      self.mask = np.ones((pheight, pwidth), dytype=np.uint8)
+      self.mask = np.ones((pheight, pwidth), dtype=np.uint8)
 
     scalemethod = 'clip'
     if rescale == True:
