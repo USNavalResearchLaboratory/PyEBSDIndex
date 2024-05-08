@@ -23,6 +23,28 @@ float sum16(const float16 *v1){
 
 }
 
+void writeadd16(__global float *placetowrite, float16 *v1);
+void writeadd16(__global float *placetowrite, float16 *v1){
+     
+     placetowrite[0] += v1[0].s0;
+     placetowrite[1] += v1[0].s1;
+     placetowrite[2] += v1[0].s2;
+     placetowrite[3] += v1[0].s3;
+     placetowrite[4] += v1[0].s4;
+     placetowrite[5] += v1[0].s5;
+     placetowrite[6] += v1[0].s6;
+     placetowrite[7] += v1[0].s7;
+     placetowrite[8] += v1[0].s8;
+     placetowrite[9] += v1[0].s9;
+     placetowrite[10] += v1[0].sa;
+     placetowrite[11] += v1[0].sb;
+     placetowrite[12] += v1[0].sc;
+     placetowrite[13] += v1[0].sd;
+     placetowrite[14] += v1[0].se;
+     placetowrite[15] += v1[0].sf;
+
+}
+
 void print16(const float16 v1);
 void print16(const float16 v1){
      
@@ -46,30 +68,26 @@ void print16(const float16 v1){
 }
 
 
-__kernel void nlloadpat8bit(const __global uchar *datain, __global float *dataout){
+__kernel void nlloadpat8bit(__global uchar *datain, __global float *dataout){
   const unsigned long int x = get_global_id(0);
-  uchar imVal;
-  float imValflt;
-  imVal =  datain[x];
-  imValflt = convert_float(imVal);
+  uchar imVal =  datain[x];
+  float imValflt = convert_float(imVal);
   dataout[x] = imValflt;
 }
 
-__kernel void nlloadpat16bit(const __global ushort *datain, __global float *dataout){
+__kernel void nlloadpat16bit(__global ushort *datain, __global float *dataout){
   const unsigned long int x = get_global_id(0);
-  ushort imVal;
-  float imValflt;
-  imVal =  datain[x];
-  imValflt = convert_float(imVal);
+  ushort imVal = datain[x];
+  float imValflt = convert_float(imVal);
   dataout[x] = imValflt;
 }
 
-__kernel void nlloadpat32flt(const __global float *datain, __global float *dataout){
+__kernel void nlloadpat32flt(__global float *datain, __global float *dataout){
   const unsigned long int x = get_global_id(0);
   dataout[x] = datain[x];
 }
 
-__kernel void calcsigma( const __global float *data, const __global float16 *mask, 
+__kernel void calcsigma( __global float *data, __global float16 *mask, 
       __global float *sig, 
       __global float *dg, __global float *ng,
       const long  nn, const long ndatchunk, const long npatpoint, const float maxlim){
@@ -176,6 +194,202 @@ __kernel void calcsigma( const __global float *data, const __global float16 *mas
   }
 
 }
+
+
+
+__kernel void calcnlpar( 
+      const __global float *data, 
+      const __global float16 *mask, 
+      const __global float *sigma, 
+      const __global long *crlimits, 
+      __global float *dataout, 
+      const long sr, 
+      const long ndatchunk, 
+      const long npatpoint, 
+      const float maxlim, 
+      const float lam2, 
+      const float dthresh){
+  //IDs of work-item represent x and y coordinates in image
+  //const long4 calclim =  crlimits[0];
+  const long x = get_global_id(0)+crlimits[0];
+  const long y = get_global_id(1)+crlimits[1];
+  const long ncol = crlimits[2]; //get_global_size(0);
+  const long nrow = crlimits[3];//get_global_size(1);
+  const long indx_xy = x+y*ncol;
+  //printf("%d\n", indx_xy);
+  const long indx0 = npatpoint * indx_xy;
+  //printf("%d, %d, %d, %d\n", x,y,ncol, nrow); 
+  long i, j, z;
+  long indx_j, indx_ij, count; 
+
+  long nnn = (2*sr+1) * (2*sr+1);
+
+  float16 d1, d0; 
+  float16 mask0, mask1;
+  float dd, nn, sigma_ij, norm; 
+  float sigma0 = sigma[indx_xy];
+  sigma0 *= sigma0; 
+  //float16* writeloc; 
+
+  float d[512]; // taking a risk here that noone will want a SR > 10
+  float n[512]; 
+
+  
+  for(j=0; j < nnn; ++j){
+      d[j] = 0.0;
+      n[j] = 1.0e-6; 
+  }
+
+
+  for(z = 0; z<ndatchunk; ++z){
+      count = 0; 
+      
+      
+      d0 =  *(__global float16*) (data + indx0+16*z); 
+      
+      mask0 = mask[z];
+      mask0 =  (mask0 > (float16) 1.e-3) ? (float16) 1.0 : (float16) 0.0; 
+      mask0 =  d0 < (float16) (maxlim) ? mask0 : (float16) (0.0);
+      
+      
+      for(j=y-sr; j<=y+sr; ++j){
+          
+          indx_j =  (j >= 0) ? (j): abs(j);
+          indx_j =  (indx_j < nrow) ? (indx_j): nrow - (indx_j -nrow +1);
+          indx_j = ncol * indx_j;
+          
+          for(i=x-sr; i<=x+sr; ++i){
+            
+              indx_ij =  (i >= 0) ? (i): abs(i);
+              indx_ij =  (indx_ij < ncol) ? (indx_ij): ncol - (indx_ij -ncol +1);
+              
+              indx_ij = (indx_ij + indx_j);
+              
+              indx_ij *= npatpoint;
+              
+              mask1 = mask0;
+              d1 =  *(__global float16*) (data + indx_ij+16*z); 
+              
+
+              mask1 =  d1 < (float16) (maxlim) ? mask1 : (float16) (0.0);
+              //mask1 = select((float16) (1.0), (float16) (0.0), isgreater(mask0, (float16)(1e-6)) && isgreater(mask1,(float16)(1e-6)));
+              //printf("%*s\n", 'here');
+              
+              d1 = (d0-d1);
+              d1 *= d1 ; 
+              d1 *= mask1; 
+
+              dd = sum16(&d1);
+              dd = (indx_ij == indx0) ? -1.0 : dd; // mark the center point 
+              
+              d[count] += dd;
+              n[count] += sum16(&mask1);
+              //d[count+nnn*indx_xy] += dd;
+              //n[count+nnn*indx_xy] += sum16(&mask1);
+
+              count += 1; 
+          }
+      }
+      
+  }
+// calculate the weights
+  count = 0; 
+  float sum = 0.0; 
+  nn = 1.0;
+  for(j=y-sr; j<=y+sr; ++j){
+          
+          indx_j =  (j >= 0) ? (j): abs(j);
+          indx_j =  (indx_j < nrow) ? (indx_j): nrow - (indx_j -nrow +1);
+          indx_j = ncol * indx_j;
+          
+          for(i=x-sr; i<=x+sr; ++i){
+              
+              dd = d[count]; 
+              if (dd > 1.e-3){
+                indx_ij =  (i >= 0) ? (i): abs(i);
+                indx_ij =  (indx_ij < ncol) ? (indx_ij): ncol - (indx_ij -ncol +1);
+                
+                indx_ij = (indx_ij + indx_j);
+                
+                sigma_ij = sigma[indx_xy];
+                sigma_ij *= sigma_ij; 
+                nn = n[count]; 
+                dd -= nn*(sigma_ij+sigma0);
+                
+                norm = (sigma0 + sigma_ij)*sqrt(2.0*nn);
+                if (norm > 1.0e-8){
+                  dd /= norm;  
+                } else {
+                  dd = 1e6*nn;
+                } 
+
+              } else {
+                dd = 0.0;
+                nn = 1.0;
+              }
+              
+              dd -= dthresh; 
+              dd = dd >= 0.0 ? dd : 0.0; 
+
+              dd = exp(-1.0*dd*lam2); 
+              sum += dd; 
+              d[count] = dd;
+
+              count += 1; 
+              
+          }
+  }
+  
+  for (j =0;j<nnn;j++){d[j] *= 1.0/sum; }
+
+// now one more time through the loops to average across the patterns with the weights  
+// and place in the output array
+  for(z = 0; z<ndatchunk; ++z){
+      count = 0; 
+      d0 =  *(__global float16*) (data + indx0+16*z); 
+      
+      mask0 = mask[z];
+      mask0 =  (mask0 > (float16) -1.e-3) ? (float16) 1.0 : (float16) 0.0; 
+      
+      for(j=y-sr; j<=y+sr; ++j){
+          
+          indx_j =  (j >= 0) ? (j): abs(j);
+          indx_j =  (indx_j < nrow) ? (indx_j): nrow - (indx_j -nrow +1);
+          indx_j = ncol * indx_j;
+          
+          for(i=x-sr; i<=x+sr; ++i){
+            
+              indx_ij =  (i >= 0) ? (i): abs(i);
+              indx_ij =  (indx_ij < ncol) ? (indx_ij): ncol - (indx_ij -ncol +1);
+              
+              indx_ij = (indx_ij + indx_j);
+              
+              indx_ij *= npatpoint;
+              
+              
+              d1 =  *(__global float16*) (data + indx_ij+16*z); 
+              
+              
+              d1 *= (float16) d[count]; 
+              d1 *= mask0; 
+              
+              *(__global float16*) (dataout + indx0+16*z) += d1; 
+              
+              //writeadd16(&(dataout[indx0+16*z]), &d1 );
+
+              //d[count+nnn*indx_xy] += dd;
+              //n[count+nnn*indx_xy] += sum16(&mask1);
+
+              count += 1; 
+          }
+      }
+  }
+
+
+
+}
+
+
 
 
 
