@@ -273,7 +273,7 @@ class NLPAR:
 
 
       d2norm(d2, n2, dij, sigchunk)
-      
+
 
       lamopt_values_chnk = []
       for tw in target_weights:
