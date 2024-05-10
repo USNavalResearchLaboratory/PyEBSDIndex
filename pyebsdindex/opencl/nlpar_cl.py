@@ -333,7 +333,7 @@ class NLPAR(nlpar.NLPAR):
     #print(gpuid)
     clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
     clparams.get_queue()
-    target_mem = clparams.queue.device.max_mem_alloc_size//4
+    target_mem = clparams.queue.device.max_mem_alloc_size//2
     ctx = clparams.ctx
     prg = clparams.prg
     queue = clparams.queue
@@ -421,6 +421,7 @@ class NLPAR(nlpar.NLPAR):
         calclim = np.array([cstartcalc, rstartcalc, ncolchunk, nrowchunk], dtype=np.int64)
         crlimits_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=calclim)
         queue.flush()
+        data_gpu.release()
         prg.calcnlpar(queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
         #prg.calcnlpar(queue, (1, 1), None,
                                datapad_gpu,

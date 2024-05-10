@@ -23,27 +23,6 @@ float sum16(const float16 *v1){
 
 }
 
-void writeadd16(__global float *placetowrite, float16 *v1);
-void writeadd16(__global float *placetowrite, float16 *v1){
-     
-     placetowrite[0] += v1[0].s0;
-     placetowrite[1] += v1[0].s1;
-     placetowrite[2] += v1[0].s2;
-     placetowrite[3] += v1[0].s3;
-     placetowrite[4] += v1[0].s4;
-     placetowrite[5] += v1[0].s5;
-     placetowrite[6] += v1[0].s6;
-     placetowrite[7] += v1[0].s7;
-     placetowrite[8] += v1[0].s8;
-     placetowrite[9] += v1[0].s9;
-     placetowrite[10] += v1[0].sa;
-     placetowrite[11] += v1[0].sb;
-     placetowrite[12] += v1[0].sc;
-     placetowrite[13] += v1[0].sd;
-     placetowrite[14] += v1[0].se;
-     placetowrite[15] += v1[0].sf;
-
-}
 
 void print16(const float16 v1);
 void print16(const float16 v1){
