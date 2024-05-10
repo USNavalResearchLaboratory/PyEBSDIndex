@@ -342,7 +342,7 @@ class NLPAR(nlpar.NLPAR):
 
     chunks = self._calcchunks( [pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
-
+    #print(chunks[2], chunks[3])
     print(lam, sr, dthresh)
 
     # precalculate some needed arrays for the GPU
@@ -394,8 +394,8 @@ class NLPAR(nlpar.NLPAR):
         else:
           mxval *= 0.9961
 
-        #filldatain = cl.enqueue_fill_buffer(queue, datapad_gpu, np.float32(mxval+10), 0,int(4*npadmx))
-        #cl.enqueue_fill_buffer(queue, datapadout_gpu, np.float32(0.0), 0, int(4 * npadmx))
+        filldatain = cl.enqueue_fill_buffer(queue, datapad_gpu, np.float32(mxval+10), 0,int(4*npadmx))
+        cl.enqueue_fill_buffer(queue, datapadout_gpu, np.float32(0.0), 0, int(4 * npadmx))
 
         sigmachunk = np.ascontiguousarray(sigma[rstart:rend, cstart:cend].astype(np.float32))
         sigmachunk_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=sigmachunk)
@@ -408,17 +408,17 @@ class NLPAR(nlpar.NLPAR):
         data_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=data)
 
         if data.dtype.type is np.float32:
-          prg.nlloadpat32flt(queue, (np.uint64(data.size),1), None, data_gpu, datapad_gpu)#, wait_for=[filldatain])
+          prg.nlloadpat32flt(queue, (np.uint64(data.size),1), None, data_gpu, datapad_gpu, wait_for=[filldatain])
         if data.dtype.type is np.ubyte:
-          prg.nlloadpat8bit(queue, (np.uint64(data.size),1), None, data_gpu, datapad_gpu)#, wait_for=[filldatain])
+          prg.nlloadpat8bit(queue, (np.uint64(data.size),1), None, data_gpu, datapad_gpu, wait_for=[filldatain])
         if data.dtype.type is np.uint16:
-          prg.nlloadpat16bit(queue, (np.uint64(data.size),1), None, data_gpu, datapad_gpu)#, wait_for=[filldatain])
+          prg.nlloadpat16bit(queue, (np.uint64(data.size),1), None, data_gpu, datapad_gpu, wait_for=[filldatain])
 
 
 
         calclim = np.array([cstartcalc, rstartcalc, ncolchunk, nrowchunk], dtype=np.int64)
         crlimits_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=calclim)
-
+        queue.finish()
         prg.calcnlpar(queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
         #prg.calcnlpar(queue, (1, 1), None,
                                datapad_gpu,
@@ -435,6 +435,7 @@ class NLPAR(nlpar.NLPAR):
 
         data = data.astype(np.float32) # prepare to receive data back from GPU
         data.reshape(-1)[:] = 0.0
+        data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
         queue.finish()
         sigmachunk_gpu.release()
         cl.enqueue_copy(queue, data, datapadout_gpu).wait()
@@ -445,8 +446,10 @@ class NLPAR(nlpar.NLPAR):
             temp -= temp.min()
             temp *= np.float32(mxval) / temp.max()
             data[i, :, :] = temp
-
-        patternfileout.write_data(newpatterns=data, patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
+        data = data[rstartcalc: rstartcalc+nrowcalc,cstartcalc: cstartcalc+ncolcalc, :,: ]
+        data = data.reshape(nrowcalc*ncolcalc, pheight, pwidth)
+        patternfileout.write_data(newpatterns=data, patStartCount=[[cstart+cstartcalc, rstart+rstartcalc],
+                                                                   [ncolcalc, nrowcalc]],
                                   flt2int='clip', scalevalue=1.0)
 
     return str(patternfileout.filepath)
