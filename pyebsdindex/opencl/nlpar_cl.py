@@ -240,6 +240,8 @@ class NLPAR(nlpar.NLPAR):
     dist_local.release()
     count_local.release()
     datapad_gpu.release()
+    queue.flush()
+    queue = None
     return sigma, dist, countnn
 
   def calcnlpar_cl(self,chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
@@ -450,7 +452,8 @@ class NLPAR(nlpar.NLPAR):
         patternfileout.write_data(newpatterns=data, patStartCount=[[cstart+cstartcalc, rstart+rstartcalc],
                                                                    [ncolcalc, nrowcalc]],
                                   flt2int='clip', scalevalue=1.0)
-
+    queue.flush()
+    queue = None
     return str(patternfileout.filepath)
 
 
