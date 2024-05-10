@@ -220,7 +220,7 @@ class NLPAR(nlpar.NLPAR):
 
 
         sigmachunk_gpu =  cl.Buffer(ctx, mf.WRITE_ONLY, size=sigmachunk.nbytes)
-
+        queue.flush()
         prg.calcsigma(queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
                                datapad_gpu, mask_gpu,sigmachunk_gpu,
                                dist_local, count_local,
@@ -418,7 +418,7 @@ class NLPAR(nlpar.NLPAR):
 
         calclim = np.array([cstartcalc, rstartcalc, ncolchunk, nrowchunk], dtype=np.int64)
         crlimits_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=calclim)
-        queue.finish()
+        queue.flush()
         prg.calcnlpar(queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
         #prg.calcnlpar(queue, (1, 1), None,
                                datapad_gpu,
@@ -436,7 +436,6 @@ class NLPAR(nlpar.NLPAR):
         data = data.astype(np.float32) # prepare to receive data back from GPU
         data.reshape(-1)[:] = 0.0
         data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
-        queue.finish()
         sigmachunk_gpu.release()
         cl.enqueue_copy(queue, data, datapadout_gpu).wait()
 
