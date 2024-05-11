@@ -266,7 +266,7 @@ class NLPAR(nlpar_cl.NLPAR):
     # clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
     # clparams.get_queue()
 
-    target_mem = clparams.gpu[gpuid].max_mem_alloc_size//2
+    target_mem = clparams.gpu[gpuid].max_mem_alloc_size//4
     print(target_mem/1.0e9)
     chunks = self._calcchunks([pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
@@ -293,12 +293,12 @@ class NLPAR(nlpar_cl.NLPAR):
             cendcalc = ncolchunk - sr if (colchunk < (chunks[0] - 1)) else ncolchunk
             ncolcalc = np.int64(cendcalc - cstartcalc)
 
-            jobqueue.append( GPUJob([colchunk, rowchunk],\
+            jobqueue.append( NLPARGPUJob([colchunk, rowchunk],\
                     [cstart,cend, rstart, rend],\
                   [cstartcalc,cendcalc, rstartcalc, rendcalc ]))
 
 
-    ngpuwrker = 2
+    ngpuwrker = 8
     ngpu_per_wrker = float(1.0/ngpuwrker)
     ray.shutdown()
 
@@ -310,16 +310,16 @@ class NLPAR(nlpar_cl.NLPAR):
       runtime_env={"env_vars":
                      {"PYTHONPATH": os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
                       }},
-      logging_level=logging.WARNING,
-    )  # Supress INFO messages from ray.
+      logging_level=logging.WARNING,)  # Supress INFO messages from ray.
 
     nlpar_remote = ray.put(self)
 
     idlewrker = []
     busywrker = []
     tasks = []
+
     for w in range(ngpuwrker):
-        idlewrker.append(GPUWorker.options(num_cpus=float(0.99), num_gpus=ngpu_per_wrker).remote(
+        idlewrker.append(NLPARGPUWorker.options(num_cpus=float(0.99), num_gpus=ngpu_per_wrker).remote(
                 actorid=w, gpu_id=gpuid, cudavis=cudavis))
 
     njobs = len(jobqueue)
@@ -339,12 +339,6 @@ class NLPAR(nlpar_cl.NLPAR):
                 indx = tasks.index(tsk)
                 message, job, newdata = ray.get(tsk)
                 if message == 'Done':
-                  self.patternfileout.write_data(newpatterns=newdata,
-                                                     patStartCount=[[job.cstart + job.cstartcalc,
-                                                                     job.rstart + job.rstartcalc],
-                                                                    [job.ncolcalc, job.nrowcalc]],
-                                                     flt2int='clip', scalevalue=1.0)
-
                   idlewrker.append(busywrker.pop(indx))
                   tasks.remove(tsk)
                   ndone += 1
@@ -356,7 +350,9 @@ class NLPAR(nlpar_cl.NLPAR):
     data = np.ascontiguousarray(data)
     ctx = clparams.ctx
     prg = clparams.prg
-    queue = clparams.get_queue()
+    clparams.get_queue()
+
+
     mf = clparams.memflags
     clvectlen = 16
 
@@ -401,8 +397,8 @@ class NLPAR(nlpar_cl.NLPAR):
     datapad_gpu = cl.Buffer(ctx, mf.READ_WRITE, size=int(npadmx) * int(4))
     datapadout_gpu = cl.Buffer(ctx, mf.READ_WRITE, size=int(npadmx) * int(4))
 
-    fill1 = cl.enqueue_fill_buffer(queue, datapad_gpu, np.float32(mxval + 10), 0, int(4 * npadmx))
-    fill2 = cl.enqueue_fill_buffer(queue, datapadout_gpu, np.float32(0.0), 0, int(4 * npadmx))
+    fill1 = cl.enqueue_fill_buffer(clparams.queue, datapad_gpu, np.float32(mxval + 10), 0, int(4 * npadmx))
+    fill2 = cl.enqueue_fill_buffer(clparams.queue, datapadout_gpu, np.float32(0.0), 0, int(4 * npadmx))
 
 
     mask = self.mask.astype(np.float32)
@@ -417,21 +413,21 @@ class NLPAR(nlpar_cl.NLPAR):
     sigmachunk_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=sigmachunk)
 
     szdata = data.size
-    cl.enqueue_barrier(queue)
+    cl.enqueue_barrier(clparams.queue)
     data_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=data)
     if data.dtype.type is np.float32:
-      prg.nlloadpat32flt(queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
+      prg.nlloadpat32flt(clparams.queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
     if data.dtype.type is np.ubyte:
-      prg.nlloadpat8bit(queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
+      prg.nlloadpat8bit(clparams.queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
     if data.dtype.type is np.uint16:
-      prg.nlloadpat16bit(queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
+      prg.nlloadpat16bit(clparams.queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
 
     calclim = np.array([cstartcalc, rstartcalc, ncolchunk, nrowchunk], dtype=np.int64)
     crlimits_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=calclim)
-    cl.enqueue_barrier(queue)
+    cl.enqueue_barrier(clparams.queue)
     data_gpu.release()
-    prg.calcnlpar(queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
-                  # prg.calcnlpar(queue, (1, 1), None,
+    prg.calcnlpar(clparams.queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
+                  # prg.calcnlpar(clparams.queue, (1, 1), None,
                   datapad_gpu,
                   mask_gpu,
                   sigmachunk_gpu,
@@ -447,9 +443,9 @@ class NLPAR(nlpar_cl.NLPAR):
     data = data.astype(np.float32)  # prepare to receive data back from GPU
     data.reshape(-1)[:] = 0.0
     data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
-    cl.enqueue_copy(queue, data, datapadout_gpu).wait()
+    cl.enqueue_copy(clparams.queue, data, datapadout_gpu).wait()
     sigmachunk_gpu.release()
-    queue.finish()
+    clparams.queue.finish()
     if self.rescale == True:
       for i in range(data.shape[0]):
         temp = data[i, :, :]
@@ -459,7 +455,7 @@ class NLPAR(nlpar_cl.NLPAR):
     data = data[rstartcalc: rstartcalc + nrowcalc, cstartcalc: cstartcalc + ncolcalc, :, :]
     data = data.reshape(nrowcalc * ncolcalc, pheight, pwidth)
 
-    queue = None
+    clparams.queue = None
 
     return data
 
@@ -487,7 +483,7 @@ class NLPAR(nlpar_cl.NLPAR):
 
 
 @ray.remote
-class GPUWorker:
+class NLPARGPUWorker:
     def __init__(self, actorid=0, gpu_id=None, cudavis = '0'):
         # sys.path.append(path.dirname(path.dirname(__file__)))  # do this to help Ray find the program files
         # import openclparam # do this to help Ray find the program files
@@ -499,11 +495,12 @@ class GPUWorker:
         os.environ["CUDA_VISIBLE_DEVICES"] = cudavis
         self.actorID = actorid
         self.openCLParams = openclparam.OpenClParam()
-        try:
-            self.openCLParams.gpu_id = gpu_id
-            self.openCLParams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
-        except:
-            self.openCLParams = None
+
+        self.openCLParams.gpu_id = gpu_id
+        self.openCLParams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
+
+
+            #elf.openCLParams = None
 
     def runnlpar_chunk(self, gpujob, nlparobj=None):
 
@@ -516,7 +513,7 @@ class GPUWorker:
             #time.sleep(random.uniform(0, 1.0))
 
             #if self.openCLParams is not None:
-                #self.openCLParams.get_queue()
+            #    self.openCLParams.get_queue()
 
 
 
@@ -525,24 +522,30 @@ class GPUWorker:
                                                                         convertToFloat=False, returnArrayOnly=True)
 
 
-            newpats = nlparobj._nlparchunkcalc_cl(data, gpujob, clparams=self.openCLParams)
-            if self.openCLParams is not None:
+            newdata = nlparobj._nlparchunkcalc_cl(data, gpujob, clparams=self.openCLParams)
+
+            if self.openCLParams.queue is not None:
                 print("queue still here")
                 self.openCLParams.queue.finish()
                 self.openCLParams.queue = None
 
+            nlparobj.patternfileout.write_data(newpatterns=newdata,
+                                           patStartCount=[[gpujob.cstart + gpujob.cstartcalc,
+                                                           gpujob.rstart + gpujob.rstartcalc],
+                                                          [gpujob.ncolcalc, gpujob.nrowcalc]],
+                                           flt2int='clip', scalevalue=1.0)
 
             gpujob._endtime()
 
 
-            return 'Done', gpujob, newpats
+            return 'Done', gpujob, None
         except Exception as e:
             print(e)
             gpujob.rate = None
             return "Error", gpujob, e
 
 
-class GPUJob:
+class NLPARGPUJob:
   def __init__(self, jobid, chunk, calclim):
     self.jobid = jobid
     if self.jobid is not None:
