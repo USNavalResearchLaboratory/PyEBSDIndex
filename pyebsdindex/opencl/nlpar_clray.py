@@ -266,8 +266,8 @@ class NLPAR(nlpar_cl.NLPAR):
     # clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
     # clparams.get_queue()
 
-    target_mem = clparams.gpu[gpuid].max_mem_alloc_size//8
-
+    target_mem = clparams.gpu[gpuid].max_mem_alloc_size//2
+    print(target_mem/1.0e9)
     chunks = self._calcchunks([pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
 
@@ -298,7 +298,7 @@ class NLPAR(nlpar_cl.NLPAR):
                   [cstartcalc,cendcalc, rstartcalc, rendcalc ]))
 
 
-    ngpuwrker = 4
+    ngpuwrker = 2
     ngpu_per_wrker = float(1.0/ngpuwrker)
     ray.shutdown()
 
@@ -356,7 +356,7 @@ class NLPAR(nlpar_cl.NLPAR):
     data = np.ascontiguousarray(data)
     ctx = clparams.ctx
     prg = clparams.prg
-    queue = clparams.queue
+    queue = clparams.get_queue()
     mf = clparams.memflags
     clvectlen = 16
 
@@ -515,8 +515,8 @@ class GPUWorker:
             gpujob._starttime()
             #time.sleep(random.uniform(0, 1.0))
 
-            if self.openCLParams is not None:
-                self.openCLParams.get_queue()
+            #if self.openCLParams is not None:
+                #self.openCLParams.get_queue()
 
 
 
@@ -527,6 +527,7 @@ class GPUWorker:
 
             newpats = nlparobj._nlparchunkcalc_cl(data, gpujob, clparams=self.openCLParams)
             if self.openCLParams is not None:
+                print("queue still here")
                 self.openCLParams.queue.finish()
                 self.openCLParams.queue = None
 
