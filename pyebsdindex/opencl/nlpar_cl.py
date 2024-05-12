@@ -225,7 +225,7 @@ class NLPAR(nlpar.NLPAR):
                                dist_local, count_local,
                                np.int64(nn), np.int64(npatsteps), np.int64(npat_point),
                                np.float32(mxval) )
-
+        cl.enqueue_barrier(queue)
         prg.normd(queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
                         sigmachunk_gpu,
                         count_local, dist_local,
