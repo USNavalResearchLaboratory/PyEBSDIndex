@@ -71,13 +71,12 @@ class NLPAR(nlpar.NLPAR):
     dthresh = np.float32(dthresh)
     lamopt_values = []
 
-    sigma, d2, n2 = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask)
+    sigma, d2, n2 = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, normalize_d=True)
 
     sigmapad = np.pad(sigma, 1, mode='reflect')
-
-
     d2normcl(d2, n2, sigmapad)
 
+    #print(d2.min(), d2.max(), d2.mean())
 
     lamopt_values_chnk = []
     for tw in target_weights:
@@ -97,7 +96,7 @@ class NLPAR(nlpar.NLPAR):
     return lamopt_values.flatten()
 
 
-  def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True, gpuid = None, **kwargs):
+  def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True, normalize_d=False, gpuid = None, **kwargs):
 
     if gpuid is None:
       clparams = openclparam.OpenClParam()
@@ -226,7 +225,14 @@ class NLPAR(nlpar.NLPAR):
                                dist_local, count_local,
                                np.int64(nn), np.int64(npatsteps), np.int64(npat_point),
                                np.float32(mxval) )
-        queue.finish()
+
+
+        #cl.enqueue_barrier(queue)
+        # prg.normd(queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
+        #               sigmachunk_gpu,
+        #               count_local, dist_local,
+        #               np.int64(nn))
+        queue.flush()
 
         cl.enqueue_copy(queue, distchunk, dist_local, is_blocking=False)
         cl.enqueue_copy(queue, countchunk, count_local,  is_blocking=False)
@@ -244,6 +250,7 @@ class NLPAR(nlpar.NLPAR):
     datapad_gpu.release()
     queue.flush()
     queue = None
+    self.sigma = sigma
     return sigma, dist, countnn
 
   def calcnlpar_cl(self,chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,

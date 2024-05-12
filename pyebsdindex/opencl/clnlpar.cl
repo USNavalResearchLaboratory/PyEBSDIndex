@@ -175,6 +175,59 @@ __kernel void calcsigma( __global float *data, __global float16 *mask,
 }
 
 
+__kernel void normd(
+    const __global float *sigma, 
+    const __global float *n, 
+     __global float *d,
+     const long sr){
+
+    const long x = get_global_id(0);
+    const long y = get_global_id(1);
+    const long ncol = get_global_size(0);
+    const long nrow = get_global_size(1);
+    const long indx_xy = x+y*ncol;
+
+    long i, j;
+    long indx_j, indx_ij, count; 
+
+    //long nnn = (2*nn+1) * (2*nn+1);
+
+    float sigma_xy = sigma[indx_xy];  
+    sigma_xy *= sigma_xy;
+    float sigma_ij, nn, dd;  
+    count = 0;
+    for(j=y-nn; j<=y+nn; ++j){
+          
+          indx_j =  (j >= 0) ? (j): abs(j);
+          indx_j =  (indx_j < nrow) ? (indx_j): nrow - (indx_j -nrow +1);
+          indx_j = ncol * indx_j;
+          
+          for(i=x-nn; i<=x+nn; ++i){  
+             dd = d[count];
+             nn = n[count];    
+             if (nn > 0){            
+               indx_ij =  (i >= 0) ? (i): abs(i);
+               indx_ij =  (indx_ij < ncol) ? (indx_ij): ncol - (indx_ij -ncol +1);
+               indx_ij =  (indx_ij + indx_j);
+               sigma_ij = sigma[indx_ij];
+               sigma_ij *= sigma_ij;
+              
+               sigma_ij = sigma_ij + sigma_xy;
+               dd -= nn*sigma_ij;
+               dd /= sigma_ij * sqrt(2.0*nn); 
+               //printf("%f\n", dd) ;
+               d[count] = dd; 
+               count += 1;       
+             }
+           }
+
+     }      
+
+
+}
+
+
+
 
 __kernel void calcnlpar( 
       const __global float *data, 
