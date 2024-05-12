@@ -190,11 +190,13 @@ __kernel void normd(
     long i, j;
     long indx_j, indx_ij, count; 
 
-    //long nnn = (2*nn+1) * (2*nn+1);
+    long nnn = (2*sr+1) * (2*sr+1);
 
     float sigma_xy = sigma[indx_xy];  
     sigma_xy *= sigma_xy;
+    //printf("%f", sigma_xy);
     float sigma_ij, nn, dd;  
+
     count = 0;
     for(j=y-nn; j<=y+nn; ++j){
           
@@ -203,9 +205,9 @@ __kernel void normd(
           indx_j = ncol * indx_j;
           
           for(i=x-nn; i<=x+nn; ++i){  
-             dd = d[count];
-             nn = n[count];    
-             if (nn > 0){            
+             dd = d[count+nnn*indx_xy];
+             nn = n[count+nnn*indx_xy];    
+             if (nn > 1e-3){            
                indx_ij =  (i >= 0) ? (i): abs(i);
                indx_ij =  (indx_ij < ncol) ? (indx_ij): ncol - (indx_ij -ncol +1);
                indx_ij =  (indx_ij + indx_j);
@@ -214,11 +216,11 @@ __kernel void normd(
               
                sigma_ij = sigma_ij + sigma_xy;
                dd -= nn*sigma_ij;
-               dd /= sigma_ij * sqrt(2.0*nn); 
+               dd /= (sigma_ij * sqrt(2.0*nn)); 
                //printf("%f\n", dd) ;
-               d[count] = dd; 
-               count += 1;       
+               d[count+nnn*indx_xy] = dd;         
              }
+             count += 1;  
            }
 
      }      

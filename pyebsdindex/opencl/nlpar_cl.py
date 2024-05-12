@@ -73,10 +73,10 @@ class NLPAR(nlpar.NLPAR):
 
     sigma, d2, n2 = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, normalize_d=True)
 
-    sigmapad = np.pad(sigma, 1, mode='reflect')
-    d2normcl(d2, n2, sigmapad)
+    #sigmapad = np.pad(sigma, 1, mode='reflect')
+    #d2normcl(d2, n2, sigmapad)
 
-    #print(d2.min(), d2.max(), d2.mean())
+    print(d2.min(), d2.max(), d2.mean())
 
     lamopt_values_chnk = []
     for tw in target_weights:
@@ -226,12 +226,10 @@ class NLPAR(nlpar.NLPAR):
                                np.int64(nn), np.int64(npatsteps), np.int64(npat_point),
                                np.float32(mxval) )
 
-
-        #cl.enqueue_barrier(queue)
-        # prg.normd(queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
-        #               sigmachunk_gpu,
-        #               count_local, dist_local,
-        #               np.int64(nn))
+        prg.normd(queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
+                        sigmachunk_gpu,
+                        count_local, dist_local,
+                        np.int64(nn))
         queue.flush()
 
         cl.enqueue_copy(queue, distchunk, dist_local, is_blocking=False)
