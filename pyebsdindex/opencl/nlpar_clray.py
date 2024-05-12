@@ -243,6 +243,7 @@ class NLPAR(nlpar_cl.NLPAR):
       else:  # not int, so no rescale.
         self.rescale = False
 
+    ngpuwrker = 8
     clparams = openclparam.OpenClParam()
     clparams.get_gpu()
     if gpuid is None:
@@ -263,10 +264,22 @@ class NLPAR(nlpar_cl.NLPAR):
         cudavis += str(cdgpu) + ','
 
     # print(gpuid)
-    # clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
-    # clparams.get_queue()
+    clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
+    clparams.get_queue()
+    if clparams.gpu[gpuid].host_unified_memory:
+      return nlpar_cl.NLPAR.calcnlpar_cl(self, saturation_protect=saturation_protect,
+                                               automask=automask,
+                                               filename=filename,
+                                               fileout=fileout,
+                                               reset_sigma=reset_sigma,
+                                               backsub = backsub,
+                                               rescale = rescale,
+                                               gpuid = gpuid)
 
-    target_mem = clparams.gpu[gpuid].max_mem_alloc_size//4
+    target_mem = clparams.gpu[gpuid].max_mem_alloc_size//2
+    max_mem = clparams.gpu[gpuid].global_mem_size*0.75
+    if target_mem*ngpuwrker > max_mem:
+      target_mem = max_mem/ngpuwrker
     print(target_mem/1.0e9)
     chunks = self._calcchunks([pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
@@ -298,7 +311,7 @@ class NLPAR(nlpar_cl.NLPAR):
                   [cstartcalc,cendcalc, rstartcalc, rendcalc ]))
 
 
-    ngpuwrker = 8
+
     ngpu_per_wrker = float(1.0/ngpuwrker)
     ray.shutdown()
 
@@ -443,7 +456,7 @@ class NLPAR(nlpar_cl.NLPAR):
     data = data.astype(np.float32)  # prepare to receive data back from GPU
     data.reshape(-1)[:] = 0.0
     data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
-    cl.enqueue_copy(clparams.queue, data, datapadout_gpu).wait()
+    cl.enqueue_copy(clparams.queue, data, datapadout_gpu,  is_blocking=True)
     sigmachunk_gpu.release()
     clparams.queue.finish()
     if self.rescale == True:
@@ -514,13 +527,9 @@ class NLPARGPUWorker:
 
             #if self.openCLParams is not None:
             #    self.openCLParams.get_queue()
-
-
-
             data, xyloc = nlparobj.patternfile.read_data(patStartCount=[[gpujob.cstart, gpujob.rstart],
                                                                         [gpujob.ncolchunk, gpujob.nrowchunk]],
                                                                         convertToFloat=False, returnArrayOnly=True)
-
 
             newdata = nlparobj._nlparchunkcalc_cl(data, gpujob, clparams=self.openCLParams)
 
@@ -536,8 +545,6 @@ class NLPARGPUWorker:
                                            flt2int='clip', scalevalue=1.0)
 
             gpujob._endtime()
-
-
             return 'Done', gpujob, None
         except Exception as e:
             print(e)

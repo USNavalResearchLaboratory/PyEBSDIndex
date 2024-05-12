@@ -220,7 +220,7 @@ class NLPAR(nlpar.NLPAR):
 
 
         sigmachunk_gpu =  cl.Buffer(ctx, mf.WRITE_ONLY, size=sigmachunk.nbytes)
-        queue.flush()
+        cl.enqueue_barrier(queue)
         prg.calcsigma(queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
                                datapad_gpu, mask_gpu,sigmachunk_gpu,
                                dist_local, count_local,
@@ -228,11 +228,13 @@ class NLPAR(nlpar.NLPAR):
                                np.float32(mxval) )
         queue.finish()
 
-        cl.enqueue_copy(queue, distchunk, dist_local)
-        cl.enqueue_copy(queue, countchunk, count_local)
-        cl.enqueue_copy(queue, sigmachunk, sigmachunk_gpu).wait()
+        cl.enqueue_copy(queue, distchunk, dist_local, is_blocking=False)
+        cl.enqueue_copy(queue, countchunk, count_local,  is_blocking=False)
+        cl.enqueue_copy(queue, sigmachunk, sigmachunk_gpu,  is_blocking=True)
 
-        sigmachunk_gpu.release()
+        #sigmachunk_gpu.release()
+
+        queue.finish()
         countnn[rstart:rend, cstart:cend] = countchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
         dist[rstart:rend, cstart:cend] = distchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
         sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigmachunk)
@@ -257,6 +259,8 @@ class NLPAR(nlpar.NLPAR):
 
     if searchradius is not None:
       self.searchradius = searchradius
+
+
 
     lam = np.float32(self.lam)
     dthresh = np.float32(self.dthresh)
@@ -302,11 +306,14 @@ class NLPAR(nlpar.NLPAR):
       self.mask = np.ones((pheight, pwidth), dtype=np.uint8)
 
     scalemethod = 'clip'
+    self.rescale = False
     if rescale == True:
+      self.rescale = True
       if np.issubdtype(patternfileout.filedatatype, np.integer):
         mxval = np.iinfo(patternfileout.filedatatype).max
         scalemethod = 'fullscale'
       else:  # not int, so no rescale.
+        self.rescale = False
         rescale = False
 
 
@@ -440,8 +447,8 @@ class NLPAR(nlpar.NLPAR):
         data.reshape(-1)[:] = 0.0
         data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
         sigmachunk_gpu.release()
-        cl.enqueue_copy(queue, data, datapadout_gpu).wait()
-
+        cl.enqueue_copy(queue, data, datapadout_gpu,  is_blocking=True)
+        queue.finish()
         if rescale == True:
           for i in range(data.shape[0]):
             temp = data[i, :, :]
@@ -453,7 +460,7 @@ class NLPAR(nlpar.NLPAR):
         patternfileout.write_data(newpatterns=data, patStartCount=[[cstart+cstartcalc, rstart+rstartcalc],
                                                                    [ncolcalc, nrowcalc]],
                                   flt2int='clip', scalevalue=1.0)
-    queue.flush()
+    queue.finish()
     queue = None
     return str(patternfileout.filepath)
 
