@@ -215,7 +215,7 @@ __kernel void normd(
                for(q=0;q<nnn;q++){
                 dd = d[q+nnn*indx_xy];
                 nn = n[q+nnn*indx_xy];    
-                if (nn > 1e-3){           
+                if (nn > 1.0e-3){           
                   dd -= nn*sigma_ij;
                   dd /= (sigma_ij * sqrt(2.0*nn)); 
                   //printf("%f\n", dd) ;
