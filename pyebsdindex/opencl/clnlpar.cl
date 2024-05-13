@@ -179,7 +179,7 @@ __kernel void normd(
     const __global float *sigma, 
     const __global float *n, 
      __global float *d,
-     const long sr){
+     const long nn){
 
     const long x = get_global_id(0);
     const long y = get_global_id(1);
@@ -190,13 +190,13 @@ __kernel void normd(
     long i, j, q;
     long indx_j, indx_ij; 
 
-    long nnn = (2*sr+1) * (2*sr+1);
-
+    long nnn = (2*nn+1) * (2*nn+1);
+    //printf("%d\n", nnn) ;
     float sigma_xy = sigma[indx_xy];  
     sigma_xy *= sigma_xy;
-    //printf("%f", sigma_xy);
-    float sigma_ij, nn, dd;  
-
+    // printf("%f", sigma_xy);
+    float sigma_ij, n_ij, d_ij;  
+    q = 0; 
     for(j=y-nn; j<=y+nn; ++j){
           
           indx_j =  (j >= 0) ? (j): abs(j);
@@ -212,23 +212,19 @@ __kernel void normd(
                sigma_ij *= sigma_ij;
               
                sigma_ij = sigma_ij + sigma_xy;
-               for(q=0;q<nnn;q++){
-                dd = d[q+nnn*indx_xy];
-                nn = n[q+nnn*indx_xy];    
-                if (nn > 1.0e-3){           
-                  dd -= nn*sigma_ij;
-                  dd /= (sigma_ij * sqrt(2.0*nn)); 
-                  //printf("%f\n", dd) ;
-                  d[q+nnn*indx_xy] = dd;    
-               }
-                    
-             }
-             
+               
+               d_ij = d[q+nnn*indx_xy];
+               n_ij = n[q+nnn*indx_xy];    
+               if (n_ij > 1.0e-3){           
+                  d_ij -= n_ij*sigma_ij;
+                  d_ij *= 1.0/( sigma_ij * sqrt(2.0*n_ij) ); 
+                  
+                  d[q+nnn*indx_xy] = d_ij;    
+                }
+               q += 1.0; 
            }
-
-     }      
-
-
+      } 
+      //printf("%d, %d, %d\n",nn, q, nnn);     
 }
 
 

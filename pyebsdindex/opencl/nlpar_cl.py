@@ -27,37 +27,17 @@ class NLPAR(nlpar.NLPAR):
                             saturation_protect=saturation_protect,automask=automask, **kwargs)
 
   def opt_lambda_cl(self, saturation_protect=True, automask=True, backsub=False,
-                 target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True):
+                 target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True, **kwargs):
 
     target_weights = np.asarray(target_weights)
 
     def loptfunc(lam, d2, tw, dthresh):
-      temp = (d2 > dthresh).choose(dthresh, d2)
+      temp = np.maximum(d2, dthresh)#(d2 > dthresh).choose(dthresh, d2)
       dw = np.exp(-(temp) / lam ** 2)
       w = np.sum(dw, axis=2) + 1e-12
 
       metric = np.mean(np.abs(tw - 1.0 / w))
       return metric
-
-    @numba.njit(fastmath=True, cache=True, parallel=True)
-    def d2normcl(d2, n2, sigmapad):
-      sftpat = np.array([[-1,-1], [-1, 0], [-1, 1],
-                [0, -1], [0, 0], [0, 1],
-                [1, -1], [1, 0], [1, 1]], dtype = np.int64)
-      #sftpat = sftpat.reshape(-1)
-      shp = d2.shape
-      s2 = sigmapad ** 2
-      for j in numba.prange(shp[0]):
-        for i in range(shp[1]):
-          s_ij = s2[j+1, i+1]
-          for q in range(shp[2]):
-            if n2[j, i, q] > 0:
-              jj = np.int64(j+1+sftpat[q,0])
-              ii = np.int64(i+1+sftpat[q, 1])
-              s_q =s2[jj,ii ]
-              s2_12 = (s_ij + s_q)
-              d2[j, i, q] -= n2[j, i, q] * s2_12
-              d2[j, i, q] /= s2_12 * np.sqrt(2.0 * n2[j, i, q])
 
     patternfile = self.getinfileobj()
     patternfile.read_header()
@@ -71,7 +51,7 @@ class NLPAR(nlpar.NLPAR):
     dthresh = np.float32(dthresh)
     lamopt_values = []
 
-    sigma, d2, n2 = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, normalize_d=True)
+    sigma, d2, n2 = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, normalize_d=True, **kwargs)
 
     #sigmapad = np.pad(sigma, 1, mode='reflect')
     #d2normcl(d2, n2, sigmapad)
@@ -225,12 +205,13 @@ class NLPAR(nlpar.NLPAR):
                                dist_local, count_local,
                                np.int64(nn), np.int64(npatsteps), np.int64(npat_point),
                                np.float32(mxval) )
-        cl.enqueue_barrier(queue)
-        prg.normd(queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
-                        sigmachunk_gpu,
-                        count_local, dist_local,
-                        np.int64(nn))
-        queue.flush()
+        if normalize_d is True:
+          cl.enqueue_barrier(queue)
+          prg.normd(queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
+                          sigmachunk_gpu,
+                          count_local, dist_local,
+                          np.int64(nn))
+        queue.finish()
 
         cl.enqueue_copy(queue, distchunk, dist_local, is_blocking=False)
         cl.enqueue_copy(queue, countchunk, count_local,  is_blocking=False)
@@ -432,7 +413,7 @@ class NLPAR(nlpar.NLPAR):
 
         calclim = np.array([cstartcalc, rstartcalc, ncolchunk, nrowchunk], dtype=np.int64)
         crlimits_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=calclim)
-        queue.flush()
+        cl.enqueue_barrier(queue)
         data_gpu.release()
         prg.calcnlpar(queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
         #prg.calcnlpar(queue, (1, 1), None,
