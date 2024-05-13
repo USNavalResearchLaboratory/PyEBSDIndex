@@ -362,23 +362,25 @@ class NLPAR(nlpar.NLPAR):
 
     nnn = int((2 * sr + 1) ** 2)
 
-    for colchunk in range(chunks[0]):
-      cstart = chunks[2][colchunk, 0]
-      cend = chunks[2][colchunk, 1]
-      ncolchunk = cend - cstart
 
-      cstartcalc = sr if (colchunk > 0) else 0
-      cendcalc = ncolchunk-sr if (colchunk < (chunks[0]-1)) else ncolchunk
-      ncolcalc = np.int64(cendcalc - cstartcalc)
 
-      for rowchunk in range(chunks[1]):
-        rstart = chunks[3][rowchunk, 0]
-        rend = chunks[3][rowchunk, 1]
-        nrowchunk = rend - rstart
+    for rowchunk in range(chunks[1]):
+      rstart = chunks[3][rowchunk, 0]
+      rend = chunks[3][rowchunk, 1]
+      nrowchunk = rend - rstart
 
-        rstartcalc = sr if (rowchunk > 0) else 0
-        rendcalc = nrowchunk - sr if (rowchunk < (chunks[1] - 1)) else nrowchunk
-        nrowcalc = np.int64(rendcalc - rstartcalc)
+      rstartcalc = sr if (rowchunk > 0) else 0
+      rendcalc = nrowchunk - sr if (rowchunk < (chunks[1] - 1)) else nrowchunk
+      nrowcalc = np.int64(rendcalc - rstartcalc)
+
+      for colchunk in range(chunks[0]):
+        cstart = chunks[2][colchunk, 0]
+        cend = chunks[2][colchunk, 1]
+        ncolchunk = cend - cstart
+
+        cstartcalc = sr if (colchunk > 0) else 0
+        cendcalc = ncolchunk - sr if (colchunk < (chunks[0] - 1)) else ncolchunk
+        ncolcalc = np.int64(cendcalc - cstartcalc)
 
         data, xyloc = patternfile.read_data(patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
                                           convertToFloat=False, returnArrayOnly=True)
