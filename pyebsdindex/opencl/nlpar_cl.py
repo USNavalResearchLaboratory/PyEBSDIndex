@@ -56,7 +56,7 @@ class NLPAR(nlpar.NLPAR):
     #sigmapad = np.pad(sigma, 1, mode='reflect')
     #d2normcl(d2, n2, sigmapad)
 
-    print(d2.min(), d2.max(), d2.mean())
+   #print(d2.min(), d2.max(), d2.mean())
 
     lamopt_values_chnk = []
     for tw in target_weights:
