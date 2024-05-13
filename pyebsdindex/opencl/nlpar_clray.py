@@ -123,7 +123,7 @@ class NLPAR(nlpar_cl.NLPAR):
                                                rescale = rescale,
                                                gpuid = gpuid)
 
-    target_mem = clparams.gpu[gpuid].max_mem_alloc_size//2
+    target_mem = clparams.gpu[gpuid].max_mem_alloc_size//3
     max_mem = clparams.gpu[gpuid].global_mem_size*0.75
     if target_mem*ngpuwrker > max_mem:
       target_mem = max_mem/ngpuwrker

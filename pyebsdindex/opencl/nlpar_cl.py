@@ -100,7 +100,7 @@ class NLPAR(nlpar.NLPAR):
     #print(gpuid)
     clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
     clparams.get_queue()
-    target_mem = clparams.queue.device.max_mem_alloc_size
+    target_mem = clparams.queue.device.max_mem_alloc_size//2
     ctx = clparams.ctx
     prg = clparams.prg
     queue = clparams.queue
