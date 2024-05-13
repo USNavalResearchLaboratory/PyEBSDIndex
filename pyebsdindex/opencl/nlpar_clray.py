@@ -21,7 +21,13 @@ class NLPAR(nlpar_cl.NLPAR):
     nlpar_cl.NLPAR.__init__(self, **kwargs)
     self.useCPU = False
 
-  def calcnlpar_cl(self,chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
+  def calcnlpar(self, **kwargs):
+    return self.calcnlpar_clray(**kwargs)
+
+  def calcnlpar_clsq(self, **kwargs):
+    return nlpar_cl.NLPAR.calcnlpar_cl(self, **kwargs)
+
+  def calcnlpar_clray(self, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
                 filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False, gpuid = None, **kwargs):
 
     if lam is not None:

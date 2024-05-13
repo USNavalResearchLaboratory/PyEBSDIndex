@@ -15,12 +15,28 @@ class NLPAR(nlpar.NLPAR):
     nlpar.NLPAR.__init__(self, **kwargs)
     self.useCPU = False
 
+
+  def opt_lambda(self,saturation_protect=True, automask=True, backsub=False,
+                 target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True, **kwargs):
+    return self.opt_lambda_cl(saturation_protect=saturation_protect,
+                              automask=automask,
+                              backsub=backsub,
+                              target_weights=target_weights,
+                              dthresh=dthresh,
+                              autoupdate=autoupdate, **kwargs)
+  def calcnlpar(self, **kwargs):
+    return self.calcnlpar_cl(**kwargs)
+
+
   def calcsigma(self,nn=1, saturation_protect=True,automask=True, **kwargs):
     return self.calcsigma_cl(nn=nn,
                             saturation_protect=saturation_protect,
                             automask=automask, **kwargs)[0]
+  def opt_lambda_cpu(self, **kwargs):
+    return nlpar.NLPAR.opt_lambda(self, **kwargs)
 
-
+  def calcnlpar_cpu(self, **kwargs):
+    return nlpar.NLPAR.calcnlpar(self, **kwargs)
 
   def calcsigma_cpu(self,nn=1, saturation_protect=True,automask=True, **kwargs):
     return nlpar.NLPAR.calcsigma(self, nn=nn,
@@ -160,14 +176,16 @@ class NLPAR(nlpar.NLPAR):
     count_local = cl.Buffer(ctx, mf.READ_WRITE, size=int(mxchunk * nnn * 4))
     countchunk = np.zeros((mxchunk, nnn), dtype=np.float32)
 
-    for colchunk in range(chunks[0]):
-      cstart = chunks[2][colchunk, 0]
-      cend = chunks[2][colchunk, 1]
-      ncolchunk = cend - cstart
-      for rowchunk in range(chunks[1]):
-        rstart = chunks[3][rowchunk, 0]
-        rend = chunks[3][rowchunk, 1]
-        nrowchunk = rend - rstart
+    for rowchunk in range(chunks[1]):
+      rstart = chunks[3][rowchunk, 0]
+      rend = chunks[3][rowchunk, 1]
+      nrowchunk = rend - rstart
+
+      for colchunk in range(chunks[0]):
+        cstart = chunks[2][colchunk, 0]
+        cend = chunks[2][colchunk, 1]
+        ncolchunk = cend - cstart
+
         data, xyloc = patternfile.read_data(patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
                                           convertToFloat=False, returnArrayOnly=True)
 
