@@ -294,7 +294,7 @@ class NLPAR:
     return np.mean(lamopt_values, axis = 0).flatten()
 
   def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
-                filename=None, fileout=None, reset_sigma=True, backsub = False, rescale = False):
+                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False):
 
     if lam is not None:
       self.lam = lam
@@ -312,8 +312,8 @@ class NLPAR:
     if filename is not None:
       self.setfile(filepath=filename)
 
-    if reset_sigma:
-      self.sigma = None
+
+
 
     patternfile = self.getinfileobj()
 
@@ -354,8 +354,10 @@ class NLPAR:
       calcsigma = True
       self.sigma = np.zeros((nrows, ncols), dtype=np.float32)+1e24
 
+    if reset_sigma:
+      self.sigma = None
 
-    if np.asarray(self.sigma).size == 1:
+    if (np.asarray(self.sigma).size == 1) and (self.sigma is not None):
       tmp = np.asarray(self.sigma)[0]
       self.sigma =  np.zeros((nrows, ncols), dtype=np.float32)+tmp
       calcsigma = False
@@ -365,8 +367,8 @@ class NLPAR:
       self.sigma = np.zeros((nrows,ncols),dtype=np.float32) + 1e24
       calcsigma = True
 
-
     sigma = np.asarray(self.sigma)
+
     scalemethod = 'clip'
     if rescale == True:
       if np.issubdtype(patternfileout.filedatatype, np.integer):

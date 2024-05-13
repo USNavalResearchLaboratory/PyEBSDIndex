@@ -22,7 +22,7 @@ class NLPAR(nlpar_cl.NLPAR):
     self.useCPU = False
 
   def calcnlpar_cl(self,chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
-                filename=None, fileout=None, reset_sigma=True, backsub = False, rescale = False, gpuid = None, **kwargs):
+                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False, gpuid = None, **kwargs):
 
     if lam is not None:
       self.lam = lam
@@ -90,7 +90,7 @@ class NLPAR(nlpar_cl.NLPAR):
       else:  # not int, so no rescale.
         self.rescale = False
 
-    ngpuwrker = 8
+    ngpuwrker = 6
     clparams = openclparam.OpenClParam()
     clparams.get_gpu()
     if gpuid is None:

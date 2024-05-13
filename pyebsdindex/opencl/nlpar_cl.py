@@ -233,7 +233,7 @@ class NLPAR(nlpar.NLPAR):
     return sigma, dist, countnn
 
   def calcnlpar_cl(self,chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
-                filename=None, fileout=None, reset_sigma=True, backsub = False, rescale = False, gpuid = None, **kwargs):
+                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False, gpuid = None, **kwargs):
 
     if lam is not None:
       self.lam = lam
