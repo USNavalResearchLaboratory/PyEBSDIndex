@@ -11,8 +11,8 @@ from pyebsdindex.opencl import openclparam
 from time import time as timer
 import scipy
 class NLPAR(nlpar.NLPAR):
-  def __init__( self, **kwargs):
-    nlpar.NLPAR.__init__(self, **kwargs)
+  def __init__( self, filename=None, **kwargs):
+    nlpar.NLPAR.__init__(self, filename=filename, **kwargs)
     self.useCPU = False
 
 

@@ -17,8 +17,8 @@ OSPLATFORM  = platform.system()
 
 
 class NLPAR(nlpar_cl.NLPAR):
-  def __init__( self, **kwargs):
-    nlpar_cl.NLPAR.__init__(self, **kwargs)
+  def __init__( self,filename=None, **kwargs):
+    nlpar_cl.NLPAR.__init__(self,filename=filename, **kwargs)
     self.useCPU = False
 
   def calcnlpar(self, **kwargs):
