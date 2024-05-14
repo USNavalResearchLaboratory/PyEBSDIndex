@@ -26,7 +26,7 @@ class NLPAR(nlpar_cl.NLPAR):
 
   def calcsigma(self, nn=1, saturation_protect=True, automask=True, return_nndist=False, **kwargs):
     self.sigmann = nn
-    sig = nlpar_cl.NLPAR.calcsigma_cl(self, nn=nn,
+    sig = self.calcsigma_clray(self, nn=nn,
                             saturation_protect=saturation_protect,
                             automask=automask, **kwargs)
     if return_nndist == True:
@@ -69,7 +69,7 @@ class NLPAR(nlpar_cl.NLPAR):
       cudavis += str(cdgpu) + ','
 
     #print(gpuid)
-    ngpuwrker = 2
+    ngpuwrker = 6
     clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
     clparams.get_queue()
     if clparams.gpu[gpuid].host_unified_memory:
