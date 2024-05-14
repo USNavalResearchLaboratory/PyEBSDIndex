@@ -57,6 +57,7 @@ class NLPAR:
     self.setfile(filename)
     self.mask = None
     self.sigma = None
+    self.sigmann = 1
     self.nrows = None
     self.ncols = None
     if nrows is not None:
@@ -439,7 +440,7 @@ class NLPAR:
     return str(patternfileout.filepath)
 
   def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True):
-
+    self.sigmann = nn
     patternfile = self.getinfileobj()
 
 

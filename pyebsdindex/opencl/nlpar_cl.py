@@ -29,6 +29,7 @@ class NLPAR(nlpar.NLPAR):
 
 
   def calcsigma(self,nn=1, saturation_protect=True,automask=True, return_nndist=False, **kwargs):
+    self.sigmann = nn
     sig =  self.calcsigma_cl(nn=nn,
                             saturation_protect=saturation_protect,
                             automask=automask, **kwargs)
