@@ -82,8 +82,10 @@ class NLPAR(nlpar.NLPAR):
 
     lamopt_values_chnk = []
     for tw in target_weights:
+      stride = 1 if sigma.size < 1e6 else 10
+
       lam = 1.0
-      lambopt1 = sp_opt.minimize(loptfunc, lam, args=(d2, tw, dthresh), method='Nelder-Mead',
+      lambopt1 = sp_opt.minimize(loptfunc, lam, args=(d2[0::stride, :], tw, dthresh), method='Nelder-Mead',
                               bounds=[[0.001, 10.0]], options={'fatol': 0.0001})
       lamopt_values.append(lambopt1['x'])
 
