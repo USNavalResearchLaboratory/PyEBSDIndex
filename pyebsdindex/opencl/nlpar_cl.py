@@ -73,7 +73,7 @@ class NLPAR(nlpar.NLPAR):
     lamopt_values = []
 
     sigma, d2, n2 = self.calcsigma(nn=1, saturation_protect=saturation_protect, automask=automask, normalize_d=True,
-                                   return_nndist=True, **kwargs)
+                                   return_nndist=True)
 
     #sigmapad = np.pad(sigma, 1, mode='reflect')
     #d2normcl(d2, n2, sigmapad)

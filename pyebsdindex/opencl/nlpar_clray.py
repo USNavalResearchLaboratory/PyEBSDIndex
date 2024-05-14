@@ -26,7 +26,7 @@ class NLPAR(nlpar_cl.NLPAR):
 
   def calcsigma(self, nn=1, saturation_protect=True, automask=True, return_nndist=False, **kwargs):
     self.sigmann = nn
-    sig = self.calcsigma_clray(self, nn=nn,
+    sig = self.calcsigma_clray(nn=nn,
                             saturation_protect=saturation_protect,
                             automask=automask, **kwargs)
     if return_nndist == True:
@@ -41,7 +41,7 @@ class NLPAR(nlpar_cl.NLPAR):
   def calcsigma_clsq(self, **kwargs):
     return nlpar_cl.NLPAR.calcsigma_cl(self, **kwargs)
 
-  def calcsigma_clray(self,nn=1,saturation_protect=True,automask=True, normalize_d=False, gpuid = None, **kwargs):
+  def calcsigma_clray(self, nn=1, saturation_protect=True, automask=True, normalize_d=False, gpuid = None, **kwargs):
     self.patternfile = self.getinfileobj()
     self.sigmann = nn
 
@@ -73,7 +73,10 @@ class NLPAR(nlpar_cl.NLPAR):
     clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
     clparams.get_queue()
     if clparams.gpu[gpuid].host_unified_memory:
-      return nlpar_cl.NLPAR.calcsigma_cl(self, **kwargs)
+      return nlpar_cl.NLPAR.calcsigma_cl(self, nn=nn, saturation_protect=saturation_protect,
+                                         automask=automask,
+                                         normalize_d=normalize_d,
+                                         gpuid=gpuid, **kwargs)
 
     target_mem = clparams.gpu[gpuid].max_mem_alloc_size // 3
     max_mem = clparams.gpu[gpuid].global_mem_size * 0.75
