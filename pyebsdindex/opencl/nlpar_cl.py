@@ -28,10 +28,14 @@ class NLPAR(nlpar.NLPAR):
     return self.calcnlpar_cl(**kwargs)
 
 
-  def calcsigma(self,nn=1, saturation_protect=True,automask=True, **kwargs):
-    return self.calcsigma_cl(nn=nn,
+  def calcsigma(self,nn=1, saturation_protect=True,automask=True, return_nndist=False, **kwargs):
+    sig =  self.calcsigma_cl(nn=nn,
                             saturation_protect=saturation_protect,
-                            automask=automask, **kwargs)[0]
+                            automask=automask, **kwargs)
+    if return_nndist == True:
+      return sig
+    else:
+      return sig[0]
   def opt_lambda_cpu(self, **kwargs):
     return nlpar.NLPAR.opt_lambda(self, **kwargs)
 
@@ -67,7 +71,8 @@ class NLPAR(nlpar.NLPAR):
     dthresh = np.float32(dthresh)
     lamopt_values = []
 
-    sigma, d2, n2 = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, normalize_d=True, **kwargs)
+    sigma, d2, n2 = self.calcsigma(nn=1, saturation_protect=saturation_protect, automask=automask, normalize_d=True,
+                                   return_nndist=True, **kwargs)
 
     #sigmapad = np.pad(sigma, 1, mode='reflect')
     #d2normcl(d2, n2, sigmapad)

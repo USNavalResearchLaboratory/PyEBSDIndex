@@ -24,9 +24,22 @@ class NLPAR(nlpar_cl.NLPAR):
   def calcnlpar(self, **kwargs):
     return self.calcnlpar_clray(**kwargs)
 
+  def calcsigma(self, nn=1, saturation_protect=True, automask=True, return_nndist=False, **kwargs):
+
+    sig = nlpar_cl.NLPAR.calcsigma_cl(self, nn=nn,
+                            saturation_protect=saturation_protect,
+                            automask=automask, **kwargs)
+    if return_nndist == True:
+      return sig
+    else:
+      return sig[0]
+
+
   def calcnlpar_clsq(self, **kwargs):
     return nlpar_cl.NLPAR.calcnlpar_cl(self, **kwargs)
 
+  def calcsigma_clsg(self, **kwargs):
+    return nlpar_cl.NLPAR.calcsigma_cl(self, **kwargs)
   def calcnlpar_clray(self, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
                 filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False, gpuid = None, **kwargs):
 
@@ -324,27 +337,6 @@ class NLPAR(nlpar_cl.NLPAR):
     clparams.queue = None
 
     return data
-
-
-
-
-
-
-
-
-
-    #
-    # filldatain = cl.enqueue_fill_buffer(queue, datapad_gpu, np.float32(mxval + 10), 0, int(4 * npadmx))
-    # cl.enqueue_fill_buffer(queue, datapadout_gpu, np.float32(0.0), 0, int(4 * npadmx))
-    #
-    # sigmachunk = np.ascontiguousarray(sigma[rstart:rend, cstart:cend].astype(np.float32))
-    # sigmachunk_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=sigmachunk)
-    # szdata = data.size
-    # npad = clvectlen * int(np.ceil(szdata / clvectlen))
-    #
-    # # datapad = np.zeros((npad), dtype=np.float32) + np.float32(mxval + 10)
-    # # datapad[0:szdata] = data.reshape(-1)
-
 
 
 
