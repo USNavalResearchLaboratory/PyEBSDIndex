@@ -259,7 +259,8 @@ class NLPAR(nlpar.NLPAR):
     return sigma, dist, countnn
 
   def calcnlpar_cl(self,chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
-                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False, gpuid = None, **kwargs):
+                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,
+                   gpuid = None, verbose=2, **kwargs):
 
     if lam is not None:
       self.lam = lam
@@ -364,7 +365,8 @@ class NLPAR(nlpar.NLPAR):
     chunks = self._calcchunks( [pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
     #print(chunks[2], chunks[3])
-    print(lam, sr, dthresh)
+    if verbose >=1:
+      print("lambda:", lam, "search radius:", sr, "dthresh:", dthresh)
 
     # precalculate some needed arrays for the GPU
     mask = self.mask.astype(np.float32)
@@ -378,7 +380,7 @@ class NLPAR(nlpar.NLPAR):
 
     chunksize = (chunks[2][:,1] - chunks[2][:,0]).reshape(1,-1) * \
                      (chunks[3][:, 1] - chunks[3][:, 0]).reshape(-1, 1)
-
+    nchunks = chunksize.size
     #return chunks, chunksize
     mxchunk = int(chunksize.max())
     npadmx = clvectlen * int(np.ceil(float(mxchunk)*npat_point/ clvectlen))
@@ -389,7 +391,9 @@ class NLPAR(nlpar.NLPAR):
     nnn = int((2 * sr + 1) ** 2)
 
 
-
+    ndone = 0
+    # if verbose >= 2:
+    #   print('\n', end='')
     for rowchunk in range(chunks[1]):
       rstart = chunks[3][rowchunk, 0]
       rend = chunks[3][rowchunk, 1]
@@ -474,6 +478,12 @@ class NLPAR(nlpar.NLPAR):
         patternfileout.write_data(newpatterns=data, patStartCount=[[cstart+cstartcalc, rstart+rstartcalc],
                                                                    [ncolcalc, nrowcalc]],
                                   flt2int='clip', scalevalue=1.0)
+        ndone +=1
+        if verbose >= 2:
+          print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
+
+    if verbose >= 2:
+      print('', end='')
     queue.finish()
     queue = None
     return str(patternfileout.filepath)

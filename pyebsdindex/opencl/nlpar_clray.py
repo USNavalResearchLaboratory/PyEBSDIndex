@@ -41,7 +41,8 @@ class NLPAR(nlpar_cl.NLPAR):
   def calcsigma_clsq(self, **kwargs):
     return nlpar_cl.NLPAR.calcsigma_cl(self, **kwargs)
 
-  def calcsigma_clray(self, nn=1, saturation_protect=True, automask=True, normalize_d=False, gpuid = None, **kwargs):
+  def calcsigma_clray(self, nn=1, saturation_protect=True, automask=True, normalize_d=False,
+                      gpuid = None, verbose=2, **kwargs):
     self.patternfile = self.getinfileobj()
     self.sigmann = nn
 
@@ -136,8 +137,11 @@ class NLPAR(nlpar_cl.NLPAR):
     # return data
 
     ngpu_per_wrker = float(1.0 / ngpuwrker)
-    ray.shutdown()
 
+    if verbose >=1:
+      print("lambda:", self.lam, "search radius:", self.searchradius, "dthresh:", self.dthresh)
+
+    ray.shutdown()
     rayclust = ray.init(
       num_cpus=int(ngpuwrker),
       num_gpus=1,
@@ -165,6 +169,7 @@ class NLPAR(nlpar_cl.NLPAR):
 
     njobs = len(jobqueue)
     ndone = 0
+
     while ndone < njobs:
       if len(jobqueue) > 0:
         if len(idlewrker) > 0:
@@ -205,8 +210,10 @@ class NLPAR(nlpar_cl.NLPAR):
             idlewrker.append(busywrker.pop(indx))
             tasks.remove(tsk)
             ndone += 1
-          print(message, ndone, njobs)
-
+          if verbose >= 2:
+            print("tiles complete: ", ndone,"/", njobs,sep='', end='\r'  )
+    if verbose >= 2:
+      print('\n', end='')
     return sigma, dist, countnn
 
   def _sigmachunkcalc_cl(self, data, calclim, clparams=None, saturation_protect=True):
