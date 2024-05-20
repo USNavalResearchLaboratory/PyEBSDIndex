@@ -100,29 +100,29 @@ class NLPAR(nlpar.NLPAR):
     return lamopt_values.flatten()
 
 
-  def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True, normalize_d=False, gpuid = None, **kwargs):
+  def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True, normalize_d=False, gpu_id = None, **kwargs):
 
-    if gpuid is None:
+    if gpu_id is None:
       clparams = openclparam.OpenClParam()
       clparams.get_gpu()
       target_mem = 0
-      gpuid = 0
+      gpu_id = 0
       count = 0
 
       for gpu in clparams.gpu:
         gmem = gpu.max_mem_alloc_size
         if target_mem < gmem:
-          gpuid = count
+          gpu_id = count
           target_mem = gmem
         count += 1
     else:
       clparams = openclparam.OpenClParam()
       clparams.get_gpu()
-      gpuid = min(len(clparams.gpu)-1, gpuid)
+      gpu_id = min(len(clparams.gpu)-1, gpu_id)
 
 
-    #print(gpuid)
-    clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
+    #print(gpu_id)
+    clparams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
     clparams.get_queue()
     target_mem = clparams.queue.device.max_mem_alloc_size//2
     ctx = clparams.ctx
@@ -258,9 +258,9 @@ class NLPAR(nlpar.NLPAR):
     self.sigma = sigma
     return sigma, dist, countnn
 
-  def calcnlpar_cl(self,chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
-                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,
-                   gpuid = None, verbose=2, **kwargs):
+  def calcnlpar_cl(self, chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
+                   filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,
+                   gpu_id = None, verbose=2, **kwargs):
 
     if lam is not None:
       self.lam = lam
@@ -307,7 +307,7 @@ class NLPAR(nlpar.NLPAR):
         self.sigma = None
 
     if self.sigma is None:
-      self.sigma = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, gpuid=gpuid)[0]
+      self.sigma = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, gpu_id=gpu_id)[0]
 
     sigma = np.asarray(self.sigma).astype(np.float32)
 
@@ -331,27 +331,27 @@ class NLPAR(nlpar.NLPAR):
 
 
 
-    if gpuid is None:
+    if gpu_id is None:
       clparams = openclparam.OpenClParam()
       clparams.get_gpu()
       target_mem = 0
-      gpuid = 0
+      gpu_id = 0
       count = 0
 
       for gpu in clparams.gpu:
         gmem = gpu.max_mem_alloc_size
         if target_mem < gmem:
-          gpuid = count
+          gpu_id = count
           target_mem = gmem
         count += 1
     else:
       clparams = openclparam.OpenClParam()
       clparams.get_gpu()
-      gpuid = min(len(clparams.gpu)-1, gpuid)
+      gpu_id = min(len(clparams.gpu) - 1, gpu_id)
 
 
-    #print(gpuid)
-    clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
+    #print(gpu_id)
+    clparams.get_context(gpu_id=gpu_id, kfile ='clnlpar.cl')
     clparams.get_queue()
     target_mem = clparams.queue.device.max_mem_alloc_size//2
     ctx = clparams.ctx

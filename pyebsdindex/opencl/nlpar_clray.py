@@ -42,45 +42,45 @@ class NLPAR(nlpar_cl.NLPAR):
     return nlpar_cl.NLPAR.calcsigma_cl(self, **kwargs)
 
   def calcsigma_clray(self, nn=1, saturation_protect=True, automask=True, normalize_d=False,
-                      gpuid = None, verbose=2, **kwargs):
+                      gpu_id = None, verbose=2, **kwargs):
     self.patternfile = self.getinfileobj()
     self.sigmann = nn
 
-    if gpuid is None:
+    if gpu_id is None:
       clparams = openclparam.OpenClParam()
       clparams.get_gpu()
 
       target_mem = 0
-      gpuid = 0
+      gpu_id = 0
       count = 0
 
       for gpu in clparams.gpu:
         gmem = gpu.max_mem_alloc_size
         if target_mem < gmem:
-          gpuid = count
+          gpu_id = count
           target_mem = gmem
         count += 1
     else:
       clparams = openclparam.OpenClParam()
       clparams.get_gpu()
-      gpuid = min(len(clparams.gpu)-1, gpuid)
+      gpu_id = min(len(clparams.gpu)-1, gpu_id)
 
     cudavis = ''
     for cdgpu in range(len(clparams.gpu)):
       cudavis += str(cdgpu) + ','
 
-    #print(gpuid)
+    #print(gpu_id)
     ngpuwrker = 6
-    clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
+    clparams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
     clparams.get_queue()
-    if clparams.gpu[gpuid].host_unified_memory:
+    if clparams.gpu[gpu_id].host_unified_memory:
       return nlpar_cl.NLPAR.calcsigma_cl(self, nn=nn, saturation_protect=saturation_protect,
                                          automask=automask,
                                          normalize_d=normalize_d,
-                                         gpuid=gpuid, **kwargs)
+                                         gpu_id=gpu_id, **kwargs)
 
-    target_mem = clparams.gpu[gpuid].max_mem_alloc_size // 3
-    max_mem = clparams.gpu[gpuid].global_mem_size * 0.75
+    target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 3
+    max_mem = clparams.gpu[gpu_id].global_mem_size * 0.75
     if target_mem * ngpuwrker > max_mem:
       target_mem = max_mem / ngpuwrker
 
@@ -129,7 +129,7 @@ class NLPAR(nlpar_cl.NLPAR):
                                     [cstartcalc, cendcalc, rstartcalc, rendcalc]))
 
 
-    # wrker = NLPARGPUWorker(actorid=1, gpu_id=gpuid, cudavis=cudavis)
+    # wrker = NLPARGPUWorker(actorid=1, gpu_id=gpu_id, cudavis=cudavis)
     # job = jobqueue[0]
     #
     # data = wrker.runsigma_chunk(job, nlparobj=self, saturation_protect=saturation_protect)
@@ -165,7 +165,7 @@ class NLPAR(nlpar_cl.NLPAR):
 
     for w in range(ngpuwrker):
       idlewrker.append(NLPARGPUWorker.options(num_cpus=float(0.99), num_gpus=ngpu_per_wrker).remote(
-        actorid=w, gpu_id=gpuid, cudavis=cudavis))
+        actorid=w, gpu_id=gpu_id, cudavis=cudavis))
 
     njobs = len(jobqueue)
     ndone = 0
@@ -329,7 +329,8 @@ class NLPAR(nlpar_cl.NLPAR):
 
 
   def calcnlpar_clray(self, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
-                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False, gpuid = None, **kwargs):
+                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,
+                verbose = 2, gpu_id = None, **kwargs):
 
     if lam is not None:
       self.lam = lam
@@ -376,7 +377,7 @@ class NLPAR(nlpar_cl.NLPAR):
         self.sigma = None
 
     if self.sigma is None:
-      self.sigma = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, gpuid=gpuid)[0]
+      self.sigma = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, gpu_id=gpu_id)[0]
 
     sigma = np.asarray(self.sigma).astype(np.float32)
 
@@ -400,41 +401,42 @@ class NLPAR(nlpar_cl.NLPAR):
     ngpuwrker = 6
     clparams = openclparam.OpenClParam()
     clparams.get_gpu()
-    if gpuid is None:
+    if gpu_id is None:
       target_mem = 0
-      gpuid = 0
+      gpu_id = 0
       count = 0
 
       for gpu in clparams.gpu:
         gmem = gpu.max_mem_alloc_size
         if target_mem < gmem:
-          gpuid = count
+          gpu_id = count
           target_mem = gmem
         count += 1
     else:
-      gpuid = min(len(clparams.gpu)-1, gpuid)
+      gpu_id = min(len(clparams.gpu)-1, gpu_id)
     cudavis = ''
     for cdgpu in range(len(clparams.gpu)):
         cudavis += str(cdgpu) + ','
 
-    # print(gpuid)
-    clparams.get_context(gpu_id=gpuid, kfile = 'clnlpar.cl')
+    # print(gpu_id)
+    clparams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
     clparams.get_queue()
-    if clparams.gpu[gpuid].host_unified_memory:
+    if clparams.gpu[gpu_id].host_unified_memory:
       return nlpar_cl.NLPAR.calcnlpar_cl(self, saturation_protect=saturation_protect,
-                                               automask=automask,
-                                               filename=filename,
-                                               fileout=fileout,
-                                               reset_sigma=reset_sigma,
-                                               backsub = backsub,
-                                               rescale = rescale,
-                                               gpuid = gpuid)
+                                         automask=automask,
+                                         filename=filename,
+                                         fileout=fileout,
+                                         reset_sigma=reset_sigma,
+                                         backsub = backsub,
+                                         rescale = rescale,
+                                         gpu_id= gpu_id)
 
-    target_mem = clparams.gpu[gpuid].max_mem_alloc_size//3
-    max_mem = clparams.gpu[gpuid].global_mem_size*0.75
+    target_mem = clparams.gpu[gpu_id].max_mem_alloc_size//3
+    max_mem = clparams.gpu[gpu_id].global_mem_size*0.75
     if target_mem*ngpuwrker > max_mem:
       target_mem = max_mem/ngpuwrker
-    print(target_mem/1.0e9)
+    #print(target_mem/1.0e9)
+
     chunks = self._calcchunks([pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
 
@@ -465,7 +467,8 @@ class NLPAR(nlpar_cl.NLPAR):
                   [cstartcalc,cendcalc, rstartcalc, rendcalc ]))
 
 
-
+    if verbose >=1:
+      print("lambda:", lam, "search radius:", sr, "dthresh:", dthresh)
     ngpu_per_wrker = float(1.0/ngpuwrker)
     ray.shutdown()
 
@@ -487,7 +490,7 @@ class NLPAR(nlpar_cl.NLPAR):
 
     for w in range(ngpuwrker):
         idlewrker.append(NLPARGPUWorker.options(num_cpus=float(0.99), num_gpus=ngpu_per_wrker).remote(
-                actorid=w, gpu_id=gpuid, cudavis=cudavis))
+                actorid=w, gpu_id=gpu_id, cudavis=cudavis))
 
     njobs = len(jobqueue)
     ndone = 0
@@ -509,8 +512,10 @@ class NLPAR(nlpar_cl.NLPAR):
                   idlewrker.append(busywrker.pop(indx))
                   tasks.remove(tsk)
                   ndone += 1
-                print(message, ndone, njobs)
-
+                  if verbose >= 2:
+                    print("tiles complete: ", ndone, "/", njobs, sep='', end='\r')
+    if verbose >= 2:
+      print('\n', end='')
     return str(self.patternfileout.filepath)
 
   def _nlparchunkcalc_cl(self, data, calclim, clparams=None):
