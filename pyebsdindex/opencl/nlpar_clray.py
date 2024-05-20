@@ -138,8 +138,8 @@ class NLPAR(nlpar_cl.NLPAR):
 
     ngpu_per_wrker = float(1.0 / ngpuwrker)
 
-    if verbose >=1:
-      print("lambda:", self.lam, "search radius:", self.searchradius, "dthresh:", self.dthresh)
+    # if verbose >=1:
+    #   print("lambda:", self.lam, "search radius:", self.searchradius, "dthresh:", self.dthresh)
 
     ray.shutdown()
     rayclust = ray.init(
