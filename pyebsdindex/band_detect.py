@@ -94,6 +94,7 @@ class BandDetect():
     self.EDAXIQ = False
     self.backgroundsub = None
     self.patternmask = None
+    self.useCPU = True
 
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\

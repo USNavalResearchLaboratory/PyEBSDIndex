@@ -10,10 +10,18 @@ __name__ = "pyebsdindex"
 __version__ = "0.2.2dev"
 
 
-# Try to import only once
+# Try to import only once - also will perform check that at least one GPU is found.
 try:
+    _pyopencl_installed = False
     import pyopencl
-    _pyopencl_installed = True
+    from pyebsdindex.opencl import openclparam
+    testcl = openclparam.OpenClParam()
+    try:
+        gpu = testcl.get_gpu()
+        if len(gpu) > 0:
+            _pyopencl_installed = True
+    except:
+        pass
 except ImportError:
     _pyopencl_installed = False
 
