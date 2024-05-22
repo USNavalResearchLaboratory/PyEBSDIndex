@@ -21,7 +21,7 @@ try:
         if len(gpu) > 0:
             _pyopencl_installed = True
     except:
-        raise ImportError
+        raise ImportError()
 except ImportError:
     _pyopencl_installed = False
 
