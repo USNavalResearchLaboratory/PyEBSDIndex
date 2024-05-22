@@ -18,7 +18,14 @@
 # some notice that they have been modified.
 #
 # Author: David Rowenhorst;
-# The US Naval Research Laboratory Date: 21 Aug 2020
+# The US Naval Research Laboratory Date: 22 May 2024
+
+# For further information see:
+# David J. Rowenhorst, Patrick G. Callahan, Håkon W. Ånes. Fast Radon transforms for
+# high-precision EBSD orientation determination using PyEBSDIndex.
+# Journal of Applied Crystallography, 57(1):3–19, 2024.
+# DOI: 10.1107/S1600576723010221
+
 
 """Setup and handling of Radon indexing runs of EBSD patterns on a
 single thread.
