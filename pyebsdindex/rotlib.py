@@ -51,13 +51,16 @@
 
 import numpy as np
 import numba
-from os import environ
+import os
 import tempfile
-from pathlib import PurePath
+from pathlib import PurePath, Path
 import platform
-tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
-tempdir = tempdir.joinpath('numba')
-environ["NUMBA_CACHE_DIR"] = str(tempdir)
+tempdir = PurePath(Path.home())
+#tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
+#tempdir = tempdir.joinpath('numbacache')
+tempdir = tempdir.joinpath('.pyebsdindex').joinpath('numbacache')
+Path(tempdir).mkdir(parents=True, exist_ok=True)
+os.environ["NUMBA_CACHE_DIR"] = str(tempdir)+str(os.sep)
 
 P = 1
 eps = 1.0e-12 # used for "closeto" approximations in Numba code

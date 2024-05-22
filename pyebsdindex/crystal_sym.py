@@ -381,7 +381,7 @@ def spacegroup2lauenumber(spacegroupid):
 
        Parameters
        ----------
-       sapcegroupid : int
+       spacegroupid : int
            number between 1 and 230
 
        Returns

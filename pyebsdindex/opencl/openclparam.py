@@ -55,17 +55,40 @@ class OpenClParam():
 
   def get_platform(self):
     self.platform = cl.get_platforms()[0]
-  def get_gpu(self):
+    return self.platform
+  def get_gpu(self, get_integrated_and_discrete=False):
 
     if self.platform is None:
       self.get_platform()
 
-    self.gpu = self.platform.get_devices(device_type=cl.device_type.GPU)
-    self.ngpu = len(self.gpu)
-    if len(self.gpu)-1 < self.gpu_id:
-      self.gpu_id = len(self.gpu)-1
+    gpu = self.platform.get_devices(device_type=cl.device_type.GPU)
+    if get_integrated_and_discrete == True: # get all GPU, regardless of integrated or not
+      self.gpu = gpu
+      self.ngpu = len(self.gpu)
 
-  def get_context(self, gpu_id=None):
+    else:
+      if len(gpu) == 1: # only one GPU -- keep it even if integrated.
+        self.gpu = gpu
+        self.ngpu = len(self.gpu)
+      elif len(gpu) > 1: # More than one gpu
+        gpukeep = []
+        gpudrop = []
+        for g in gpu:
+          if (g.host_unified_memory == 1): # these are integrated GPU
+            gpudrop.append(g)
+          else:
+            gpukeep.append(g) # these are discrete GPU
+        if len(gpukeep) > 0: # prefer to keep discrete
+          self.gpu = gpukeep
+        else:
+          self.gpu = gpudrop #but will take integrated if needed.
+      self.ngpu = len(self.gpu)
+    if len(self.gpu) - 1 < self.gpu_id:
+      self.gpu_id = len(self.gpu) - 1
+    return self.gpu
+
+
+  def get_context(self, gpu_id=None, kfile = 'clkernels.cl' ):
     if self.gpu is None:
       self.get_gpu()
 
@@ -77,12 +100,14 @@ class OpenClParam():
     self.ctx = cl.Context(devices = [self.gpu[self.gpu_id]])
 
     kernel_location = path.dirname(__file__)
-    self.prg = cl.Program(self.ctx,open(path.join(kernel_location,'clkernels.cl')).read()).build()
+    self.prg = cl.Program(self.ctx,open(path.join(kernel_location,kfile)).read()).build()
     #print('ctx', self.gpu_id)
+    return self.ctx
   def get_queue(self, gpu_id=None):
     if self.ctx is None:
       self.get_context(gpu_id=None)
     if self.queue is None:
       self.queue = cl.CommandQueue(self.ctx)
+    return self.queue
 
 
