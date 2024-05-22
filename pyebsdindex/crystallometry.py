@@ -35,7 +35,7 @@ from functools import reduce
 
 
 class CrystalPlane:
-    def __init__(self,hkl = [0,0,0],centering = 'F'):
+    def __init__(self,hkl = (0,0,0),centering = 'F'):
         self.hkl = np.array(hkl)
         self.allowed = True
         self.lattice_centering = centering
