@@ -39,6 +39,7 @@ def test_available_functionality_without_pyopencl():
 @pytest.mark.skipif(_pyopencl_installed, reason="pyopencl is installed")
 def test_unavailable_functionality_without_pyopencl():
     with pytest.raises(ImportError):
+
         from pyebsdindex.opencl import openclparam
         try:
             clparam = openclparam.OpenClParam()
