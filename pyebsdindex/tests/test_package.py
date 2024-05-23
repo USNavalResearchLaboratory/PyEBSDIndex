@@ -39,9 +39,15 @@ def test_available_functionality_without_pyopencl():
 @pytest.mark.skipif(_pyopencl_installed, reason="pyopencl is installed")
 def test_unavailable_functionality_without_pyopencl():
     with pytest.raises(ImportError):
-        raise ImportError()
-        #from pyebsdindex.opencl.band_detect_cl import BandDetect
 
+        from pyebsdindex.opencl import openclparam
+        try:
+            clparam = openclparam.OpenClParam()
+            gpu = clparam.get_gpu()
+            if len(gpu) < 1:
+                raise ImportError('')
+        except:
+            raise ImportError('')
 
 @pytest.mark.skipif(not _ray_installed, reason="ray is not installed")
 def test_available_functionality_with_ray():

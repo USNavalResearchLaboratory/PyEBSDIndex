@@ -189,7 +189,7 @@ class NLPAR:
       return None
 
   def opt_lambda(self,chunksize=0,saturation_protect=True,automask=True, backsub = False,
-                 target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True, **kwargs):
+                target_weights=(0.5, 0.34, 0.25), dthresh=0.0, autoupdate=True, verbose = 2, **kwargs):
 
     target_weights = np.asarray(target_weights)
 
@@ -250,7 +250,11 @@ class NLPAR:
     lamopt_values = []
     
     for j in range(0,nrows,chunksize):
-      print('Block',j)
+
+      if verbose >= 2:
+        print("begin row: ", j, "/", nrows, sep='', end='\r')
+      #print('Block',j)
+
       #rowstartread = np.int64(max(0,j - nn))
       rowstartread = np.int64(j)
       rowend = min(j + chunksize + nn,nrows)
@@ -285,9 +289,14 @@ class NLPAR:
 
 
       lamopt_values.append(lamopt_values_chnk)
+
+    if verbose >= 2:
+      print('', end='')
     lamopt_values = np.asarray(lamopt_values)
-    print("Range of lambda values: ", np.mean(lamopt_values, axis = 0).flatten())
-    print("Optimal Choice: ", np.median(np.mean(lamopt_values, axis = 0)))
+    if verbose >=1:
+      print("Range of lambda values: ", np.mean(lamopt_values, axis = 0).flatten())
+      print("Optimal Choice: ", np.median(np.mean(lamopt_values, axis = 0)))
+
     if autoupdate == True:
       self.lam = np.median(np.mean(lamopt_values, axis = 0))
     if self.sigma is None:
@@ -295,7 +304,8 @@ class NLPAR:
     return np.mean(lamopt_values, axis = 0).flatten()
 
   def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
-                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False, **kwargs):
+               filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,verbose=2,
+                **kwargs):
 
     if lam is not None:
       self.lam = lam
@@ -381,10 +391,13 @@ class NLPAR:
     nthreadpos = numba.get_num_threads()
     #numba.set_num_threads(36)
     colstartcount = np.asarray([0,ncols],dtype=np.int64)
-    print(lam, sr, dthresh)
+    if verbose >= 1:
+      print("lambda:", self.lam, "search radius:", self.searchradius, "dthresh:", self.dthresh)
 
     for j in range(0,nrows,chunksize):
-      print('Row start', j)
+      #print('Row start', j)
+      if verbose >= 2:
+        print("begin row: ", j, "/", nrows, sep='', end='\r')
 
       rowstartread = np.int64(max(0, j-sr))
       rowend = min(j + chunksize+sr,nrows)
@@ -435,6 +448,10 @@ class NLPAR:
       #return dataout
       #sigma[j:j+rowstartcount[1],:] += \
       #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
+
+
+    if verbose >= 2:
+      print('', end='')
 
     numba.set_num_threads(nthreadpos)
     return str(patternfileout.filepath)
