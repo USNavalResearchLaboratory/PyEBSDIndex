@@ -250,6 +250,8 @@ class NLPAR:
     lamopt_values = []
     
     for j in range(0,nrows,chunksize):
+      if verbose >= 2:
+        print("begin row: ", j, "/", nrows, sep='', end='\r')
       #print('Block',j)
       #rowstartread = np.int64(max(0,j - nn))
       rowstartread = np.int64(j)
@@ -285,8 +287,7 @@ class NLPAR:
 
 
       lamopt_values.append(lamopt_values_chnk)
-      if verbose >= 2:
-        print("row complete: ", j, "/", nrows, sep='', end='\r')
+
 
     if verbose >= 2:
       print('', end='')
@@ -393,6 +394,8 @@ class NLPAR:
 
     for j in range(0,nrows,chunksize):
       #print('Row start', j)
+      if verbose >= 2:
+        print("begin row: ", j, "/", nrows, sep='', end='\r')
 
       rowstartread = np.int64(max(0, j-sr))
       rowend = min(j + chunksize+sr,nrows)
@@ -443,8 +446,7 @@ class NLPAR:
       #return dataout
       #sigma[j:j+rowstartcount[1],:] += \
       #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
-      if verbose >= 2:
-        print("row complete: ", j, "/", nrows, sep='', end='\r')
+
 
     if verbose >= 2:
       print('', end='')
