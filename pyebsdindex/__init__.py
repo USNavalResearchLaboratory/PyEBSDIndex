@@ -7,7 +7,7 @@ __credits__ = [
 ]
 __description__ = "Python based tool for Radon based EBSD indexing"
 __name__ = "pyebsdindex"
-__version__ = "0.2.2dev"
+__version__ = "0.3.0"
 
 
 # Try to import only once - also will perform check that at least one GPU is found.
