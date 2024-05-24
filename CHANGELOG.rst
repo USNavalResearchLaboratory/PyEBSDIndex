@@ -5,19 +5,29 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
-0.2.2dev
+0.3.1 (2024-05-24)
+==================
+
+Fixed
+-----
+- Fixed issue when multiple OpenCL platforms are detected.  Will default to discrete GPUs, with whatever platform has the most discrete GPUs attached.  Otherwise, will fall back to integrated graphics.
+
+
+0.3.0 (2024-05-23)
 ==================
 Added
 -----
-
+- NLPAR should now use GPU if pyopencl is installed, and a GPU is found. Expect 2-10x improvement in speed.
+- Faster band indexing. Should lead to increased pattern indexing speed.
 
 Changed
 -------
-
+- PyEBSDIndex will now automatically select discrete GPUs if both integrated and discrete GPUs are found. If no discrete GPUs are found, it will use the integrated GPU.
+- Numba will now cache in the directory ~/.pyebsdindex/  This *might* help with less recompilinging after restarts.
 
 Removed
 -------
-
+- Removed ``band_vote`` modual as that is now wrapped into triplevote.
 
 Fixed
 -----
