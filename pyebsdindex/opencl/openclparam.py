@@ -54,37 +54,38 @@ class OpenClParam():
         print(e)
 
   def get_platform(self):
-    self.platform = cl.get_platforms()[0]
+    self.platform = cl.get_platforms()
     return self.platform
-  def get_gpu(self, get_integrated_and_discrete=False):
+  def get_gpu(self):
 
     if self.platform is None:
       self.get_platform()
 
-    gpu = self.platform.get_devices(device_type=cl.device_type.GPU)
-    if get_integrated_and_discrete == True: # get all GPU, regardless of integrated or not
-      self.gpu = gpu
-      self.ngpu = len(self.gpu)
+    pgpudiscrete = np.zeros(len(self.platform), dtype=int)
 
+    for i in range(len(self.platform)):
+      g = self.platform[i].get_devices(device_type=cl.device_type.GPU)
+      if len(g) > 0:
+        discrete = np.zeros(len(g), dtype=int)
+        for j in range(len(g)):
+          discrete[j] = g[j].host_unified_memory == False
+          if discrete[j] > 0:
+            pgpudiscrete[i] += 1
+      else:
+        pgpudiscrete[i] = -1
+    gpu = []
+    if pgpudiscrete.max() > 0:  # discrete graphics found
+      self.platform = [self.platform[pgpudiscrete.argmax()]]
+      g = self.platform[0].get_devices(device_type=cl.device_type.GPU)
+      for g1 in g:
+        if g1.host_unified_memory == False:
+          gpu.append(g1)
+    elif pgpudiscrete.max() == 0:  # only integrated graphics available
+      self.platform = [self.platform[pgpudiscrete.argmax()]]
+      gpu.extend(self.platform[0].get_devices(device_type=cl.device_type.GPU))
     else:
-      if len(gpu) == 1: # only one GPU -- keep it even if integrated.
-        self.gpu = gpu
-        self.ngpu = len(self.gpu)
-      elif len(gpu) > 1: # More than one gpu
-        gpukeep = []
-        gpudrop = []
-        for g in gpu:
-          if (g.host_unified_memory == 1): # these are integrated GPU
-            gpudrop.append(g)
-          else:
-            gpukeep.append(g) # these are discrete GPU
-        if len(gpukeep) > 0: # prefer to keep discrete
-          self.gpu = gpukeep
-        else:
-          self.gpu = gpudrop #but will take integrated if needed.
-      self.ngpu = len(self.gpu)
-    if len(self.gpu) - 1 < self.gpu_id:
-      self.gpu_id = len(self.gpu) - 1
+      pass
+    self.gpu = gpu
     return self.gpu
 
 
