@@ -5,6 +5,14 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
+0.3.1 (2024-05-24)
+==================
+
+Fixed
+-----
+- Fixed issue when multiple OpenCL platforms are detected.  Will default to discrete GPUs, with whatever platform has the most discrete GPUs attached.  Otherwise, will fall back to integrated graphics.
+
+
 0.3.0 (2024-05-23)
 ==================
 Added

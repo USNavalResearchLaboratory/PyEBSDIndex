@@ -57,9 +57,11 @@ class OpenClParam():
     self.platform = cl.get_platforms()
     return self.platform
   def get_gpu(self):
-
     if self.platform is None:
       self.get_platform()
+
+    if type(self.platform) is not list:
+      self.platform = [self.platform]
 
     pgpudiscrete = np.zeros(len(self.platform), dtype=int)
 
