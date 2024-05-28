@@ -110,7 +110,7 @@ class NLPAR(nlpar_cl.NLPAR):
       cudavis += str(cdgpu) + ','
 
     #print(gpu_id)
-    ngpuwrker = 6
+    ngpuwrker = 4
     clparams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
     clparams.get_queue()
     if clparams.gpu[gpu_id].host_unified_memory:
@@ -119,9 +119,10 @@ class NLPAR(nlpar_cl.NLPAR):
                                          normalize_d=normalize_d,
                                          gpu_id=gpu_id, **kwargs)
 
-    target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 3
+    target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 2
     max_mem = clparams.gpu[gpu_id].global_mem_size * 0.75
     if target_mem * ngpuwrker > max_mem:
+      print('revisemem:')
       target_mem = max_mem / ngpuwrker
 
     patternfile = self.getinfileobj()
@@ -445,7 +446,7 @@ class NLPAR(nlpar_cl.NLPAR):
       else:  # not int, so no rescale.
         self.rescale = False
 
-    ngpuwrker = 6
+    ngpuwrker = 4
     clparams = openclparam.OpenClParam()
     clparams.get_gpu()
     if gpu_id is None:
@@ -545,7 +546,7 @@ class NLPAR(nlpar_cl.NLPAR):
         if len(jobqueue) > 0:
             if len(idlewrker) > 0:
                 wrker = idlewrker.pop()
-                job = jobqueue.pop()
+                job = jobqueue.pop(0)
 
                 tasks.append(wrker.runnlpar_chunk.remote(job, nlparobj=nlpar_remote))
                 busywrker.append(wrker)
