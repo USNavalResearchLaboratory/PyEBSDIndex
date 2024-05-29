@@ -110,7 +110,7 @@ class NLPAR(nlpar_cl.NLPAR):
       cudavis += str(cdgpu) + ','
 
     #print(gpu_id)
-    ngpuwrker = 4
+    ngpuwrker = 6
     clparams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
     clparams.get_queue()
     if clparams.gpu[gpu_id].host_unified_memory:
@@ -120,9 +120,9 @@ class NLPAR(nlpar_cl.NLPAR):
                                          gpu_id=gpu_id, **kwargs)
 
     target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 2
-    max_mem = clparams.gpu[gpu_id].global_mem_size * 0.75
+    max_mem = clparams.gpu[gpu_id].global_mem_size * 0.5
     if target_mem * ngpuwrker > max_mem:
-      print('revisemem:')
+      #print('revisemem:')
       target_mem = max_mem / ngpuwrker
 
     patternfile = self.getinfileobj()
@@ -446,7 +446,7 @@ class NLPAR(nlpar_cl.NLPAR):
       else:  # not int, so no rescale.
         self.rescale = False
 
-    ngpuwrker = 4
+    ngpuwrker = 6
     clparams = openclparam.OpenClParam()
     clparams.get_gpu()
     if gpu_id is None:
@@ -480,7 +480,7 @@ class NLPAR(nlpar_cl.NLPAR):
                                          gpu_id= gpu_id)
 
     target_mem = clparams.gpu[gpu_id].max_mem_alloc_size//3
-    max_mem = clparams.gpu[gpu_id].global_mem_size*0.75
+    max_mem = clparams.gpu[gpu_id].global_mem_size*0.4
     if target_mem*ngpuwrker > max_mem:
       target_mem = max_mem/ngpuwrker
     #print(target_mem/1.0e9)
@@ -562,6 +562,10 @@ class NLPAR(nlpar_cl.NLPAR):
                   ndone += 1
                   if verbose >= 2:
                     print("tiles complete: ", ndone, "/", njobs, sep='', end='\r')
+                else: #An error has occured ... hopefully just need a re-process.
+                  jobqueue.append(job)
+                  print(message)
+
     if verbose >= 2:
       print('\n', end='')
     return str(self.patternfileout.filepath)
