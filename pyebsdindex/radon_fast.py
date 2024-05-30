@@ -235,6 +235,7 @@ class Radon:
 
   def radon_faster(self,imageIn,padding = np.array([0,0]), fixArtifacts = False, background = None, normalization=True):
     tic = timer()
+
     shapeIm = np.shape(imageIn)
     if imageIn.ndim == 2:
       nIm = 1
@@ -244,11 +245,13 @@ class Radon:
       nIm = shapeIm[0]
     #  reform = False
 
+
     if background is None:
       image = (imageIn.reshape(-1)).astype(np.float32)
     else:
       image = imageIn - background
       image = (image.reshape(-1)).astype(np.float32)
+    image = np.asarray(image)
 
     nPx = shapeIm[-1]*shapeIm[-2]
     indxDim = np.asarray(self.indexPlan.shape)
