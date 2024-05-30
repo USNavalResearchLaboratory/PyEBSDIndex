@@ -225,6 +225,8 @@ class BandDetect(band_detect.BandDetect):
   def radon_fasterCL(self,image,padding = np.array([0,0]), fixArtifacts = False, background = None, returnBuff = True, clparams=None ):
     # this function executes the radon sumations on the GPU
     tic = timer()
+    image = np.asarray(image)
+
     # make sure we have an OpenCL environment
     if clparams is not None:
       if clparams.queue is None:

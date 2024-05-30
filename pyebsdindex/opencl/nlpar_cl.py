@@ -264,6 +264,7 @@ class NLPAR(nlpar_cpu.NLPAR):
 
 
         sigmachunk_gpu =  cl.Buffer(ctx, mf.WRITE_ONLY, size=sigmachunk.nbytes)
+
         cl.enqueue_barrier(queue)
         prg.calcsigma(queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
                                datapad_gpu, mask_gpu,sigmachunk_gpu,
@@ -404,7 +405,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     clvectlen = 16
 
 
-
+    # print("target mem:", target_mem)
     chunks = self._calcchunks( [pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
     #print(chunks[2], chunks[3])
@@ -426,10 +427,14 @@ class NLPAR(nlpar_cpu.NLPAR):
     nchunks = chunksize.size
     #return chunks, chunksize
     mxchunk = int(chunksize.max())
+    # print("max chunk:" , mxchunk)
+
     npadmx = clvectlen * int(np.ceil(float(mxchunk)*npat_point/ clvectlen))
 
     datapad_gpu = cl.Buffer(ctx, mf.READ_WRITE, size=int(npadmx) * int(4))
     datapadout_gpu = cl.Buffer(ctx, mf.READ_WRITE, size=int(npadmx) * int(4))
+    # print("data pad", datapad_gpu.size)
+    # print("data out", datapadout_gpu.size)
 
     nnn = int((2 * sr + 1) ** 2)
 
@@ -469,6 +474,7 @@ class NLPAR(nlpar_cpu.NLPAR):
 
         sigmachunk = np.ascontiguousarray(sigma[rstart:rend, cstart:cend].astype(np.float32))
         sigmachunk_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=sigmachunk)
+        # print("sigma", sigmachunk_gpu.size)
         szdata = data.size
         npad = clvectlen * int(np.ceil(szdata / clvectlen))
 
@@ -476,7 +482,7 @@ class NLPAR(nlpar_cpu.NLPAR):
         #datapad[0:szdata] = data.reshape(-1)
 
         data_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=data)
-
+        # print("data", data_gpu.size)
         if data.dtype.type is np.float32:
           prg.nlloadpat32flt(queue, (np.uint64(data.size),1), None, data_gpu, datapad_gpu, wait_for=[filldatain])
         if data.dtype.type is np.ubyte:
