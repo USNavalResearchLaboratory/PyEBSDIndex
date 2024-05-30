@@ -25,7 +25,7 @@ import numpy as np
 from os import path
 import pyopencl as cl
 from os import environ
-environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
+environ['PYOPENCL_COMPILER_OUTPUT'] = '0'
 
 RADDEG = 180.0/np.pi
 DEGRAD = np.pi/180.0
