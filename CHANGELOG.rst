@@ -5,6 +5,16 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
+0.3.2 (2024-05-31)
+==================
+
+Fixed
+-----
+- Fixed issues with smaller GPUs and NLPAR.
+- Improved the initial write of NLPAR file under Windows.
+- Fixed issue where user sends in non-numpy array of patterns to be indexed.
+
+
 0.3.1 (2024-05-24)
 ==================
 
