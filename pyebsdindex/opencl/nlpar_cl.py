@@ -106,7 +106,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     lamopt_values = []
 
     sigma, d2, n2 = self.calcsigma(nn=1, saturation_protect=saturation_protect, automask=automask, normalize_d=True,
-                                   return_nndist=True)
+                                   return_nndist=True, **kwargs)
 
     #sigmapad = np.pad(sigma, 1, mode='reflect')
     #d2normcl(d2, n2, sigmapad)
@@ -133,7 +133,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     return lamopt_values.flatten()
 
 
-  def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True, normalize_d=False, gpu_id = None, **kwargs):
+  def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True, normalize_d=False, gpu_id = None, verbose = 2, **kwargs):
     self.sigmann = nn
     if self.sigmann > 7:
       print("Sigma optimization search limited to a search radius <= 7")
@@ -222,7 +222,8 @@ class NLPAR(nlpar_cpu.NLPAR):
     #count_local = cl.LocalMemory(nnn*npadmx*4)
     count_local = cl.Buffer(ctx, mf.READ_WRITE, size=int(mxchunk * nnn * 4))
     countchunk = np.zeros((mxchunk, nnn), dtype=np.float32)
-
+    ndone = 0
+    nchunks = int(chunks[1] * chunks[0])
     for rowchunk in range(chunks[1]):
       rstart = chunks[3][rowchunk, 0]
       rend = chunks[3][rowchunk, 1]
@@ -289,7 +290,9 @@ class NLPAR(nlpar_cpu.NLPAR):
         countnn[rstart:rend, cstart:cend] = countchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
         dist[rstart:rend, cstart:cend] = distchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
         sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigmachunk)
-
+        if verbose >= 2:
+          print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
+        ndone +=1
     dist_local.release()
     count_local.release()
     datapad_gpu.release()

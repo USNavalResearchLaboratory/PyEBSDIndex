@@ -35,7 +35,7 @@ from pyebsdindex import _pyopencl_installed
 
 
 if _ray_installed and _pyopencl_installed:
-  from pyebsdindex.opencl.nlpar_clray import NLPAR
+  from pyebsdindex.opencl.nlpar_cl import NLPAR
 elif _pyopencl_installed and not _ray_installed:
   from pyebsdindex.opencl.nlpar_cl import NLPAR
 else:

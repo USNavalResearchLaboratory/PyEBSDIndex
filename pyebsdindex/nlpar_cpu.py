@@ -389,7 +389,7 @@ class NLPAR:
         rescale = False
 
     nthreadpos = numba.get_num_threads()
-    #numba.set_num_threads(36)
+    #numba.set_num_threads(18)
     colstartcount = np.asarray([0,ncols],dtype=np.int64)
     if verbose >= 1:
       print("lambda:", self.lam, "search radius:", self.searchradius, "dthresh:", self.dthresh)
