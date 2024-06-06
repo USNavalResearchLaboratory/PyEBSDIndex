@@ -446,7 +446,7 @@ class NLPAR(nlpar_cl.NLPAR):
       else:  # not int, so no rescale.
         self.rescale = False
 
-    ngpuwrker = 6
+    ngpuwrker = 4
     clparams = openclparam.OpenClParam()
     clparams.get_gpu()
     if gpu_id is None:
