@@ -5,6 +5,15 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
+
+0.3.4 (2024-06-07)
+==================
+
+Fixed
+-----
+- This time I think that edge case for NLPAR chunking of scans is really fixed.
+- Wrote on a chalkboard 100 times, "I will run ALL the unit tests before release."
+
 0.3.3 (2024-06-07)
 ==================
 
