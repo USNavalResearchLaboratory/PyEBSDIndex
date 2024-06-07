@@ -294,6 +294,7 @@ def index_pats_distributed(
         else:
             if ngpu is None:
                 ngpu = len(clparam.gpu)
+                gpu_id = np.arange(ngpu, dtype=int)
             cudagpuvis = ''
             for cdgpu in range(len(clparam.gpu)):
                 cudagpuvis += str(cdgpu)+','
