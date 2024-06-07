@@ -446,7 +446,7 @@ class NLPAR(nlpar_cl.NLPAR):
       else:  # not int, so no rescale.
         self.rescale = False
 
-    ngpuwrker = 4
+    ngpuwrker = 6
     clparams = openclparam.OpenClParam()
     clparams.get_gpu()
     if gpu_id is None:
@@ -479,7 +479,7 @@ class NLPAR(nlpar_cl.NLPAR):
                                          rescale = rescale,
                                          gpu_id= gpu_id)
 
-    target_mem = clparams.gpu[gpu_id].max_mem_alloc_size//4
+    target_mem = clparams.gpu[gpu_id].max_mem_alloc_size//6
     max_mem = clparams.gpu[gpu_id].global_mem_size*0.4
     if target_mem*ngpuwrker > max_mem:
       target_mem = max_mem/ngpuwrker
