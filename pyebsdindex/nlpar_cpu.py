@@ -390,6 +390,7 @@ class NLPAR:
 
     nthreadpos = numba.get_num_threads()
     #numba.set_num_threads(18)
+    #numba.set_num_threads(18)
     colstartcount = np.asarray([0,ncols],dtype=np.int64)
     if verbose >= 1:
       print("lambda:", self.lam, "search radius:", self.searchradius, "dthresh:", self.dthresh)
@@ -776,7 +777,7 @@ class NLPAR:
     colchunks[-1, 1] = ncol
 
     if ncolchunks > 1:
-      colchunks[-1, 0] = max(0, colchunks[-2, 1] - col_overlap)
+      colchunks[-1, 0] = max(0, colchunks[-2, 1] -  2*col_overlap-1)
 
     colchunks += col_offset
 
@@ -795,10 +796,25 @@ class NLPAR:
     nrowchunks = len(rowchunks)
     rowchunks = np.array(rowchunks, dtype=int)
     rowchunks[0, 0] = 0
+    # for i in range(ncolchunks - 1):
+    #   if colchunks[i + 1, 0] >= ncol:
+    #     colchunks = colchunks[0:i + 1, :]
+
+    rowchunks = []
+    row_overlap = int(row_overlap)
+    for r in range(nrowchunks):
+      rchunk = [int(r * rowstep) - row_overlap, int(r * rowstep + rowstepov) - row_overlap]
+      rowchunks.append(rchunk)
+      if rchunk[1] > nrow:
+        break
+
+    nrowchunks = len(rowchunks)
+    rowchunks = np.array(rowchunks, dtype=int)
+    rowchunks[0, 0] = 0
     rowchunks[-1, 1] = nrow
 
     if nrowchunks > 1:
-      rowchunks[-1, 0] = max(0, rowchunks[-2, 1] - row_overlap)
+      rowchunks[-1, 0] = max(0, rowchunks[-2, 1] -  2*row_overlap-1)
 
     rowchunks += row_offset
 
