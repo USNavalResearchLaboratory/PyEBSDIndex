@@ -5,6 +5,17 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
+0.3.3 (2024-06-07)
+==================
+
+Fixed
+-----
+- Fixed edge case for NLPAR chunking of scans that would lead to a crash.
+- Fixed issue where PyEBSDIndex would not use all GPUs by default.
+- ``IPFColor.makeipf()`` will now automatically read the number of columns/rows in the scan from the file defined in the indexer object.
+
+
+
 0.3.2 (2024-05-31)
 ==================
 

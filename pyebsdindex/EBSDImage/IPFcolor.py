@@ -50,17 +50,26 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
 
   if xsize is not None:
     xsize = int(xsize)
-    if ysize is None:
-      ysize = int(npoints // xsize + np.int64((npoints % xsize) > 0))
+    #if ysize is None:
       #print(ysize)
   else:
-    xsize = int(npoints)
-    ysize = 1
+    xsize = indexer.fID.nCols
+    #xsize = int(npoints)
+    #ysize = 1
 
-  npts = int(npoints)
-  if int(xsize*ysize) < npoints:
-    npts = int(xsize*ysize)
-  ipf_out = ipfout[0:npts,:].reshape(ysize, xsize,3)
+  if ysize is not None:
+    ysize = int(ysize)
+  else:
+    ysize = int(npoints // xsize + np.int64((npoints % xsize) > 0))
+
+
+  ipf_out = np.zeros((ysize, xsize,3), dtype=np.float32)
+  ipf_out = ipf_out.flatten()
+  npts = min(int(npoints), int(xsize*ysize))
+  # if int(xsize*ysize) < npoints:
+  #   npts = int(xsize*ysize)
+  ipf_out[0:npts*3] = ipfout[0:npts,:].flatten()
+  ipf_out = ipf_out.reshape(ysize, xsize, 3)
   return ipf_out
 
 

@@ -389,7 +389,7 @@ class NLPAR:
         rescale = False
 
     nthreadpos = numba.get_num_threads()
-    #numba.set_num_threads(36)
+    #numba.set_num_threads(18)
     colstartcount = np.asarray([0,ncols],dtype=np.int64)
     if verbose >= 1:
       print("lambda:", self.lam, "search radius:", self.searchradius, "dthresh:", self.dthresh)
@@ -756,50 +756,51 @@ class NLPAR:
     rowstepov = min(rowstep + 2 * row_overlap, nrow)
 
     # colchunks = np.round(np.arange(ncolchunks+1)*ncol/ncolchunks).astype(int)
-    colchunks = np.zeros((ncolchunks, 2), dtype=int)
-    colchunks[:, 0] = (np.arange(ncolchunks) * colstep).astype(int)
-    colchunks[:, 1] = colchunks[:, 0] + colstepov - int(col_overlap)
-    colchunks[:, 0] -= col_overlap
-    colchunks[0, 0] = 0;
+    # colchunks = np.zeros((ncolchunks, 2), dtype=int)
+    # colchunks[:, 0] = (np.arange(ncolchunks) * colstep).astype(int)
+    # colchunks[:, 1] = colchunks[:, 0] + colstepov - int(col_overlap)
+    # colchunks[:, 0] -= col_overlap
+    # colchunks[0, 0] = 0;
 
-    for i in range(ncolchunks - 1):
-      if colchunks[i + 1, 0] >= ncol:
-        colchunks = colchunks[0:i + 1, :]
+    colchunks = []
+    col_overlap = int(col_overlap)
+    for c in range(ncolchunks):
+      cchunk = [int(c * colstep) - col_overlap, int(c * colstep + colstepov) - col_overlap]
+      colchunks.append(cchunk)
+      if cchunk[1] > ncol:
+        break
 
-    ncolchunks = colchunks.shape[0]
+    ncolchunks = len(colchunks)
+    colchunks = np.array(colchunks, dtype=int)
+    colchunks[0, 0] = 0
     colchunks[-1, 1] = ncol
+
+    if ncolchunks > 1:
+      colchunks[-1, 0] = max(0, colchunks[-2, 1] - col_overlap)
 
     colchunks += col_offset
 
-    # colproc = np.zeros((ncolchunks, 2), dtype=int)
-    # if ncolchunks > 1:
-    #   colproc[1:, 0] = col_overlap
-    # if ncolchunks > 1:
-    #   colproc[0:, 1] = colchunks[:, 1] - colchunks[:, 0] - col_overlap
-    # colproc[-1, 1] = colchunks[-1, 1] - colchunks[-1, 0]
+    # for i in range(ncolchunks - 1):
+    #   if colchunks[i + 1, 0] >= ncol:
+    #     colchunks = colchunks[0:i + 1, :]
 
-    # rowchunks = np.round(np.arange(nrowchunks + 1) * nrow / nrowchunks).astype(int)
-    rowchunks = np.zeros((nrowchunks, 2), dtype=int)
-    rowchunks[:, 0] = (np.arange(nrowchunks) * rowstep).astype(int)
-    rowchunks[:, 1] = rowchunks[:, 0] + rowstepov - int(row_overlap)
-    rowchunks[:, 0] -= row_overlap
-    rowchunks[0, 0] = 0;
+    rowchunks = []
+    row_overlap = int(row_overlap)
+    for r in range(nrowchunks):
+      rchunk = [int(r * rowstep) - row_overlap, int(r * rowstep + rowstepov) - row_overlap]
+      rowchunks.append(rchunk)
+      if rchunk[1] > nrow:
+        break
 
-    for i in range(nrowchunks - 1):
-      if rowchunks[i + 1, 0] >= nrow:
-        rowchunks = rowchunks[0:i + 1, :]
-
-    nrowchunks = rowchunks.shape[0]
+    nrowchunks = len(rowchunks)
+    rowchunks = np.array(rowchunks, dtype=int)
+    rowchunks[0, 0] = 0
     rowchunks[-1, 1] = nrow
 
-    rowchunks += row_offset
+    if nrowchunks > 1:
+      rowchunks[-1, 0] = max(0, rowchunks[-2, 1] - row_overlap)
 
-    # rowproc = np.zeros((nrowchunks, 2), dtype=int)
-    # if nrowchunks > 1:
-    #   rowproc[1:, 0] = row_overlap
-    # if nrowchunks > 1:
-    #   rowproc[0:, 1] = rowchunks[:, 1] - rowchunks[:, 0] - row_overlap
-    # rowproc[-1, 1] = rowchunks[-1, 1] - rowchunks[-1, 0]
+    rowchunks += row_offset
 
     return ncolchunks, nrowchunks, colchunks, rowchunks
 
