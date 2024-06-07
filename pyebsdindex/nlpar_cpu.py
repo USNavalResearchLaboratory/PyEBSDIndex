@@ -776,7 +776,7 @@ class NLPAR:
     colchunks[-1, 1] = ncol
 
     if ncolchunks > 1:
-      colchunks[-1, 0] = max(0, colchunks[-2, 1] - col_overlap)
+      colchunks[-1, 0] = max(0, colchunks[-2, 1] -  2*col_overlap-1)
 
     colchunks += col_offset
 
@@ -798,7 +798,7 @@ class NLPAR:
     rowchunks[-1, 1] = nrow
 
     if nrowchunks > 1:
-      rowchunks[-1, 0] = max(0, rowchunks[-2, 1] - row_overlap)
+      rowchunks[-1, 0] = max(0, rowchunks[-2, 1] -  2*row_overlap-1)
 
     rowchunks += row_offset
 
