@@ -312,7 +312,7 @@ def index_pats_distributed(
         ngpupro = min(max(6, ngpu*6), 12)  # number of processes that will serve data to the gpu
         #ngpupro = 8
         if n_cpu_nodes < 8:
-            ngpupro = min(ngpupro,8)
+            ngpupro = min(ngpupro, n_cpu_nodes)
         if n_cpu_nodes < 2:
             ngpupro = 2
         #if OSPLATFORM == 'Linux':
