@@ -768,6 +768,7 @@ def __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam):
 @ray.remote(num_cpus=1, num_gpus=1)
 class GPUWorker:
     def __init__(self, actorid=0, clparammodule=None, gpu_id=None, cudavis = '0'):
+        del os.environ['CUDA_VISIBLE_DEVICES']
         # sys.path.append(path.dirname(path.dirname(__file__)))  # do this to help Ray find the program files
         # import openclparam # do this to help Ray find the program files
         # device, context, queue, program, mf
