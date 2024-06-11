@@ -47,7 +47,8 @@ if _pyopencl_installed:
 else:
     from pyebsdindex import band_detect as band_detect
 
-RAYIPADDRESS = '127.0.0.1'
+#RAYIPADDRESS = '127.0.0.1'
+RAYIPADDRESS = '0.0.0.0'
 OSPLATFORM  = platform.system()
 #if OSPLATFORM  == 'Darwin':
 #    RAYIPADDRESS = '0.0.0.0'  # the localhost address does not work on macOS when on a VPN
