@@ -309,7 +309,10 @@ def index_pats_distributed(
 
 
     if ngpu > 0:
-        ngpupro = min(max(6, ngpu*6), 12)  # number of processes that will serve data to the gpu
+        gpuratio = (12, ngpu*6)
+        if (platform.machine(), platform.system()) == ('x86_64', 'Darwin'):
+            gpuratio = (6, ngpu*6)
+        ngpupro = min(max(gpuratio), 18)  # number of processes that will serve data to the gpu
         #ngpupro = 8
         if n_cpu_nodes < 8:
             ngpupro = min(ngpupro, n_cpu_nodes)
