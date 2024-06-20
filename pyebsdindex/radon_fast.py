@@ -331,7 +331,7 @@ class Radon:
     stheta = np.sin(theta)
     ctheta = np.cos(theta)
 
-    pctemp =  np.asfarray(PC).copy()
+    pctemp =  np.asarray(PC, dtype=np.float32).copy()
     shapet = pctemp.shape
     if ven != 'EMSOFT':
       if len(shapet) < 2:
