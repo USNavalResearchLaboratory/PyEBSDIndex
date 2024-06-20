@@ -462,7 +462,7 @@ def index_pats_distributed(
 
         #gpu_launched += 1
 
-    gpuwrker_cycles = 0
+    gpuwrker_cycles = -500
     cpuwrker_cycles = 0
 
     while ncpudone < njobs:
