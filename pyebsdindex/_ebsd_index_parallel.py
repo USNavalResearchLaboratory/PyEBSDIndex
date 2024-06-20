@@ -373,7 +373,7 @@ def index_pats_distributed(
     # fall back to CPU only calculation.
     clparamfunction = band_detect.getopenclparam
     # Set up the jobs
-    njobs = (np.ceil(npats / chunksize)).astype(np.long64)
+    njobs = (np.ceil(npats / chunksize)).astype(np.int64)
 
     p_indx_start_end = [
         [i * chunksize + patstart, (i + 1) * chunksize + patstart, chunksize]

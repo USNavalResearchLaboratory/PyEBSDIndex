@@ -396,7 +396,7 @@ class BandDetect():
       chunksize = nPats
       chunk_start_end = [[0,nPats]]
     else:
-      nchunks = (np.ceil(nPats / chunksize)).astype(np.long64)
+      nchunks = (np.ceil(nPats / chunksize)).astype(np.int64)
       chunk_start_end = [[i * chunksize, (i + 1) * chunksize] for i in range(nchunks)]
       chunk_start_end[-1][1] = nPats
 
