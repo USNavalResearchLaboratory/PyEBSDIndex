@@ -87,7 +87,7 @@ class BandDetect(band_detect.BandDetect):
         nchunks = 1
         chunksize = nPats
       else:
-        nchunks = (np.ceil(nPats / chunksize)).astype(np.compat.long)
+        nchunks = (np.ceil(nPats / chunksize)).astype(np.long64)
 
       chunk_start_end = [[i * chunksize,(i + 1) * chunksize] for i in range(nchunks)]
       chunk_start_end[-1][1] = nPats
