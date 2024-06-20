@@ -134,9 +134,9 @@ class Radon:
         #else:
           #indx_x = np.ceil(a[i] * n + b1).astype(np.int64)
         indx_x = np.round(a[i] * n + b1).astype(np.int64)
-        indx_x = np.where(indx_x < 0, outofbounds, indx_x)
-        indx_x = np.where(indx_x >= self.imDim[1], outofbounds, indx_x)
-        indx1D = np.clip(indx_x+self.imDim[1]*n, 0, outofbounds)
+        indx_x = np.where(indx_x < 0, outofbounds, indx_x).astype(np.int64)
+        indx_x = np.where(indx_x >= self.imDim[1], outofbounds, indx_x).astype(np.int64)
+        indx1D = np.clip(indx_x+self.imDim[1]*n, 0, outofbounds).astype(np.int64)
         # for j in range(self.nRho):
         #   indx_good = indx1D[j,:].flatten()
         #   whgood = np.nonzero(indx_good < outofbounds)[0]
@@ -151,10 +151,10 @@ class Radon:
         #       indx1D[j, 0:whmask.size] = newindex[whmask]
 
         self.indexPlan[:, i, 0:self.imDim[0]] = indx1D
-    tempindx = self.indexPlan.flatten()
-    mask = np.concatenate( (self.mask.flatten(), np.array([0,0])))
+    tempindx = self.indexPlan.flatten().astype(np.int64)
+    mask = np.concatenate( (self.mask.flatten().astype(np.int64), np.array([0,0], dtype=np.int64)))
     tempindx = np.where(mask[tempindx] > 0, tempindx, outofbounds)
-    maskindex = np.concatenate((self.maskindex.flatten(), np.array([-1,-1])))
+    maskindex = np.concatenate((self.maskindex.flatten(), np.array([-1,-1]))).astype(np.int64)
     tempindx = np.where(maskindex[tempindx] >= 0, maskindex[tempindx], outofbounds)
     self.indexPlan = tempindx.reshape([self.nRho,self.nTheta,self.imDim.max()])
     self.indexPlan.sort(axis = -1)
