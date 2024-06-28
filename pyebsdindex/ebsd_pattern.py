@@ -502,7 +502,7 @@ class UPFile(EBSDPatternFile):
     typeread = self.filedatatype
     typebyte = self.filedatatype(0).nbytes
 
-    f.seek(int(nPerPat * patStart * typebyte),1)
+    f.seek(int(np.int64(nPerPat) * np.int64(patStart) * typebyte),1)
     readpats = np.fromfile(f,dtype=typeread,count=int(nPatToRead * nPerPat))
     readpats = readpats.reshape(nPatToRead,self.patternH,self.patternW)
     f.close()
