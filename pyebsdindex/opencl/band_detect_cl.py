@@ -270,7 +270,7 @@ class BandDetect(band_detect.BandDetect):
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=radon.nbytes)
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
     image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image)
-    imstep = np.uint64(np.product(shapeIm[-2:]))
+    imstep = np.uint64(np.prod(shapeIm[-2:]))
     tic = timer()
 
     nImChunk = np.uint64(nImCL/clvtypesize)

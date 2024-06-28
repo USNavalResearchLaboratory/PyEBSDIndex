@@ -98,7 +98,7 @@ class Radon(radon_fast.Radon):
     image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image_align)
     rdnIndx_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=self.indexPlan)
 
-    imstep = np.uint64(np.product(shapeIm[-2:]))
+    imstep = np.uint64(np.prod(shapeIm[-2:]))
     indxstep = np.uint64(self.indexPlan.shape[-1])
     rdnstep = np.uint64(self.nRho * self.nTheta)
 

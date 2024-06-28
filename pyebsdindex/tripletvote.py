@@ -792,7 +792,7 @@ class BandIndexer():
     tic = timer()
     poles = self.tripLib.completelib['polesCart']
     nGood = whGood.size
-    n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int64(2))
+    n2Fit = np.int64(np.prod(np.arange(2)+(nGood-2+1))/np.int64(2))
     whGood = np.asarray(whGood,dtype=np.int64)
     #AB, ABgood = self.orientation_refine_loops_am(nGood,whGood,poles,bandnorms,polematch,n2Fit)
     # tic = timer()
