@@ -163,7 +163,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     #print(gpu_id)
     clparams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
     clparams.get_queue()
-    target_mem = min(clparams.queue.device.max_mem_alloc_size//2, int(4e9))
+    target_mem = min(clparams.queue.device.max_mem_alloc_size//2, np.int64(4e9))
     ctx = clparams.ctx
     prg = clparams.prg
     queue = clparams.queue
