@@ -407,7 +407,7 @@ class BandIndexer():
     #print(indx0FID)
     #This completely over previsions the arrays, this is essentially 
     #N Choose K with N = number of angles and K = 3
-    nlib = int(npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))//np.int64(math.factorial(3)))
+    nlib = npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))//np.int64(math.factorial(3))
     nlib = nlib.astype(int)
 
     libANG = np.zeros((nlib, 3))
