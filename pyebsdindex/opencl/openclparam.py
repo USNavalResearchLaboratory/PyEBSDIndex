@@ -88,6 +88,7 @@ class OpenClParam():
     else:
       pass
     self.gpu = gpu
+    self.ngpu = len(gpu)
     return self.gpu
 
 

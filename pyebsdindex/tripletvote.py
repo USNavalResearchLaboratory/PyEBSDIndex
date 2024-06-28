@@ -407,7 +407,7 @@ class BandIndexer():
     #print(indx0FID)
     #This completely over previsions the arrays, this is essentially 
     #N Choose K with N = number of angles and K = 3
-    nlib = npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))/np.compat.long(math.factorial(3))
+    nlib = npoles*np.prod(np.arange(3, dtype=np.int64)+(nangs-2+1))//np.int64(math.factorial(3))
     nlib = nlib.astype(int)
 
     libANG = np.zeros((nlib, 3))
@@ -792,7 +792,7 @@ class BandIndexer():
     tic = timer()
     poles = self.tripLib.completelib['polesCart']
     nGood = whGood.size
-    n2Fit = np.int64(np.product(np.arange(2)+(nGood-2+1))/np.int64(2))
+    n2Fit = np.int64(np.prod(np.arange(2)+(nGood-2+1), dtype=int)//np.int64(2))
     whGood = np.asarray(whGood,dtype=np.int64)
     #AB, ABgood = self.orientation_refine_loops_am(nGood,whGood,poles,bandnorms,polematch,n2Fit)
     # tic = timer()

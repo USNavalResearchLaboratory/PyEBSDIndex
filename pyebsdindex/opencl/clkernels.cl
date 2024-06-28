@@ -70,7 +70,7 @@ __kernel void loaduint16( const __global ushort *im1, __global float *im1flt, co
 
 
 // simple program to convert a float to float and transpose array
-__kernel void loaduufloat32( const __global float *im1, __global float *im1flt, const unsigned long int nImCL)
+__kernel void loadfloat32( const __global float *im1, __global float *im1flt, const unsigned long int nImCL)
   {
   const unsigned long int x = get_global_id(0);
   const unsigned long int y = get_global_id(1);

@@ -435,9 +435,9 @@ class PSOOpt():
         self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
 
 
-        self.pbest = np.zeros(self.n_particles) + np.infty
+        self.pbest = np.zeros(self.n_particles) + np.inf
         self.pbest_loc = np.copy(self.pos)
-        self.gbest = np.infty
+        self.gbest = np.inf
         self.gbest_loc = start
 
 

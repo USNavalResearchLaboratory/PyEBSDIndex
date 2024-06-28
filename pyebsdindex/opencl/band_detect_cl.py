@@ -87,7 +87,7 @@ class BandDetect(band_detect.BandDetect):
         nchunks = 1
         chunksize = nPats
       else:
-        nchunks = (np.ceil(nPats / chunksize)).astype(np.compat.long)
+        nchunks = (np.ceil(nPats / chunksize)).astype(np.int64)
 
       chunk_start_end = [[i * chunksize,(i + 1) * chunksize] for i in range(nchunks)]
       chunk_start_end[-1][1] = nPats
@@ -270,7 +270,7 @@ class BandDetect(band_detect.BandDetect):
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE,size=radon.nbytes)
     #radon_gpu = cl.Buffer(ctx,mf.READ_WRITE | mf.COPY_HOST_PTR,hostbuf=radon)
     image_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=image)
-    imstep = np.uint64(np.product(shapeIm[-2:]))
+    imstep = np.uint64(np.prod(shapeIm[-2:], dtype=int))
     tic = timer()
 
     nImChunk = np.uint64(nImCL/clvtypesize)

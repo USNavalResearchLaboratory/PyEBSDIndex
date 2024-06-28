@@ -48,6 +48,7 @@ else:
     from pyebsdindex import band_detect as band_detect
 
 RAYIPADDRESS = '127.0.0.1'
+#RAYIPADDRESS = '0.0.0.0'
 OSPLATFORM  = platform.system()
 #if OSPLATFORM  == 'Darwin':
 #    RAYIPADDRESS = '0.0.0.0'  # the localhost address does not work on macOS when on a VPN
@@ -309,10 +310,13 @@ def index_pats_distributed(
 
 
     if ngpu > 0:
-        ngpupro = max(12, ngpu*8)  # number of processes that will serve data to the gpu
+        gpuratio = (12, ngpu*4)
+        if (platform.machine(), platform.system()) == ('x86_64', 'Darwin'):
+            gpuratio = (6, ngpu*6)
+        ngpupro = min(max(gpuratio), 12)  # number of processes that will serve data to the gpu
         #ngpupro = 8
         if n_cpu_nodes < 8:
-            ngpupro = min(ngpupro,8)
+            ngpupro = min(ngpupro, n_cpu_nodes)
         if n_cpu_nodes < 2:
             ngpupro = 2
         #if OSPLATFORM == 'Linux':
@@ -369,7 +373,7 @@ def index_pats_distributed(
     # fall back to CPU only calculation.
     clparamfunction = band_detect.getopenclparam
     # Set up the jobs
-    njobs = (np.ceil(npats / chunksize)).astype(np.compat.long)
+    njobs = (np.ceil(npats / chunksize)).astype(np.int64)
 
     p_indx_start_end = [
         [i * chunksize + patstart, (i + 1) * chunksize + patstart, chunksize]
@@ -458,7 +462,7 @@ def index_pats_distributed(
 
         #gpu_launched += 1
 
-    gpuwrker_cycles = 0
+    gpuwrker_cycles = -500
     cpuwrker_cycles = 0
 
     while ncpudone < njobs:
@@ -765,6 +769,7 @@ def __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam):
 @ray.remote(num_cpus=1, num_gpus=1)
 class GPUWorker:
     def __init__(self, actorid=0, clparammodule=None, gpu_id=None, cudavis = '0'):
+        #del os.environ['CUDA_VISIBLE_DEVICES']
         # sys.path.append(path.dirname(path.dirname(__file__)))  # do this to help Ray find the program files
         # import openclparam # do this to help Ray find the program files
         # device, context, queue, program, mf
