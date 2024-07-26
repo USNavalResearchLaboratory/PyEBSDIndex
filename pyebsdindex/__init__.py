@@ -11,17 +11,24 @@ __version__ = "0.3.5"
 
 
 # Try to import only once - also will perform check that at least one GPU is found.
+_pyopencl_installed = False
 try:
-    _pyopencl_installed = False
-    import pyopencl
-    from pyebsdindex.opencl import openclparam
-    testcl = openclparam.OpenClParam()
-    try:
-        gpu = testcl.get_gpu()
-        if len(gpu) > 0:
-            _pyopencl_installed = True
-    except:
-        raise ImportError('pyopencl could not find GPU')
+    import pyopencl as cl
+    plt = cl.get_platforms()
+    if len(plt) > 0:
+        for p in plt:
+            g = p.get_devices(device_type=cl.device_type.GPU)
+            if len(g) > 0:
+                _pyopencl_installed = True
+                break
+    #from pyebsdindex.opencl import openclparam
+    #testcl = openclparam.OpenClParam()
+    #try:
+    #    gpu = testcl.get_gpu()
+    #    if len(gpu) > 0:
+    #        _pyopencl_installed = True
+    #except:
+    #    raise ImportError('pyopencl could not find GPU')
 except ImportError:
     _pyopencl_installed = False
 
