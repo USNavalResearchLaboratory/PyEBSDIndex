@@ -33,10 +33,27 @@
 from pyebsdindex import _ray_installed
 from pyebsdindex import _pyopencl_installed
 
+gpuisthere = False
+if _pyopencl_installed:
+  # check for at least one gpu
+  import pyopencl as cl
+  try:
+    plt = cl.get_platforms()
+    if len(plt) > 0:
+      for p in plt:
+        g = p.get_devices(device_type=cl.device_type.GPU)
+        if len(g) > 0:
+          gpuisthere = True
+          g = None
+          break
+    plt = None
+  except:
+    pass
 
-if _ray_installed and _pyopencl_installed:
+
+if _ray_installed and gpuisthere:
   from pyebsdindex.opencl.nlpar_clray import NLPAR
-elif _pyopencl_installed and not _ray_installed:
+elif gpuisthere and not _ray_installed:
   from pyebsdindex.opencl.nlpar_cl import NLPAR
 else:
   from pyebsdindex.nlpar_cpu import NLPAR
