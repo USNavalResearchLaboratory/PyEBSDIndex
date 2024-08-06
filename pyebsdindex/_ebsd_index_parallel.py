@@ -360,6 +360,7 @@ def index_pats_distributed(
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars":
                       {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__)),
+                       "CUDA_VISIBLE_DEVICES": cudagpuvis,
                       }},
         logging_level=logging.WARNING,
     )  # Supress INFO messages from ray.
