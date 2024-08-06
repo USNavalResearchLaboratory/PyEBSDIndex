@@ -654,11 +654,15 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       imVal2 = maxvalin[indxy]; 
       avetempweight += imVal2;
       dxy += imVal2; 
+      
+      //dx -= imVal2; 
+      //dy -= imVal2;
 
       indxy = ((y-1)*imszx + (x))*nImChunk+z; 
       imVal2 = maxvalin[indxy]; 
       avetempweight += imVal2;
       dy  -= imVal2;
+      //dy -= 2.0 * imVal2;
       dyy += imVal2;
       imValym1 = imVal2; 
 
@@ -668,10 +672,14 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       avetempweight += imVal2;
       dxy -= imVal2;
 
+      //dx += imVal2;
+      //dy -= imVal2;
+
       indxy = ((y)*imszx + (x-1))*nImChunk+z; 
       imVal2 = maxvalin[indxy]; 
       avetempweight += imVal2;
       dx -= imVal2; 
+      //dx -= 2.0 * imVal2; 
       dxx += imVal2; 
 
       indxy = ((y)*imszx + (x))*nImChunk+z; 
@@ -685,17 +693,24 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       imVal2 = maxvalin[indxy]; 
       avetempweight += imVal2;
       dx  +=  imVal2;
+      //dx += 2.0 * imVal2;
       dxx +=  imVal2;
+      
+
       
       indxy = ((y+1)*imszx + (x-1))*nImChunk+z; 
       imVal2 = maxvalin[indxy]; 
       avetempweight += imVal2;
       dxy -=  imVal2;
+
+      //dx -= imVal2;
+      //dy += imVal2;
       
       indxy = ((y+1)*imszx + (x))*nImChunk+z; 
       imVal2 = maxvalin[indxy]; 
       avetempweight += imVal2;
       dy  +=  imVal2;
+      //dy += 2.0 * imVal2;
       dyy += imVal2; 
       imValyp1 = imVal2;
 
@@ -704,17 +719,39 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       avetempweight += imVal2;
       dxy  +=  imVal2;
 
+      //dx += imVal2;
+      //dy += imVal2; 
+
       dxy *= 0.25;
-      dx  *= 0.5;
-      dy  *= 0.5;
+      dx  *= 0.5; //0.125; //
+      dy  *= 0.5; //0.125; //
 
       det = (dxx*dyy - dxy*dxy);
       det = (fabs(det) > 1.0e-12) ? det : 1.0e-12; 
       det = 1.0 / det; 
 
-      ix = (float) x - (dyy * dx - dxy * dy) * det; 
-      iy = (float) y - (dxx * dy - dxy * dx) * det; 
+      //ix = (float) x - (dyy * dx - dxy * dy) * det; 
+      //iy = (float) y - (dxx * dy - dxy * dx) * det; 
 
+      ix = (dyy * dx - dxy * dy) * det; 
+      iy = (dxx * dy - dxy * dx) * det;
+      // protect against bad estimates in dxy, assume == 0.0 -- per suggestion of W. Lenthe
+      if ( (fabs(ix) > 0.875) || (fabs(iy) > 0.875) ){
+        det = (dxx*dyy);
+        det = (fabs(det) > 1.0e-12) ? det : 1.0e-12; 
+        det = 1.0 / det; 
+        ix = (dyy * dx) * det; 
+        iy = (dxx * dy) * det;
+        if ( (fabs(ix) > 0.875) || (fabs(iy) > 0.875) ){
+          ix = 0.0; 
+          iy = 0.0;
+        }
+
+      }
+
+      ix = (float) x - ix;
+      iy = (float) y - iy;
+      
       aveloc[z*lnmax + i] = (float2) (iy, ix); 
       aveval[z*lnmax + i] = avetempweight/9.0;
       // band width metric

@@ -644,6 +644,8 @@ class BandDetect():
         bandData_avemax[q,i] = sumnn / nnN
         # rnn = np.sum(nn * (np.float32(r) + nnr))
         # cnn = np.sum(nn * (np.float32(c) + nnc))
+        #dx = 0.125 * (2.0 * (nn[1,2] - nn[1,0]) + (nn[0,2] - nn[0,0]) + (nn[2,2] - nn[2,0]))
+        #dy = 0.125 * (2.0 * (nn[2,1] - nn[0,1]) + (nn[2,0] - nn[0,0]) + (nn[2,2] - nn[0,2]))
         dx  = 0.5*(nn[1,2] - nn[1,0])
         dy  = 0.5*(nn[2,1] - nn[0,1])
         dxx = nn[1,2] + nn[1,0] - 2 * nn[1,1]
@@ -655,8 +657,17 @@ class BandDetect():
         det = 1.0/det
         dc =  (dyy * dx - dxy * dy) * det
         rc = (dxx * dy - dxy * dx) * det
-        dc = max(-1.0, dc) ; rc = max(-1.0, rc)
-        dc = min(1.0, dc) ;  rc = min(1.0, rc)
+        # protect against a bad dxy estimate, assume dxy == 0.0 -- per suggestion of W. Lenthe
+        if (np.abs(dc) > 0.875) or (np.abs(rc) > 0.875):
+          det = (dxx * dyy)
+          det = det if np.fabs(det) > 1e-12 else 1.0e-12
+          det = 1.0 / det
+          dc = (dyy * dx) * det
+          rc = (dxx * dy) * det
+          if (np.abs(dc) > 0.875) or (np.abs(rc) > 0.875):
+            dc = 0.0 ; rc = 0.0
+        # dc = max(-1.0, dc) ; rc = max(-1.0, rc)
+        # dc = min(1.0, dc) ;  rc = min(1.0, rc)
         cnn = c - dc
         rnn = r - rc
         bandData_aveloc[q,i,:] = np.array([rnn,cnn])
