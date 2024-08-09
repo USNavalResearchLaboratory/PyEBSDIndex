@@ -5,13 +5,27 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
+
+0.3.6 (2024-08-06)
+==================
+
+Fixed
+-----
+- Fixed issue with newer versions of Ray and NVIDIA cards (maybe exclusively on Linux).
+
+Changed
+-------
+- Small adjustment on peak fitting suggested by W. Lenthe to put better limits on the peak fit.
+  Maybe especially useful for fitting noisy peaks.
+
+
 0.3.5 (2024-06-07)
 ==================
 
 Fixed
 -----
 - Further tweaking of NLPAR GPU memory limits for Apple-ARM.
-- Many small type fixes for numpy 2.0 compatibillty.
+- Many small type fixes for numpy 2.0 compatibility.
 - Corrected GPU detection for distributed indexing.
 - Fixed issue where slower machines would erroneously detect a GPU timeout.
 
