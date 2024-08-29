@@ -527,7 +527,7 @@ class NLPAR(nlpar_cpu.NLPAR):
             data[i, :, :] = temp
         data = data[rstartcalc: rstartcalc+nrowcalc,cstartcalc: cstartcalc+ncolcalc, :,: ]
         data = data.reshape(nrowcalc*ncolcalc, pheight, pwidth)
-        patternfileout.write_data(newpatterns=data, patStartCount=[[cstart+cstartcalc, rstart+rstartcalc],
+        patternfileout.write_data(newpatterns=data, patStartCount=[[np.int64(cstart)+cstartcalc, np.int64(rstart)+rstartcalc],
                                                                    [ncolcalc, nrowcalc]],
                                   flt2int='clip', scalevalue=1.0)
         ndone +=1
