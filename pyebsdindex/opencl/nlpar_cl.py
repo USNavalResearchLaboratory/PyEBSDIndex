@@ -414,7 +414,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     clvectlen = 16
 
 
-    print("target mem:", target_mem)
+    #print("target mem:", target_mem)
     chunks = self._calcchunks( [pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
     #print(chunks[2], chunks[3])
