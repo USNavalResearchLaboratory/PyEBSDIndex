@@ -406,6 +406,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     clparams.get_context(gpu_id=gpu_id, kfile ='clnlpar.cl')
     clparams.get_queue()
     target_mem = min(clparams.queue.device.max_mem_alloc_size//4, np.int64(2e9))
+    #target_mem = min(clparams.queue.device.max_mem_alloc_size*3, np.int64(18e9))
     ctx = clparams.ctx
     prg = clparams.prg
     queue = clparams.queue
@@ -413,7 +414,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     clvectlen = 16
 
 
-    # print("target mem:", target_mem)
+    print("target mem:", target_mem)
     chunks = self._calcchunks( [pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
     #print(chunks[2], chunks[3])
@@ -509,7 +510,8 @@ class NLPAR(nlpar_cpu.NLPAR):
         mxval = mxval0
         if mnval0 < 0:
           data -= mnval0
-          mxval = mxval0 - mnval0
+          mxval = mxval - mnval0
+       
 
         if saturation_protect == False:
           mxval += 1.0
@@ -544,7 +546,7 @@ class NLPAR(nlpar_cpu.NLPAR):
         cl.enqueue_barrier(queue)
         data_gpu.release()
         try:
-          prg.calcnlpar(queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
+          envt = prg.calcnlpar(queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
           #prg.calcnlpar(queue, (1, 1), None,
                                  datapad_gpu,
                                  mask_gpu,
@@ -563,21 +565,29 @@ class NLPAR(nlpar_cpu.NLPAR):
           data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
           sigmachunk_gpu.release()
           cl.enqueue_copy(queue, data, datapadout_gpu,  is_blocking=True)
+          #print(envt.command_execution_status)
           queue.finish()
-          mxout = data.max()
-          if (mxval0 < np.float32(1.e-8)) or ( mxout >  np.float32(1.e-8)):
+          data = data[rstartcalc: rstartcalc + nrowcalc,
+                 cstartcalc:cstartcalc + ncolcalc, :, :]
+          mxout = data.max(axis=(-1,-2))
+          mxtest = (np.float32(mxout < 1.e-8)).mean()
+          # this check is because there is a rare, silent failure on apple-si chips, which
+          # will just return zeros to the data array.  Not perfect, but this seems better than
+          # nothing.  It will attempt to reprocess the data 3 times before just writing out
+          # whatever it has.
+          if (mxval0 < np.float32(1.e-8)) or ( mxtest < 0.1 ) or (j["nattempts"] >= 3):
             if mnval0 < 0:
               data += mnval0
 
+            data = data.reshape(nrowcalc * ncolcalc, pheight, pwidth)
             if rescale == True:
               for i in range(data.shape[0]):
                 temp = data[i, :, :]
                 temp -= temp.min()
                 temp *= np.float32(mxval) / temp.max()
                 data[i, :, :] = temp
-            data = data[rstartcalc: rstartcalc + nrowcalc,
-                        cstartcalc:cstartcalc + ncolcalc, :, :]
-            data = data.reshape(nrowcalc * ncolcalc, pheight, pwidth)
+
+
             patternfileout.write_data(newpatterns=data,
                                       patStartCount=[[np.int64(cstart + cstartcalc), np.int64(rstart + rstartcalc)],
                                                      [ncolcalc, nrowcalc]],
@@ -590,12 +600,11 @@ class NLPAR(nlpar_cpu.NLPAR):
 
 
           else:
-            if mxout < np.float32(1.e-8):
-
+            if mxtest >= 0.1:
               raise OpenCLClalcError()
 
         except OpenCLClalcError:
-          if j["nattempts"] < 10:
+          if j["nattempts"] < 3:
             print("Reattempting job: ", j['nattempts'])
             jqueue.append(j)
           else:
