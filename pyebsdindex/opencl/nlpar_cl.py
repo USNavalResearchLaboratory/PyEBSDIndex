@@ -301,9 +301,14 @@ class NLPAR(nlpar_cpu.NLPAR):
     self.sigma = sigma
     return sigma, dist, countnn
 
+
+
   def calcnlpar_cl(self, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
                    filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,
                    gpu_id = None, verbose=2, **kwargs):
+
+    class OpenCLClalcError(Exception):
+      pass
 
     if lam is not None:
       self.lam = lam
@@ -400,7 +405,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     #print(gpu_id)
     clparams.get_context(gpu_id=gpu_id, kfile ='clnlpar.cl')
     clparams.get_queue()
-    target_mem = min(clparams.queue.device.max_mem_alloc_size//4, int(2e9))
+    target_mem = min(clparams.queue.device.max_mem_alloc_size//4, np.int64(2e9))
     ctx = clparams.ctx
     prg = clparams.prg
     queue = clparams.queue
@@ -418,24 +423,24 @@ class NLPAR(nlpar_cpu.NLPAR):
     # precalculate some needed arrays for the GPU
     mask = self.mask.astype(np.float32)
 
-    npad = clvectlen * int(np.ceil(mask.size/clvectlen))
+    npad = clvectlen * np.int64(np.ceil(mask.size/clvectlen))
     maskpad = np.zeros((npad) , np.float32) -1 # negative numbers will indicate a clvector overflow.
     maskpad[0:mask.size] = mask.reshape(-1).astype(np.float32)
     mask_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=maskpad)
 
-    npatsteps = int(maskpad.size/clvectlen) # how many clvector chunks to move through a pattern.
+    npatsteps = np.int64(maskpad.size/clvectlen) # how many clvector chunks to move through a pattern.
 
     chunksize = (chunks[2][:,1] - chunks[2][:,0]).reshape(1,-1) * \
                      (chunks[3][:, 1] - chunks[3][:, 0]).reshape(-1, 1)
     nchunks = chunksize.size
     #return chunks, chunksize
-    mxchunk = int(chunksize.max())
+    mxchunk = np.int64(chunksize.max())
     # print("max chunk:" , mxchunk)
 
-    npadmx = clvectlen * int(np.ceil(float(mxchunk)*npat_point/ clvectlen))
+    npadmx = clvectlen * np.int64(np.ceil(float(mxchunk)*npat_point/ clvectlen))
 
-    datapad_gpu = cl.Buffer(ctx, mf.READ_WRITE, size=int(npadmx) * int(4))
-    datapadout_gpu = cl.Buffer(ctx, mf.READ_WRITE, size=int(npadmx) * int(4))
+    datapad_gpu = cl.Buffer(ctx, mf.READ_WRITE, size=np.int64(npadmx) * np.int64(4))
+    datapadout_gpu = cl.Buffer(ctx, mf.READ_WRITE, size=np.int64(npadmx) * np.int64(4))
     # print("data pad", datapad_gpu.size)
     # print("data out", datapadout_gpu.size)
 
@@ -443,6 +448,7 @@ class NLPAR(nlpar_cpu.NLPAR):
 
 
     ndone = 0
+    jqueue = []
     # if verbose >= 2:
     #   print('\n', end='')
     for rowchunk in range(chunks[1]):
@@ -463,23 +469,61 @@ class NLPAR(nlpar_cpu.NLPAR):
         cendcalc = ncolchunk - sr if (colchunk < (chunks[0] - 1)) else ncolchunk
         ncolcalc = np.int64(cendcalc - cstartcalc)
 
-        data, xyloc = patternfile.read_data(patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
+        job = {"rstart": rstart,
+               "rend": rend,
+               "nrowchunk": nrowchunk,
+               "rstartcalc": rstartcalc,
+               "rendcalc": rendcalc,
+               "nrowcalc": nrowcalc,
+               "cstart": cstart,
+               "cend": cend,
+               "ncolchunk": ncolchunk,
+               "cstartcalc": cstartcalc,
+               "cendcalc": cendcalc,
+               "ncolcalc": ncolcalc,
+               "nattempts": -1}
+        jqueue.append(job)
+
+
+    while len(jqueue) > 0:
+        j = jqueue.pop(0)
+        j["nattempts"] += 1
+
+        rstart = j["rstart"]
+        cstart = j["cstart"]
+        rend = j["rend"]
+        cend = j["cend"]
+        cstartcalc = j["cstartcalc"]
+        rstartcalc = j["rstartcalc"]
+        ncolchunk = j["ncolchunk"]
+        nrowchunk = j["nrowchunk"]
+        ncolcalc = j["ncolcalc"]
+        nrowcalc = j["nrowcalc"]
+
+        data, xyloc = patternfile.read_data(patStartCount=[[ cstart, rstart], [ncolchunk, nrowchunk]],
                                           convertToFloat=False, returnArrayOnly=True)
 
-        mxval = data.max()
+
+        mxval0 = data.max()
+        mnval0 = data.min()
+        mxval = mxval0
+        if mnval0 < 0:
+          data -= mnval0
+          mxval = mxval0 - mnval0
+
         if saturation_protect == False:
           mxval += 1.0
         else:
           mxval *= 0.9961
 
-        filldatain = cl.enqueue_fill_buffer(queue, datapad_gpu, np.float32(mxval+10), 0,int(4*npadmx))
-        cl.enqueue_fill_buffer(queue, datapadout_gpu, np.float32(0.0), 0, int(4 * npadmx))
+        filldatain = cl.enqueue_fill_buffer(queue, datapad_gpu, np.float32(mxval+10), 0,np.int64(4*npadmx))
+        cl.enqueue_fill_buffer(queue, datapadout_gpu, np.float32(0.0), 0, np.int64(4 * npadmx))
 
         sigmachunk = np.ascontiguousarray(sigma[rstart:rend, cstart:cend].astype(np.float32))
         sigmachunk_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=sigmachunk)
         # print("sigma", sigmachunk_gpu.size)
         szdata = data.size
-        npad = clvectlen * int(np.ceil(szdata / clvectlen))
+        npad = clvectlen * np.int64(np.ceil(szdata / clvectlen))
 
         #datapad = np.zeros((npad), dtype=np.float32) + np.float32(mxval + 10)
         #datapad[0:szdata] = data.reshape(-1)
@@ -499,40 +543,67 @@ class NLPAR(nlpar_cpu.NLPAR):
         crlimits_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=calclim)
         cl.enqueue_barrier(queue)
         data_gpu.release()
-        prg.calcnlpar(queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
-        #prg.calcnlpar(queue, (1, 1), None,
-                               datapad_gpu,
-                               mask_gpu,
-                               sigmachunk_gpu,
-                               crlimits_gpu,
-                               datapadout_gpu,
-                               np.int64(sr),
-                               np.int64(npatsteps),
-                               np.int64(npat_point),
-                               np.float32(mxval),
-                               np.float32(1.0/lam**2),
-                               np.float32(dthresh) )
+        try:
+          prg.calcnlpar(queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
+          #prg.calcnlpar(queue, (1, 1), None,
+                                 datapad_gpu,
+                                 mask_gpu,
+                                 sigmachunk_gpu,
+                                 crlimits_gpu,
+                                 datapadout_gpu,
+                                 np.int64(sr),
+                                 np.int64(npatsteps),
+                                 np.int64(npat_point),
+                                 np.float32(mxval),
+                                 np.float32(1.0/lam**2),
+                                 np.float32(dthresh) )
 
-        data = data.astype(np.float32) # prepare to receive data back from GPU
-        data.reshape(-1)[:] = 0.0
-        data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
-        sigmachunk_gpu.release()
-        cl.enqueue_copy(queue, data, datapadout_gpu,  is_blocking=True)
-        queue.finish()
-        if rescale == True:
-          for i in range(data.shape[0]):
-            temp = data[i, :, :]
-            temp -= temp.min()
-            temp *= np.float32(mxval) / temp.max()
-            data[i, :, :] = temp
-        data = data[rstartcalc: rstartcalc+nrowcalc,cstartcalc: cstartcalc+ncolcalc, :,: ]
-        data = data.reshape(nrowcalc*ncolcalc, pheight, pwidth)
-        patternfileout.write_data(newpatterns=data, patStartCount=[[np.int64(cstart)+cstartcalc, np.int64(rstart)+rstartcalc],
-                                                                   [ncolcalc, nrowcalc]],
-                                  flt2int='clip', scalevalue=1.0)
-        ndone +=1
-        if verbose >= 2:
-          print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
+          data = data.astype(np.float32) # prepare to receive data back from GPU
+          data.reshape(-1)[:] = 0.0
+          data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
+          sigmachunk_gpu.release()
+          cl.enqueue_copy(queue, data, datapadout_gpu,  is_blocking=True)
+          queue.finish()
+          mxout = data.max()
+          if (mxval0 < np.float32(1.e-8)) or ( mxout >  np.float32(1.e-8)):
+            if mnval0 < 0:
+              data += mnval0
+
+            if rescale == True:
+              for i in range(data.shape[0]):
+                temp = data[i, :, :]
+                temp -= temp.min()
+                temp *= np.float32(mxval) / temp.max()
+                data[i, :, :] = temp
+            data = data[rstartcalc: rstartcalc + nrowcalc,
+                        cstartcalc:cstartcalc + ncolcalc, :, :]
+            data = data.reshape(nrowcalc * ncolcalc, pheight, pwidth)
+            patternfileout.write_data(newpatterns=data,
+                                      patStartCount=[[np.int64(cstart + cstartcalc), np.int64(rstart + rstartcalc)],
+                                                     [ncolcalc, nrowcalc]],
+                                      flt2int='clip', scalevalue=1.0)
+            ndone += 1
+            if verbose >= 2:
+              print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
+
+
+
+
+          else:
+            if mxout < np.float32(1.e-8):
+
+              raise OpenCLClalcError()
+
+        except OpenCLClalcError:
+          if j["nattempts"] < 10:
+            print("Reattempting job: ", j['nattempts'])
+            jqueue.append(j)
+          else:
+            print("Aborting job.")
+
+
+
+
 
     if verbose >= 2:
       print('', end='')
