@@ -605,7 +605,7 @@ class NLPAR(nlpar_cpu.NLPAR):
 
         except OpenCLClalcError:
           if j["nattempts"] < 3:
-            print("Reattempting job: ", j['nattempts'])
+            #print("Reattempting job: ", j['nattempts'])
             jqueue.append(j)
           else:
             print("Aborting job.")
