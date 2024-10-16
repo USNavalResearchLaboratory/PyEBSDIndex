@@ -450,6 +450,7 @@ class NLPAR(nlpar_cpu.NLPAR):
 
     ndone = 0
     jqueue = []
+    jobid = 0
     # if verbose >= 2:
     #   print('\n', end='')
     for rowchunk in range(chunks[1]):
@@ -482,7 +483,9 @@ class NLPAR(nlpar_cpu.NLPAR):
                "cstartcalc": cstartcalc,
                "cendcalc": cendcalc,
                "ncolcalc": ncolcalc,
-               "nattempts": -1}
+               "nattempts": -1,
+               "jobid": jobid}
+        jobid += 1
         jqueue.append(job)
 
 
@@ -600,12 +603,13 @@ class NLPAR(nlpar_cpu.NLPAR):
 
 
           else:
-            if mxtest >= 0.1:
+            if mxtest >= 0.5:
               raise OpenCLClalcError()
 
         except OpenCLClalcError:
           if j["nattempts"] < 3:
-            #print("Reattempting job: ", j['nattempts'])
+            #print('')
+            #print("Reattempting job: ", j["jobid"], j['nattempts'])
             jqueue.append(j)
           else:
             print("Aborting job.")
