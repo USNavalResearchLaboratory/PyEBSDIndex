@@ -527,7 +527,7 @@ class NLPAR(nlpar_cl.NLPAR):
       _node_ip_address=RAYIPADDRESS,  # "0.0.0.0",
       runtime_env={"env_vars":
                      {"PYTHONPATH": os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                      }},
+                      "CUDA_VISIBLE_DEVICES":cudavis}},
       logging_level=logging.WARNING,)  # Supress INFO messages from ray.
 
     nlpar_remote = ray.put(self)
