@@ -570,12 +570,12 @@ class NLPAR(nlpar_cpu.NLPAR):
           data = data[rstartcalc: rstartcalc + nrowcalc,
                  cstartcalc:cstartcalc + ncolcalc, :, :]
           mxout = data.max(axis=(-1,-2))
-          mxtest = (np.float32(mxout < 1.e-8)).mean()
+          mxtest = (np.float32(mxout < 1.e-8)).max()
           # this check is because there is a rare, silent failure on apple-si chips, which
           # will just return zeros to the data array.  Not perfect, but this seems better than
           # nothing.  It will attempt to reprocess the data 3 times before just writing out
           # whatever it has.
-          if (mxval0 < np.float32(1.e-8)) or ( mxtest < 0.1 ) or (j["nattempts"] >= 3):
+          if (mxval0 < np.float32(1.e-8)) or ( mxtest < 0.5 ) or (j["nattempts"] >= 3):
             if mnval0 < 0:
               data += mnval0
 

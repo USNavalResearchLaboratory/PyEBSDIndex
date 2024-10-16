@@ -6,6 +6,19 @@ All notable changes to PyEBSDIndex will be documented in this file. The format i
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
 
+0.3.7 (2024-10-16)
+==================
+
+Fixed
+-----
+- Added a very hacky fix to NLPAR not working consistently on Apple-Si chips.
+    For reasons I do not understand, the OpenCL routine would return without executing the NLPAR
+    processing, returning patterns filled with zeros.  This attempts to detect such behavior, and will
+    resubmit the job. It will attempt to run the job three times, and then it will just return the zero patterns.
+    This appears to be only an issue with the Apple Mx chips/architecture.
+
+
+
 0.3.6 (2024-08-06)
 ==================
 
