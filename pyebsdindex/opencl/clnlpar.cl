@@ -268,7 +268,8 @@ __kernel void calcnlpar(
       const long npatpoint, 
       const float maxlim, 
       const float lam2, 
-      const float dthresh){
+      const float dthresh,
+      const float diff_offset){
   //IDs of work-item represent x and y coordinates in image
   //const long4 calclim =  crlimits[0];
   const long x = get_global_id(0)+crlimits[0];
@@ -293,11 +294,13 @@ __kernel void calcnlpar(
 
   float d[512]; // taking a risk here that noone will want a SR > 10
   float n[512]; 
+  float diff_step[512];
 
   
   for(j=0; j < nnn; ++j){
       d[j] = 0.0;
       n[j] = 1.0e-6; 
+      diff_step[j] = 1.0 ;
   }
 
 
@@ -340,7 +343,14 @@ __kernel void calcnlpar(
               d1 *= mask1; 
 
               dd = sum16(&d1);
-              dd = (indx_ij == indx0) ? -1.0 : dd; // mark the center point 
+              if (indx_ij == indx0) {
+                dd = -1.0;
+                diff_step[count] = 1.0 / diff_offset;
+              } else{
+                dd = dd;
+                diff_step[count] = diff_offset;
+              }
+              //dd = (indx_ij == indx0) ? -1.0 : dd; // mark the center point 
               
               d[count] += dd;
               n[count] += sum16(&mask1);
@@ -388,10 +398,12 @@ __kernel void calcnlpar(
                 nn = 1.0;
               }
               
-              dd -= dthresh; 
+              dd -= dthresh;
+
               dd = dd >= 0.0 ? dd : 0.0; 
 
               dd = exp(-1.0*dd*lam2); 
+              dd *= diff_step[count]; 
               sum += dd; 
               d[count] = dd;
 

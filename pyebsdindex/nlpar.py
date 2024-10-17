@@ -61,3 +61,7 @@ else:
 __all__ = [
     "NLPAR",
 ]
+
+class DIFF_NLPAR(NLPAR):
+  def __init__(self, **kwargs):
+    pass
