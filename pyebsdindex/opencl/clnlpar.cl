@@ -300,7 +300,7 @@ __kernel void calcnlpar(
   for(j=0; j < nnn; ++j){
       d[j] = 0.0;
       n[j] = 1.0e-6; 
-      diff_step[j] = 1.0 ;
+      diff_step[j] = 0.0 ;
   }
 
 
@@ -345,10 +345,10 @@ __kernel void calcnlpar(
               dd = sum16(&d1);
               if (indx_ij == indx0) {
                 dd = -1.0;
-                diff_step[count] = 1.0 / diff_offset;
+                diff_step[count] +=  diff_offset;
               } else{
                 dd = dd;
-                diff_step[count] = diff_offset;
+                diff_step[count] = 0.0; //diff_offset;
               }
               //dd = (indx_ij == indx0) ? -1.0 : dd; // mark the center point 
               
@@ -403,7 +403,7 @@ __kernel void calcnlpar(
               dd = dd >= 0.0 ? dd : 0.0; 
 
               dd = exp(-1.0*dd*lam2); 
-              dd *= diff_step[count]; 
+              dd += diff_step[count]; 
               sum += dd; 
               d[count] = dd;
 

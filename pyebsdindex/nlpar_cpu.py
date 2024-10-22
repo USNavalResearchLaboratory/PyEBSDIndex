@@ -44,7 +44,7 @@ __all__ = [
 
 
 class NLPAR:
-  def __init__(self, filename=None,  lam=0.7, searchradius=3,dthresh=0.0, diff_offset=1.0,
+  def __init__(self, filename=None,  lam=0.7, searchradius=3,dthresh=0.0, diff_offset=0.0,
                nrows = None, ncols = None, **kwargs):
     self.lam = lam
     self.searchradius = searchradius
@@ -520,6 +520,13 @@ class NLPAR:
 
     return sigma
 
+  def auto_nlpar(self, filename = None, fileout=None, searchradius=None, lindex = 1, **kwargs):
+    if filename is not None:
+      self.setfile(filename)
+    lam = self.opt_lambda( automask = True, autoupdate=True, backsub = False, **kwargs)
+    nlparfile = self.calcnlpar(searchradius = searchradius, lam = lam[int(lindex)], saturation_protect=True, automask=True,
+                                fileout=fileout, backsub=False, **kwargs)
+    return nlparfile
   def backsub(self, data):
     # This function will fit a 2D gaussian on top of a plane to the averaged set of patterns (data) that is provided.
     # It will automatically use whatever mask is defined for valid data.
@@ -652,7 +659,7 @@ class NLPAR:
 
   @staticmethod
   @numba.jit(nopython=True,cache=True,fastmath=False,parallel=True)
-  def nlpar_nb(data,lam, sr, dthresh, sigma, nrows,ncols,indices,saturation_protect=True, diff_offset = np.float32(1.0)):
+  def nlpar_nb(data,lam, sr, dthresh, sigma, nrows,ncols,indices,saturation_protect=True, diff_offset = np.float32(0.0)):
     def getpairid(idx0, idx1):
       idx0_t = int(idx0)
       idx1_t = int(idx1)
@@ -667,7 +674,7 @@ class NLPAR:
     shpdata = data.shape
     shpind = indices.shape
     winsz = np.int32((2*sr+1)**2)
-    diff_step =  np.ones((winsz), dtype=np.float32)
+    diff_step =  np.zeros((winsz), dtype=np.float32)
 
     mxval = np.max(data)
     if saturation_protect == False:
@@ -696,9 +703,9 @@ class NLPAR:
 
             if indx_nn == indx_0:
               weights[counter] = np.float32(-1.0e6)
-              diff_step[counter] = 1.0 / diff_offset
+              diff_step[counter] +=  diff_offset
             else:
-              diff_step[counter] =  diff_offset
+              diff_step[counter] =  0.0
               pairid = getpairid(indx_0, indx_nn)
               if pairid in pairdict:
                 weights[counter] = pairdict[pairid]
@@ -728,7 +735,7 @@ class NLPAR:
 
           weights[i_nn] = np.maximum(weights[i_nn]-dthresh, numba.float32(0.0))
           weights[i_nn] = np.exp(-1.0 * weights[i_nn] * lam2)
-          weights[i_nn] *= diff_step[i_nn]
+          weights[i_nn] += diff_step[i_nn]
           sum += weights[i_nn]
 
         for i_nn in range(winsz):

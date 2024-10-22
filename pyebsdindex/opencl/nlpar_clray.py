@@ -668,7 +668,7 @@ class NLPAR(nlpar_cl.NLPAR):
                   np.int64(npat_point),
                   np.float32(mxval),
                   np.float32(1.0 / lam ** 2),
-                  np.float32(dthresh), 
+                  np.float32(dthresh),
                   np.float32(diff_offset))
 
     data = data.astype(np.float32)  # prepare to receive data back from GPU
