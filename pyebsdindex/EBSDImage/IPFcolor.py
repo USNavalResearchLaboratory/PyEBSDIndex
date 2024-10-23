@@ -21,10 +21,20 @@ Author: David Rowenhorst;
 The US Naval Research Laboratory Date: 21 Aug 2020'''
 
 
+'''This package uses the Google Font Open Sans.  
+Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)
+This Font Software is licensed under the SIL Open Font License, Version 1.1 . 
+This license available with a FAQ at: https://openfontlicense.org
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+'''
+
 from PIL import  Image, ImageDraw, ImageFont
 import os
 import matplotlib.colors as pltcolors
 import matplotlib.pyplot as plt
+from matplotlib.font_manager import findfont, FontProperties
+FONT = findfont(FontProperties(family='sans-serif', weight='bold'), fontext='ttf', )
+
 import numpy as np
 
 from pyebsdindex import rotlib
@@ -75,6 +85,50 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
     ipf_out = add_scalebar(ipf_out, indexer.fID.xStep, rescale=False)
   return ipf_out
 
+def scalarimage(ebsddata, indexer, datafield='pq', xsize = None, ysize = None, addscalebar=False, cmap='viridis', datafieldindex=0):
+  npoints = ebsddata.shape[-1]
+  ipfout = ebsddata[-1][datafield]
+  if len(ipfout.shape) > 1:
+    ipfout = ipfout[:,datafieldindex]
+
+  ipfout = ipfout.astype(np.float32)
+  if datafield == 'fit':
+    mn = ipfout[ipfout < 179].mean()
+    std = ipfout[ipfout < 179].std()
+    norm = plt.Normalize(vmin=max(0.0, mn-3*std), vmax=mn+3*std)
+  else:
+    norm = plt.Normalize()
+  ipfout = np.array(norm(ipfout))
+  #ipfout -= ipfout.min()
+  #ipfout *= 1.0/ipfout.max()
+
+  cm = plt.colormaps[cmap]
+  ipfout = cm(ipfout)
+
+  if xsize is not None:
+    xsize = int(xsize)
+    # if ysize is None:
+    # print(ysize)
+  else:
+    xsize = indexer.fID.nCols
+    # xsize = int(npoints)
+    # ysize = 1
+
+  if ysize is not None:
+    ysize = int(ysize)
+  else:
+    ysize = int(npoints // xsize + np.int64((npoints % xsize) > 0))
+
+  ipf_out = np.zeros((ysize, xsize, 3), dtype=np.float32)
+  ipf_out = ipf_out.flatten()
+  npts = min(int(npoints), int(xsize * ysize))
+  # if int(xsize*ysize) < npoints:
+  #   npts = int(xsize*ysize)
+  ipf_out[0:npts * 3] = ipfout[0:npts, 0:3].flatten()
+  ipf_out = ipf_out.reshape(ysize, xsize, 3)
+  if addscalebar == True:
+    ipf_out = add_scalebar(ipf_out, indexer.fID.xStep, rescale=False)
+  return ipf_out
 
 
 def qu2ipf_cubic(quats, vector=np.array([0,0,1.0])):
@@ -379,7 +433,8 @@ def add_scalebar(image, stepsize, rescale=True):
 
 
   underbar = np.zeros(underbar_size, dtype=np.uint8)+255
-  yxoffset = (int(0.25*underbar_size[0]), int(0.01*imshape[1]))
+  #yxoffset = (int(0.25*underbar_size[0]), int(0.01*imshape[1]))
+  yxoffset = (int(0.25 * underbar_size[0]), 0)
   # add our scale bar.
   underbar[yxoffset[0]:yxoffset[0]+scale_bar_height_px,
               yxoffset[1]:yxoffset[1]+scale_bar_width_px]  = 0
@@ -387,7 +442,9 @@ def add_scalebar(image, stepsize, rescale=True):
   underbarim = Image.fromarray(underbar, mode='L')
   draw = ImageDraw.Draw(underbarim)
   fontsize = scale_bar_height_px * 1.4
+
   imfont = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'OpenSans-Bold.ttf'), fontsize)
+  #imfont = ImageFont.truetype(FONT, fontsize)
   imtext = ' ' + str(scale_bar_size) + ' ' + units
   text_color = 0
   text_length = draw.textlength(imtext, imfont)
