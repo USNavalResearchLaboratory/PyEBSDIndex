@@ -30,8 +30,9 @@ SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 
 from PIL import  Image, ImageDraw, ImageFont
 import os
-import matplotlib.colors as pltcolors
+
 import matplotlib.pyplot as plt
+import scipy.ndimage as scipyndim
 #from matplotlib.font_manager import findfont, FontProperties
 #FONT = findfont(FontProperties(family='sans-serif', weight='bold'), fontext='ttf', )
 
@@ -40,7 +41,8 @@ FONT = os.path.join(os.path.dirname(__file__), 'OpenSans-Bold.ttf')
 
 import numpy as np
 
-def scalarimage(ebsddata, indexer, datafield='pq', xsize = None, ysize = None, addscalebar=False, cmap='viridis', datafieldindex=0):
+def scalarimage(ebsddata, indexer, datafield='pq', xsize = None, ysize = None,
+                addscalebar=False, cmap='viridis', datafieldindex=0, **kwargs):
   npoints = ebsddata.shape[-1]
   imagedata = ebsddata[-1][datafield]
   if len(imagedata.shape) > 1:
@@ -81,11 +83,13 @@ def scalarimage(ebsddata, indexer, datafield='pq', xsize = None, ysize = None, a
   #   npts = int(xsize*ysize)
   image_out[0:npts * 3] = imagedata[0:npts, 0:3].flatten()
   image_out = image_out.reshape(ysize, xsize, 3)
+  # perform desired image resize
+
   if addscalebar == True:
-    image_out = add_scalebar(image_out, indexer.fID.xStep, rescale=False)
+    image_out = addscalebar(image_out, indexer.fID.xStep, rescale=False, **kwargs)
   return image_out
 
-def add_scalebar(image, stepsize, rescale=True):
+def addscalebar(image, stepsize, rescale=True, upscale_xsize=None):
   # image: grayscale or color image to add scale bar to.
   # stepsize: size of a pixel in microns.
   imshape = image.shape
@@ -93,7 +97,24 @@ def add_scalebar(image, stepsize, rescale=True):
   if len(imshape) > 2:
     channels = imshape[-1]
 
-  scale_bar_size, scale_bar_width_px, units = _round_scalebar(imshape[1], stepsize, imfract=0.33)
+  rescaleim = image.astype(np.float32)
+  if rescale == True:
+    rescaleim -= rescaleim.min()
+    rescaleim *= (1.0 / (rescaleim.max())) * 0.999
+
+  rescaleim = rescaleim.reshape((imshape[0], imshape[1], channels))
+  stepadjust = 1.0
+  if upscale_xsize is not None:
+    upscale_xsize = np.int64(upscale_xsize)
+    #aspect = np.float32(imshape[1]) / np.float32(imshape[0])
+    #upscale_ysize = np.int64(upscale_xsize / aspect)
+    zoomfact = upscale_xsize / np.float32(imshape[1])
+    rescaleim = scipyndim.zoom(rescaleim, (zoomfact, zoomfact, 1)).clip(0.0, 1.0)
+    stepadjust = 1.0 / zoomfact
+
+  imshape = rescaleim.shape
+
+  scale_bar_size, scale_bar_width_px, units = _round_scalebar(imshape[1], stepsize*stepadjust, imfract=0.33)
   #print(scale_bar_size, scale_bar_width_px, units)
   #scale_bar_height_px = np.int64(scale_bar_width_px / (16.18/2) ) # use golden ratio.
   #underbar_size = (scale_bar_height_px*3, imshape[1])
@@ -124,18 +145,10 @@ def add_scalebar(image, stepsize, rescale=True):
   underbar -= underbar.min()
   underbar *= 1.0/underbar.max()
 
-
-
   newshp = (imshape[0]+underbar_size[0], imshape[1], channels)
   scalebarim = np.zeros(newshp, dtype=np.float32)
 
-  rescaleim = image.astype(np.float32)
-  if rescale == True:
-    rescaleim -= rescaleim.min()
-    rescaleim *= (1.0 / (rescaleim.max()))*0.999
 
-
-  rescaleim = rescaleim.reshape((imshape[0], imshape[1], channels))
   scalebarim[0:imshape[0], 0:imshape[1], :] = rescaleim
   for i in range(channels):
     scalebarim[imshape[0]:, 0:imshape[1], i] = underbar

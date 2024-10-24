@@ -32,12 +32,14 @@ import matplotlib.colors as pltcolors
 import matplotlib.pyplot as plt
 
 import numpy as np
+import scipy.ndimage as scipyndim
 
 from pyebsdindex import rotlib
 from pyebsdindex.EBSDImage import scalarimage
 
 
-def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize = None, addscalebar=False):
+def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize = None,
+            addscalebar=False, **kwargs):
   nphase = len(indexer.phaseLib)
 
   npoints = ebsddata.shape[-1]
@@ -78,8 +80,9 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
   #   npts = int(xsize*ysize)
   ipf_out[0:npts*3] = ipfout[0:npts,:].flatten()
   ipf_out = ipf_out.reshape(ysize, xsize, 3)
+
   if addscalebar == True:
-    ipf_out = scalarimage.add_scalebar(ipf_out, indexer.fID.xStep, rescale=False)
+    ipf_out = scalarimage.addscalebar(ipf_out, indexer.fID.xStep, rescale=False, **kwargs)
   return ipf_out
 
 
