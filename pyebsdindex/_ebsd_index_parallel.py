@@ -276,10 +276,8 @@ def index_pats_distributed(
         npats = npatsTotal - patstart
 
     # Now set up the cluster with the indexer
-    n_cpu_nodes = int(os.cpu_count())
-    # int(sum([ r['Resources']['CPU'] for r in ray.nodes()]))
-    if ncpu != -1:
-        n_cpu_nodes = int(ncpu)
+
+
 
 
     ngpu = None
@@ -308,6 +306,15 @@ def index_pats_distributed(
     if indexer.bandDetectPlan.useCPU == True:
         ngpu = 0
 
+    if ncpu == 0:
+        ncpu = os.cpu_count()
+    if ncpu <= 0:
+        if ngpu > 0:
+            ncpu = min(os.cpu_count(), len(indexer.phaseLib)*10) # this is a heuristic, and may be highly dependent on hardware
+        else:
+            ncpu = os.cpu_count()
+    if ncpu != -1:
+        n_cpu_nodes = int(ncpu)
 
     if ngpu > 0:
         gpuratio = (12, ngpu*4)
