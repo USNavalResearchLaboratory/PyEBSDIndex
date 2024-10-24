@@ -82,7 +82,7 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
   ipf_out = ipf_out.reshape(ysize, xsize, 3)
 
   if addscalebar == True:
-    ipf_out = scalarimage.addscalebar(ipf_out, indexer.fID.xStep, rescale=False, **kwargs)
+    ipf_out = scalarimage._addscalebar(ipf_out, indexer.fID.xStep, rescale=False, **kwargs)
   return ipf_out
 
 

@@ -86,10 +86,10 @@ def scalarimage(ebsddata, indexer, datafield='pq', xsize = None, ysize = None,
   # perform desired image resize
 
   if addscalebar == True:
-    image_out = addscalebar(image_out, indexer.fID.xStep, rescale=False, **kwargs)
+    image_out = _addscalebar(image_out, indexer.fID.xStep, rescale=False, **kwargs)
   return image_out
 
-def addscalebar(image, stepsize, rescale=True, upscale_xsize=None):
+def _addscalebar(image, stepsize, rescale=True, upscale_xsize=None):
   # image: grayscale or color image to add scale bar to.
   # stepsize: size of a pixel in microns.
   imshape = image.shape
