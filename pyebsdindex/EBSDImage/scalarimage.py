@@ -72,7 +72,7 @@ def scalarimage(ebsddata, indexer,
   else:
     norm = plt.Normalize()
 
-  if cmap == 'gray' and norescalegray == True:
+  if (cmap == 'gray' and norescalegray == True) or (addscalebar==False and norescalegray == True):
     if datafield == 'fit':
       imagedata = np.array(imagedata).clip(max(0.0, mn-4*std),mn+4*std )
     imagedata = np.array(imagedata)
@@ -80,8 +80,7 @@ def scalarimage(ebsddata, indexer,
     imagedata = np.array(norm(imagedata))
     cm = plt.colormaps[cmap]
     imagedata = cm(imagedata)
-    if cmap == 'gray':
-      imagedata = (imagedata[:,0]).squeeze()
+    
 
 
 
