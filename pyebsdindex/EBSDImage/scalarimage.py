@@ -40,10 +40,15 @@ def scalarimage(ebsddata, indexer,
                 addscalebar=False,
                 cmap='viridis',
                 norescalegray=False,
+                rescalenice = False,
                 datafieldindex=0,
                 **kwargs):
   npoints = ebsddata.shape[-1]
-  imagedata = ebsddata[-1][datafield]
+  if datafield != 'fitinv':
+    imagedata = ebsddata[-1][datafield]
+  else:
+    imagedata = ebsddata[-1]['fit']
+
   if len(imagedata.shape) > 1:
     imagedata = imagedata[:,datafieldindex]
 
@@ -67,8 +72,17 @@ def scalarimage(ebsddata, indexer,
     mn = imagedata[imagedata < 179].mean()
     std = imagedata[imagedata < 179].std()
     norm = plt.Normalize(vmin=max(0.0, mn-3*std), vmax=mn+3*std)
+  elif datafield == 'fitinv':
+    mn = imagedata[imagedata < 179].mean()
+    std = imagedata[imagedata < 179].std()
+    imagedata *= -1
+    norm = plt.Normalize(vmin= (-mn-3*std), vmax=min(0.0, -mn+3*std))
   elif datafield == 'phase':
     norm = plt.Normalize(vmin=-1)
+  elif rescalenice == True:
+    mn = imagedata.mean()
+    std = imagedata.std()
+    norm = plt.Normalize(vmin= (mn - 4 * std), vmax= (mn + 3 * std))
   else:
     norm = plt.Normalize()
 
@@ -80,7 +94,7 @@ def scalarimage(ebsddata, indexer,
     imagedata = np.array(norm(imagedata))
     cm = plt.colormaps[cmap]
     imagedata = cm(imagedata)
-    
+
 
 
 

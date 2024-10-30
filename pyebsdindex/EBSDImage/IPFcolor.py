@@ -38,7 +38,7 @@ from pyebsdindex.EBSDImage import scalebar, scalarimage
 
 
 def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize = None,
-            addscalebar=False, **kwargs):
+            addscalebar=False, graychannel=None,  **kwargs):
   nphase = len(indexer.phaseLib)
 
   npoints = ebsddata.shape[-1]
@@ -79,6 +79,18 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
   #   npts = int(xsize*ysize)
   ipf_out[0:npts*3] = ipfout[0:npts,:].flatten()
   ipf_out = ipf_out.reshape(ysize, xsize, 3)
+
+  if graychannel is not None:
+    if graychannel == 'fit':
+      gchan = 'fitinv'
+    else:
+      gchan = graychannel
+    gray = scalarimage.scalarimage(ebsddata, indexer,
+                       addscalebar=False,
+                       datafield=gchan,
+                       cmap='gray',
+                       rescalenice=True)
+    ipf_out *= gray
 
   if addscalebar == True:
     ipf_out = scalebar.addscalebar(ipf_out, indexer.fID.xStep, rescale=False, **kwargs)
