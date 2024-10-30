@@ -76,7 +76,7 @@ def scalarimage(ebsddata, indexer,
     mn = imagedata[imagedata < 179].mean()
     std = imagedata[imagedata < 179].std()
     imagedata *= -1
-    norm = plt.Normalize(vmin= (-mn-3*std), vmax=min(0.0, -mn+3*std))
+    norm = plt.Normalize(vmin= (-mn-4*std), vmax=min(0.0, -mn+3*std))
   elif datafield == 'phase':
     norm = plt.Normalize(vmin=-1)
   elif rescalenice == True:
