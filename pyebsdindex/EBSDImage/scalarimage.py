@@ -25,10 +25,7 @@ import os
 
 import matplotlib.pyplot as plt
 import scipy.ndimage as scipyndim
-#from matplotlib.font_manager import findfont, FontProperties
-#FONT = findfont(FontProperties(family='sans-serif', weight='bold'), fontext='ttf', )
 
-FONT = os.path.join(os.path.dirname(__file__), 'OpenSans-Bold.ttf')
 
 import numpy as np
 from pyebsdindex.EBSDImage import scalebar

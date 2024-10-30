@@ -35,6 +35,10 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as scipyndim
+from matplotlib.font_manager import findfont, FontProperties
+#FONT = findfont(FontProperties(family='sans-serif', weight='bold'), fontext='ttf', )
+#FONT = findfont(FontProperties(family='Dejavu Sans', style='normal', weight='bold'), fontext='ttf', )
+
 FONT = os.path.join(os.path.dirname(__file__), 'OpenSans-Bold.ttf')
 
 def addscalebar(image,
@@ -183,14 +187,16 @@ def addscalebar(image,
 
   underbarim = Image.fromarray(underbar, mode='L')
   draw = ImageDraw.Draw(underbarim)
-  fontsize = scale_bar_height_px * 1.4
+  fontsize = scale_bar_height_px * 1.4 #Open sans
+  #fontsize = scale_bar_height_px * 1.32 #dejavu sans
 
   imfont = ImageFont.truetype(FONT, fontsize)
   #imfont = ImageFont.truetype(FONT, fontsize)
   imtext = ' ' + str(scale_bar_size) + ' ' + units
   text_color = 0
   text_length = draw.textlength(imtext, imfont)
-  txoffset = (yxoffset[1]+scale_bar_width_px, yxoffset[0]-fontsize*0.35)
+  txoffset = (yxoffset[1]+scale_bar_width_px, yxoffset[0]-fontsize*0.35) #Open sans
+  #txoffset = (yxoffset[1]+scale_bar_width_px, yxoffset[0]-fontsize*0.19) #dejavu sans
   draw.text(txoffset, imtext, fill=text_color, font=imfont)
 
   underbar = np.array(underbarim, dtype=np.float32)
