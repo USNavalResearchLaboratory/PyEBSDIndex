@@ -402,15 +402,17 @@ __kernel void morphDilateKernelBF( __global const float16 *in,  __global float16
   out[(y*imszx + x)*nImChunk+z] = extremePxVal;
 }
 
-//find the minimum value in each image.  This probably could be sped up by using a work group store.
-__kernel void imageMin( __global const float16 *im1, __global float16 *imMin,
+//find the minimum and average intensity value in each image.  This probably could be sped up by using a work group store.
+__kernel void imageMinAve( __global const float16 *im1, __global float16 *imMin, __global float16 *imAve,
                         const unsigned int imszx, const unsigned int imszy, const unsigned int padx, const unsigned int pady)
   {
   const unsigned long int z = get_global_id(0);
   const unsigned long int nImChunk = get_global_size(0);
   long int indx,i, j;
   float16 cmin = (float16) (1.0e12);
+  float16 cave = (float16) (0.0); 
   float16 imVal;
+
 
   //indxz = z*imszx*imszy;
   for(j = pady; j<= imszy - pady-1; ++j){
@@ -418,14 +420,21 @@ __kernel void imageMin( __global const float16 *im1, __global float16 *imMin,
     for(i = padx; i<= imszx - padx-1; ++i){
         imVal = im1[(indx+i)*nImChunk+z];
         cmin = select(cmin, imVal, (imVal < cmin));
+        cave += imVal; 
     }   
   }
+
+  cave /= (float) ( (imszy - 2*pady) * (imszx - 2*padx)); 
+  cave -= cmin;
+  cave = select(cave, (float16) (1.0f), (cave < (float16) (1.0e-8f)) );
+  imAve[z] = cave; 
   imMin[z] = cmin;
 }
 
-// Subtract a value from an image stack, with clipping.
+// Subtract a value from an image stack, divide by average intesnsity, with clipping at 0.0.
 // The value to be subtracted are unique to each image, stored in an array in imMin
-__kernel void imageSubMinWClip( __global float16 *im1, __global const float16 *imMin,
+__kernel void imageSubMinNormWClip( __global float16 *im1, 
+  __global const float16 *imMin, __global const float16 *imAve, 
   const unsigned int imszx, const unsigned int imszy, 
   const unsigned int padx, const unsigned int pady)
   {
@@ -440,9 +449,11 @@ __kernel void imageSubMinWClip( __global float16 *im1, __global const float16 *i
   const long int indx = (x+y*imszx)*nImChunk + z;
   const float16 im1val = im1[indx];
   float16 value = im1val - imMin[z];
-  
+  value = select(value, (float16) (0.0f), (value < (float16) (0.0f)) );
+  value *= 1.0/imAve[z];
+
   //im1[indx] = (value < (float16) (0.0f)) ? (float16) (0.0f) : value;
-  im1[indx] = select(value, (float16) (0.0f), (value < (float16) (0.0f)) );
+  im1[indx] = value; 
 }
 
 
@@ -597,8 +608,7 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
     maxval[i+lnmax*z] = -1.0e12f;
   }
 
-  float aveint = 0.0;
-  long int avecounter = 0; 
+   
   //maxval1d[lnmax] = 1.0e12f; // prime the pump for sorting 
   for(j = pady; j< imszy - pady; ++j){
     indy = j*imszx;
@@ -606,14 +616,14 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
         indxy = indy+i;
 
         imVal1 = maxlocin[(indxy)*nImChunk+z];
-        imVal2 = maxvalin[(indxy)*nImChunk+z];
-        avecounter += 1;
-        aveint += imVal2; 
+        //imVal2 = maxvalin[(indxy)*nImChunk+z];
+        
+        
         if (imVal1 == 0){
           continue;
         }
         else{
-          //imVal2 = maxvalin[(indxy)*nImChunk+z];
+          imVal2 = maxvalin[(indxy)*nImChunk+z];
           
           dirtsort(&(maxval[z*lnmax]), &(maxloc[z*lnmax]), indxy, imVal2, lnmax);
         }
@@ -621,11 +631,10 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       
     }   
   }
-  aveint /= avecounter; 
+  
   // now place them in the output arrays
   for (i=0; i< lnmax; ++i){
     if (maxval[z*lnmax+i] > -1.0e6){
-      maxval[z*lnmax+i] *= 1.0/aveint; 
       //maxval[z*lnmax + i] = maxval1d[lnmax-i-1];
       indxy = maxloc[z*lnmax+i];
       x =  ( indxy % imszx );

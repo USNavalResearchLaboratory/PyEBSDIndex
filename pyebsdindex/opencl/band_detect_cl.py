@@ -458,13 +458,14 @@ class BandDetect(band_detect.BandDetect):
 
     # for each radon, get the min value
     mns = cl.Buffer(ctx,mf.READ_WRITE,size=nImCL * 4)
+    ave = cl.Buffer(ctx, mf.READ_WRITE, size=nImCL * 4)
 
-    prg.imageMin(queue,(nImChunk,1,1),None,
-                 rdnConv_gpu, mns,np.uint32(shp[1]),np.uint32(shp[0]),
+    prg.imageMinAve(queue,(nImChunk,1,1),None,
+                 rdnConv_gpu, mns, ave, np.uint32(shp[1]),np.uint32(shp[0]),
                  np.uint32(self.padding[1]),np.uint32(self.padding[0]))
     # subtract the min value, clipping to 0.
-    prg.imageSubMinWClip(queue,(np.int32(shp[1]), np.int32(shp[0]),nImChunk),None,
-                     rdnConv_gpu,mns,np.uint32(shp[1]),np.uint32(shp[0]),
+    prg.imageSubMinNormWClip(queue,(np.int32(shp[1]), np.int32(shp[0]),nImChunk),None,
+                     rdnConv_gpu,mns, ave, np.uint32(shp[1]),np.uint32(shp[0]),
                      np.uint32(0),np.uint32(0))
 
 
