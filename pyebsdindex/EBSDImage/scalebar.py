@@ -35,24 +35,35 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as scipyndim
-from matplotlib.font_manager import findfont, FontProperties
-#FONT = findfont(FontProperties(family='sans-serif', weight='bold'), fontext='ttf', )
-#FONT = findfont(FontProperties(family='Dejavu Sans', style='normal', weight='bold'), fontext='ttf', )
 
-FONT = os.path.join(os.path.dirname(__file__), 'OpenSans-Bold.ttf')
+
+from matplotlib.font_manager import findfont, FontProperties
+FONT = 'OpenSans-Bold'
+if FONT !=  'OpenSans-Bold':
+  FONTPATH = findfont(FontProperties(family='Dejavu Sans', style='normal', weight='bold'), fontext='ttf', )
+  FONTPATH = findfont(FontProperties(family='sans-serif', weight='bold'), fontext='ttf', )
+else:
+  FONTPATH = os.path.join(os.path.dirname(__file__), 'OpenSans-Bold.ttf')
 
 def addscalebar(image,
                 stepsize=1.0,
                 addminor = False,
                 rescale=True,
-                upscale_xsize=None,
+                zoom_xsize=None,
+                zoom_kwargs = None,
                 **kwargs):
-  """Automatically add a scalebar to the bottom of a micrograph
+  """Automatically add a scale bar to the bottom of a micrograph
   when given the dimension of a pixel within the image in microns. It will automatically
   choose the appropriate length of the scale bar, and will autoscale the units from
   nm, μm, or mm depending on the image width and provided ``stepsize``.
   The microbar is burned-in within the rasterized array, or in otherwords, it is not
-  a vectorized shapes/text.
+  a vectorized shapes/text. ``scalebar`` has the opinion that micron/scale bars should not
+  cover up the image, and thus will always place the bar under the image.
+
+  For closer integrration with matplotlib, and many more options includeing putting
+  the scale bar on top of the image, the user is pointed towards
+  the ``matplotlib-scalebar`` package.
+
 
   Parameters
       ----------
@@ -72,7 +83,7 @@ def addscalebar(image,
           ``[0,1.0]``.  If set to ``False`` the background of the scale
           bar area will be set to the maximum data value, and the bar/text
           will be set to the minumum value.
-      upscale_xsize: int, optional
+      zoom_xsize: int, optional
           Set this to be the output array number of columns in pixels.  This can be useful
           for small images, with < 500 pixels across the image.  In these cases the text
           for the scalebar can become pixelated. The image will be interpolated
@@ -83,6 +94,11 @@ def addscalebar(image,
           Note: setting ``upscale_xsize`` to a value that is smaller
           than the input image number of columns will provide a down-sized image,
           and obviously data points will be removed.
+      zoom_kwargs: dict, optional
+          Optional set of kwargs that are compatible with scipy.ndimage.zoom function. The
+          deafult value is ``zoom_kwargs = {'order':0, 'grid_mode':True, 'mode':'mirror'}``
+          which sets the output image to be a nearest-neighbor interpolation.  Changing order
+          to > 0 (int) will use bicubic interpolation for the output image.
 
   Returns
   -------
@@ -107,6 +123,7 @@ def addscalebar(image,
 
   Notes:
   -------
+
   If the input image has four channels, with the notion that the channels
   represnet ``[R,G,B,A]`` where ``A`` is the alpha channel, the current behavior of
   ```addscalebar``` will output the bar/text as ``[0.0,0.0,0.0,0.0]`` (black, transparent)
@@ -135,13 +152,16 @@ def addscalebar(image,
 
   rescaleim = rescaleim.reshape((imshape[0], imshape[1], channels))
   stepadjust = 1.0
-  if upscale_xsize is not None:
-    upscale_xsize = np.int64(upscale_xsize)
+  if zoom_xsize is not None:
+    zoom_xsize = np.int64(zoom_xsize)
     #aspect = np.float32(imshape[1]) / np.float32(imshape[0])
     #upscale_ysize = np.int64(upscale_xsize / aspect)
-    zoomfact = upscale_xsize / np.float32(imshape[1])
+    zoomfact = zoom_xsize / np.float32(imshape[1])
+    if zoom_kwargs is None:
+      zoom_kwargs = {'order':0, 'grid_mode':True, 'mode':'mirror'}
     rescaleim = scipyndim.zoom(rescaleim, (zoomfact, zoomfact, 1),
-                               order=0, grid_mode=True, mode='mirror')
+                               **zoom_kwargs)
+                               #order=0, grid_mode=True, mode='mirror')
     stepadjust = 1.0 / zoomfact
 
   imshape = rescaleim.shape
@@ -190,7 +210,7 @@ def addscalebar(image,
   fontsize = scale_bar_height_px * 1.4 #Open sans
   #fontsize = scale_bar_height_px * 1.32 #dejavu sans
 
-  imfont = ImageFont.truetype(FONT, fontsize)
+  imfont = ImageFont.truetype(FONTPATH, fontsize)
   #imfont = ImageFont.truetype(FONT, fontsize)
   imtext = ' ' + str(scale_bar_size) + ' ' + units
   text_color = 0
