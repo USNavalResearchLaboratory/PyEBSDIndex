@@ -719,8 +719,9 @@ class BandDetect():
       zorder=1,
       aspect='auto'
     )
-    width = bandData['width'][-1, :]
-    width /= width.min()
+    width = (bandData['width'][-1, :]).clip(1e-4)
+    width /= (width.min())
+    
     width *= 2.0
     xplt = np.squeeze(
       180.0 - np.interp(bandData['aveloc'][-1, :, 1] + 0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
