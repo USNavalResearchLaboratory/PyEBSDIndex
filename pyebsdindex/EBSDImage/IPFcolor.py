@@ -34,11 +34,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from pyebsdindex import rotlib
-from pyebsdindex.EBSDImage import scalebar, scalarimage
+from pyebsdindex.EBSDImage import micronbar, scalarimage
 
 
 def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize = None,
-            addscalebar=False, graychannel=None,  **kwargs):
+            addmicronbar=False, graychannel=None,  **kwargs):
   nphase = len(indexer.phaseLib)
 
   npoints = ebsddata.shape[-1]
@@ -86,14 +86,14 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
     else:
       gchan = graychannel
     gray = scalarimage.scalarimage(ebsddata, indexer,
-                       addscalebar=False,
+                       addmicronbar=False,
                        datafield=gchan,
                        cmap='gray',
                        rescalenice=True)
     ipf_out *= gray
 
-  if addscalebar == True:
-    ipf_out = scalebar.addscalebar(ipf_out, indexer.fID.xStep, rescale=False, **kwargs)
+  if addmicronbar == True:
+    ipf_out = micronbar.addmicronbar(ipf_out, indexer.fID.xStep, rescale=False, **kwargs)
   return ipf_out
 
 

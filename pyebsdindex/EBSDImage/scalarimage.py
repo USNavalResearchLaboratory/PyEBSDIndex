@@ -28,13 +28,13 @@ import scipy.ndimage as scipyndim
 
 
 import numpy as np
-from pyebsdindex.EBSDImage import scalebar
+from pyebsdindex.EBSDImage import micronbar
 
 def scalarimage(ebsddata, indexer,
                 datafield='pq',
                 xsize = None,
                 ysize = None,
-                addscalebar=False,
+                addmicronbar=False,
                 cmap='viridis',
                 norescalegray=False,
                 rescalenice = False,
@@ -83,9 +83,7 @@ def scalarimage(ebsddata, indexer,
   else:
     norm = plt.Normalize()
 
-  if (cmap == 'gray' and norescalegray == True) or (addscalebar==False and norescalegray == True):
-    if datafield == 'fit':
-      imagedata = np.array(imagedata).clip(max(0.0, mn-4*std),mn+4*std )
+  if (cmap == 'gray' and norescalegray == True) or (addmicronbar == False and norescalegray == True):
     imagedata = np.array(imagedata)
   else:
     imagedata = np.array(norm(imagedata))
@@ -113,7 +111,7 @@ def scalarimage(ebsddata, indexer,
     image_out[0:npts] = imagedata[0:npts].flatten()
     image_out = image_out.reshape(ysize, xsize)
 
-  if addscalebar == True:
-    image_out = scalebar.addscalebar(image_out, indexer.fID.xStep, rescale=False, **kwargs)
+  if addmicronbar == True:
+    image_out = micronbar.addmicronbar(image_out, indexer.fID.xStep, rescale=False, **kwargs)
   return image_out
 

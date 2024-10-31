@@ -45,13 +45,13 @@ if FONT !=  'OpenSans-Bold':
 else:
   FONTPATH = os.path.join(os.path.dirname(__file__), 'OpenSans-Bold.ttf')
 
-def addscalebar(image,
-                stepsize=1.0,
-                addminor = False,
-                rescale=True,
-                zoom_xsize=None,
-                zoom_kwargs = None,
-                **kwargs):
+def addmicronbar(image,
+                 stepsize=1.0,
+                 addminor = False,
+                 rescale=True,
+                 zoom_xsize=None,
+                 zoom_kwargs = None,
+                 **kwargs):
   """Automatically add a scale bar to the bottom of a micrograph
   when given the dimension of a pixel within the image in microns. It will automatically
   choose the appropriate length of the scale bar, and will autoscale the units from
@@ -115,9 +115,9 @@ def addscalebar(image,
   >>> import os
   >>> import numpy as np
   >>> import matplotlib.pyplot as plt
-  >>> from pyebsdindex.EBSDImage import scalebar
+  >>> from pyebsdindex.EBSDImage import micronbar
   >>> a = np.random.random((800, 1024))
-  >>> abar = scalebar.addscalebar(a, 0.15)
+  >>> abar = micronbar.addmicronbar(a, 0.15)
   >>> plt.imsave(os.path.expanduser('~/random_image.png'), abar, cmap='gray')
   >>> plt.imshow(abar)
 
@@ -132,9 +132,9 @@ def addscalebar(image,
   >>> import os
   >>> import numpy as np
   >>> import matplotlib.pyplot as plt
-  >>> from pyebsdindex.EBSDImage import scalebar
+  >>> from pyebsdindex.EBSDImage import micronbar
   >>> a = np.random.random((800, 1024, 4))
-  >>> abar = scalebar.addscalebar(a, 0.15)
+  >>> abar = micronbar.addmicronbar(a, 0.15)
   >>> abar[a.shape[0]:, :, 3] = 1.0  # if ``a`` is [R,G,B,A] ubyte8, replace with 255
   >>> plt.imsave(os.path.expanduser('~/random_image.png'), abar, cmap='gray')
   >>> plt.imshow(abar)
@@ -166,7 +166,7 @@ def addscalebar(image,
 
   imshape = rescaleim.shape
 
-  scale_bar_size, scale_bar_width_px, units = _round_scalebar(imshape[1], stepsize*stepadjust)#, imfract=0.33)
+  scale_bar_size, scale_bar_width_px, units = _round_micronbar(imshape[1], stepsize * stepadjust)#, imfract=0.33)
   #print(scale_bar_size, scale_bar_width_px, units)
   #scale_bar_height_px = np.int64(scale_bar_width_px / (16.18/2) ) # use golden ratio.
   #underbar_size = (scale_bar_height_px*3, imshape[1])
@@ -236,7 +236,7 @@ def addscalebar(image,
   scalebarim = np.squeeze(scalebarim)
   return scalebarim
 
-def _round_scalebar(image_width, pixel_width, imfract=0.333):
+def _round_micronbar(image_width, pixel_width, imfract=0.333):
   """ Internal function that when given the number of columns in an image, and the
   width of a pixel in microns, will return the appropriate scalebar for the image from
   1 nm -- 500 mm.
