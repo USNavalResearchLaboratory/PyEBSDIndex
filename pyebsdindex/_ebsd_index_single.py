@@ -375,6 +375,7 @@ class EBSDIndexer:
                 rSigma=rSigma,
                 rhoMaskFrac=rhoMaskFrac,
                 nBands=nBands,
+                nPhases = len(self.phaseLib),
                 **kwargs
             )
         else:
@@ -532,16 +533,23 @@ class EBSDIndexer:
 
         return indxData, banddata, patstart, npats
 
-    def getmatchedpole(self, banddata, float_out=False):
+    def getmatchedpole(self, ebsddata, banddata, phasenumber = -1, float_out=False):
         """Return the pole from the library that was matched to the
         detected band.
 
         Parameters
         ----------
+        ebsddata: numpy.ndarray
+            Output structured ebsd data array from
+            :meth:`~pyebsdindex.ebsd_index.index_pats` or
+            :meth:`~pyebsdindex.ebsd_index.index_pats_distributed`.
         banddata : numpy.ndarray
             Output structured band data array from
             :meth:`~pyebsdindex.ebsd_index.index_pats` or
             :meth:`~pyebsdindex.ebsd_index.index_pats_distributed`.
+        phasenumber: int, optional
+            Default( -1). Set this to which phase the poles should be returned for.
+            The default is to return the match to the best-fit phase.
         float_out : bool, optional
             Default (False) is to return an array of ints with Miller
             indices. If set to True, then floats, with unit length, will
@@ -557,6 +565,14 @@ class EBSDIndexer:
             the float_out is set to True, then the output will be
             floating point vectors of length one, within the sample
             Cartesian reference frame.
+
+            If the pole was unindexed, then for that entry, this will return
+            [0,0,0].  Note - this might be a single band that was unindexed.
+            If all bands return unindexed, this might be because the pattern did
+            not have enough bands to index, or because another phase forced an early
+            exit (solution was good enough that no other phases were tested).
+            Setting ``EBSDIndexer.nband_earlyexit`` to a value that is greater than the
+            number of bands will avoid this.
         """
         nphases = len(self.phaseLib)
 
@@ -577,13 +593,31 @@ class EBSDIndexer:
         else:
             polekey = 'polesCart'
 
-        for ph in range(nphases):
-            wh = np.nonzero(bnddat['band_match_index'][:,0,0] == ph)[0]
-            if len(wh) == 0:
-                continue
-            pindex = bnddat['band_match_index'][wh,:, 1]
-            poles = self.phaseLib[ph].completelib[polekey][pindex,:]
-            polesout[wh, :, :] = poles
+        if phasenumber == -1: # use the best-fit phase ...
+            for ph in range(nphases):
+                #wh = np.nonzero(bnddat['band_match_index'][:,0,0] == ph)[0]
+                wh = np.nonzero(ebsddata[-1, :]['phase'] == ph)[0]
+                if len(wh) == 0:
+                    continue
+                pindex = (bnddat[wh]['band_match_index'][:,:, ph]).flatten()
+                wh2 = np.nonzero(pindex >= 0)[0]
+                if len(wh2) == 0:
+                    continue
+
+                poles = self.phaseLib[ph].completelib[polekey][pindex[wh2],:]
+                temp = np.zeros((pindex.shape[0],3))
+
+                temp[wh2,:] = poles
+                polesout[wh, :, :] = temp.reshape(wh.shape[0], nbands, 3)
+        else:
+            pindex = (bnddat[:]['band_match_index'][:,:, phasenumber]).flatten()
+            wh2 = np.nonzero(pindex >= 0)[0]
+            if len(wh2) > 0:
+                poles = self.phaseLib[phasenumber].completelib[polekey][pindex[wh2], :]
+                temp = np.zeros((npoints*nbands, 3))
+                temp[wh2, :] = poles
+                polesout[:, :, :] = temp.reshape(npoints,nbands, 3)
+
 
         if float_out is False:
             polesout = np.round(polesout).astype(int)
@@ -637,7 +671,8 @@ class EBSDIndexer:
         nPhases = len(self.phaseLib)
         q = np.zeros((nPhases, npoints, 4))
         indxData = np.zeros((nPhases + 1, npoints), dtype=self.dataTemplate)
-        bandmatchindex = np.zeros((nPhases, npoints,shpBandDat[-1],2), dtype=np.int32)-100
+        #bandmatchindex = np.zeros((nPhases, npoints,shpBandDat[-1],2), dtype=np.int32)-100
+        bandmatchindex = np.zeros((npoints,shpBandDat[-1], nPhases), dtype=np.int32)-100
         banddataout = banddata.copy()
 
         indxData["phase"] = -1
@@ -660,7 +695,7 @@ class EBSDIndexer:
         else:
             earlyexit = self.nband_earlyexit
 
-
+        # the adj_intensity is used to weight the peaks in the quest fit.
         adj_intensity = (-1 * np.abs(banddata["rho"]) * 0.5 / rhomax + 1) * banddata["max"]
         adj_intensity *= ((banddata["theta"] > (2 * np.pi / 180)).astype(np.float32) + 0.5) / 2
         adj_intensity *= ((banddata["theta"] < (178.0 * np.pi / 180)).astype(np.float32) + 0.5) / 2
@@ -672,7 +707,9 @@ class EBSDIndexer:
 
         for j in range(len(self.phaseLib)):
 
-            indxData['pq'][j, :] = np.sum(banddata['max'] * banddata['valid'], axis=1)
+            indxData['pq'][j, :] = np.sum(banddata['max'] * banddata['valid'], axis=1) / shpBandDat[-1]
+
+
             p2do = np.ravel(np.nonzero(np.max(indxData["nmatch"], axis=0) < earlyexit)[0])
 
             if p2do.size ==0:
@@ -686,7 +723,11 @@ class EBSDIndexer:
                 matchAttempts,
                 totvotes,
             ) = self.phaseLib[j].bandindex(
-            bandnorm[p2do, ...], band_intensity=adj_intensity[p2do, ...], band_widths=banddata["width"][p2do, ...], verbose=verbose)
+                        bandnorm[p2do, ...],
+                        band_intensity=adj_intensity[p2do, ...],
+                        band_widths=banddata["width"][p2do, ...],
+                        verbose=verbose)
+
             whgood = np.nonzero(nMatch >= 3 )[0]
             if whgood.size > 0:
                 whgood2 = p2do[whgood]
@@ -697,7 +738,7 @@ class EBSDIndexer:
                 indxData["nmatch"][j, whgood2] = nMatch[whgood]
                 indxData["matchattempts"][j, whgood2] = matchAttempts[whgood, ...]
                 indxData["totvotes"][j, whgood2] = totvotes[whgood]
-                bandmatchindex[j, whgood2, ..., 1] = bandmatch[whgood, ...]
+                bandmatchindex[whgood2, ..., j] = bandmatch[whgood, ...]
 
 
 
@@ -709,7 +750,7 @@ class EBSDIndexer:
         q = q.reshape(nPhases, npoints, 4)
         indxData["quat"][0:nPhases, :, :] = q
         indxData[-1, :] = indxData[0, :]
-        banddataout['band_match_index'][:,:,:] = bandmatchindex[0,:,:,:].squeeze()
+        banddataout['band_match_index'][:,:, 0:nPhases] = bandmatchindex[:,:,:].squeeze()
         if nPhases > 1:
             for j in range(1, nPhases):
                 # indxData[-1, :] = np.where(
@@ -721,7 +762,7 @@ class EBSDIndexer:
                             > ((3.0 - indxData[-1, :]["fit"]) * indxData[-1, :]["nmatch"])
                 whbetter = np.nonzero(phasetest)
                 indxData[-1, whbetter] = indxData[j, whbetter]
-                banddataout['band_match_index'][whbetter,:] =  bandmatchindex[j,whbetter,:,:].squeeze()
+                #banddataout['band_match_index'][whbetter,:] =  bandmatchindex[j,whbetter,:,:].squeeze()
         return indxData, banddataout
 
     def _indexbandsphase_old(self, banddata, bandnorm, verbose=0):

@@ -597,7 +597,8 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
     maxval[i+lnmax*z] = -1.0e12f;
   }
 
-
+  float aveint = 0.0;
+  long int avecounter = 0; 
   //maxval1d[lnmax] = 1.0e12f; // prime the pump for sorting 
   for(j = pady; j< imszy - pady; ++j){
     indy = j*imszx;
@@ -605,11 +606,14 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
         indxy = indy+i;
 
         imVal1 = maxlocin[(indxy)*nImChunk+z];
+        imVal2 = maxvalin[(indxy)*nImChunk+z];
+        avecounter += 1;
+        aveint += imVal2; 
         if (imVal1 == 0){
           continue;
         }
         else{
-          imVal2 = maxvalin[(indxy)*nImChunk+z];
+          //imVal2 = maxvalin[(indxy)*nImChunk+z];
           
           dirtsort(&(maxval[z*lnmax]), &(maxloc[z*lnmax]), indxy, imVal2, lnmax);
         }
@@ -617,10 +621,11 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       
     }   
   }
-
+  aveint /= avecounter; 
   // now place them in the output arrays
   for (i=0; i< lnmax; ++i){
     if (maxval[z*lnmax+i] > -1.0e6){
+      maxval[z*lnmax+i] *= 1.0/aveint; 
       //maxval[z*lnmax + i] = maxval1d[lnmax-i-1];
       indxy = maxloc[z*lnmax+i];
       x =  ( indxy % imszx );
@@ -753,7 +758,7 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       iy = (float) y - iy;
       
       aveloc[z*lnmax + i] = (float2) (iy, ix); 
-      aveval[z*lnmax + i] = avetempweight/9.0;
+      aveval[z*lnmax + i] = (avetempweight/9.0);
       // band width metric
       width[z*lnmax + i] = 1.0 / (w - 0.5 * (imValyp1 + imValym1) + 1e-12) ;
 

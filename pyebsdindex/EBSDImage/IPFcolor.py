@@ -93,7 +93,7 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
     ipf_out *= gray
 
   if addmicronbar == True:
-    ipf_out = micronbar.addmicronbar(ipf_out, indexer.fID.xStep, rescale=False, **kwargs)
+    ipf_out = micronbar.addmicronbar(ipf_out, indexer.fID.xStep, rescale=True, **kwargs)
   return ipf_out
 
 

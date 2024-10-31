@@ -70,6 +70,9 @@ class BandDetect():
     rSigma=None,
     rhoMaskFrac=0.1,
     nBands=9,
+    nPhases = 10, # this is needed for later storage of the band index after indexing.
+      # in the normal process, this will get initiated to the number of phases the user has
+      # specified.  Using 10 as a "this should be big enough" placeholder.
     **kwargs
 ):
     self.patDim = None
@@ -91,6 +94,10 @@ class BandDetect():
     self.rhomask1 = None
 
     self.nBands = nBands
+    if nPhases is None:
+      nPhases = 10
+    self.nPhases = nPhases
+
     self.EDAXIQ = False
     self.backgroundsub = None
     self.patternmask = None
@@ -99,7 +106,7 @@ class BandDetect():
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
                     ('pqmax', np.float32), ('width', np.float32), ('theta', np.float32), ('rho', np.float32),
-                    ('valid', np.int8),('band_match_index', np.int32, (2))])
+                    ('valid', np.int8),('band_match_index', np.int64, (self.nPhases))])
 
 
     if (patterns is None) and (patDim is None):
@@ -253,6 +260,7 @@ class BandDetect():
       kernel = np.zeros(ksz, dtype=np.float32)
       kernel[(ksz[0]/2).astype(int),(ksz[1]/2).astype(int) ] = 1
       kernel = -1.0*scipyndim.gaussian_filter(kernel, [self.rSigma, self.tSigma], order=[2,0])
+      kernel *= 1.0/np.sum(kernel).clip(1e-12)
       self.kernel = kernel.reshape((1,ksz[0], ksz[1]))
       #self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int64)
       self.peakPad = np.array(np.around([2 * ksz[0], 2 * ksz[1]]), dtype=np.int64)
@@ -606,6 +614,7 @@ class BandDetect():
                                dtype=np.float32)  # location of the max based on the nearest neighbor interpolation
     bandData_width = np.zeros((nP,nB),dtype=np.float32) # a metric of the band width
 
+
     #nnc = np.array([-2,-1,0,1,2,-2,-1,0,1,2,-2,-1,0,1,2],dtype=np.float32)
     #nnr = np.array([-1,-1,-1,-1,-1,0,0,0,0,0,1,1,1,1,1],dtype=np.float32)
     #nnN = numba.float32(15)
@@ -613,6 +622,9 @@ class BandDetect():
     nnr = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1], dtype=np.float32)
     nnN = numba.float32(9)
     for q in range(nPats):
+      averdnpat = np.float32(np.mean(rdnConv[:,:,q]))
+      if averdnpat < np.float32(1.0e-12):
+        averdnpat = np.float32(1.0e-12)
       # rdnConv_q = np.copy(rdnConv[:,:,q])
       # rdnPad_q = np.copy(rdnPad[:,:,q])
       # lMaxRdn_q = np.copy(lMaxRdn[:,:,q])
@@ -626,7 +638,7 @@ class BandDetect():
         r = np.int32(peakLoc[0][srt[-1 - i]])
         c = np.int32(peakLoc[1][srt[-1 - i]])
         bandData_maxloc[q,i,:] = np.array([r,c])
-        bandData_max[q,i] = rdnPad[r,c,q]
+        bandData_max[q,i] = rdnPad[r,c,q] / averdnpat
         bandData_width[q, i] = 1.0 / (bandData_max[q,i] - 0.5* (rdnPad[r+1, c, q] + rdnPad[r-1, c, q]) + 1.0e-12)
 
         #center of mass peak localization
@@ -641,7 +653,7 @@ class BandDetect():
         nn = rdnConv[r - 1:r + 2,c - 1:c + 2,q].copy()
         sumnn = (np.sum(nn) + 1.e-12)
         nn /= sumnn
-        bandData_avemax[q,i] = sumnn / nnN
+        bandData_avemax[q,i] = (sumnn / nnN)/ averdnpat
         # rnn = np.sum(nn * (np.float32(r) + nnr))
         # cnn = np.sum(nn * (np.float32(c) + nnc))
         #dx = 0.125 * (2.0 * (nn[1,2] - nn[1,0]) + (nn[0,2] - nn[0,0]) + (nn[2,2] - nn[2,0]))
@@ -671,6 +683,7 @@ class BandDetect():
         cnn = c - dc
         rnn = r - rc
         bandData_aveloc[q,i,:] = np.array([rnn,cnn])
+
         bandData_valid[q,i] = 1
 
     return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc, bandData_valid, bandData_width
