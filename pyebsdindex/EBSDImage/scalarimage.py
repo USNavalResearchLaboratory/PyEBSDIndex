@@ -39,6 +39,7 @@ def scalarimage(ebsddata, indexer,
                 norescalegray=False,
                 rescalenice = False,
                 datafieldindex=0,
+                gamma=1.0,
                 **kwargs):
   npoints = ebsddata.shape[-1]
   if datafield != 'fitinv':
@@ -110,6 +111,8 @@ def scalarimage(ebsddata, indexer,
     #   npts = int(xsize*ysize)
     image_out[0:npts] = imagedata[0:npts].flatten()
     image_out = image_out.reshape(ysize, xsize)
+    
+  image_out = image_out**gamma
 
   if addmicronbar == True:
     image_out = micronbar.addmicronbar(image_out, indexer.fID.xStep, rescale=False, **kwargs)

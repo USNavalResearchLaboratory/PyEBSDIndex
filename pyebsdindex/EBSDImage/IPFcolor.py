@@ -38,7 +38,7 @@ from pyebsdindex.EBSDImage import micronbar, scalarimage
 
 
 def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize = None,
-            addmicronbar=False, graychannel=None,  **kwargs):
+            addmicronbar=False, graychannel=None, gamma=1.0, **kwargs):
   nphase = len(indexer.phaseLib)
 
   npoints = ebsddata.shape[-1]
@@ -90,7 +90,8 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
                        datafield=gchan,
                        cmap='gray',
                        rescalenice=True)
-    ipf_out *= gray
+    ipf_out *= gray**gamma
+
 
   if addmicronbar == True:
     ipf_out = micronbar.addmicronbar(ipf_out, indexer.fID.xStep, rescale=True, **kwargs)
