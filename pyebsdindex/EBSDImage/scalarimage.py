@@ -111,7 +111,7 @@ def scalarimage(ebsddata, indexer,
     #   npts = int(xsize*ysize)
     image_out[0:npts] = imagedata[0:npts].flatten()
     image_out = image_out.reshape(ysize, xsize)
-    
+
   image_out = image_out**gamma
 
   if addmicronbar == True:

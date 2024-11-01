@@ -155,10 +155,10 @@ class BandDetect(band_detect.BandDetect):
 
         blabeltime += timer() - tic1
 
-      bandData['avemax'] *= pscale[1]
-      bandData['avemax'] += pscale[0]
-      bandData['max'] *= pscale[1]
-      bandData['max'] += pscale[0]
+      #bandData['avemax'] *= pscale[1]
+      #bandData['avemax'] += pscale[0]
+      #bandData['max'] *= pscale[1]
+      #bandData['max'] += pscale[0]
       tottime = timer() - tic0
       # going to manually clear the clparams queue -- this should clear the memory of the queue off the GPU
 
