@@ -669,10 +669,11 @@ class EBSDIndexer:
         shpBandDat = banddata.shape
         npoints = int(banddata.size/(shpBandDat[-1])+0.1)
         nPhases = len(self.phaseLib)
+        nBands = shpBandDat[-1]
         q = np.zeros((nPhases, npoints, 4))
         indxData = np.zeros((nPhases + 1, npoints), dtype=self.dataTemplate)
         #bandmatchindex = np.zeros((nPhases, npoints,shpBandDat[-1],2), dtype=np.int32)-100
-        bandmatchindex = np.zeros((npoints,shpBandDat[-1], nPhases), dtype=np.int32)-100
+        bandmatchindex = np.zeros((npoints,nBands, nPhases), dtype=np.int32)-100
         banddataout = banddata.copy()
 
         indxData["phase"] = -1
@@ -696,6 +697,7 @@ class EBSDIndexer:
             earlyexit = self.nband_earlyexit
 
         # the adj_intensity is used to weight the peaks in the quest fit.
+        #adj_intensity =  banddata["max"].copy()
         adj_intensity = (-1 * np.abs(banddata["rho"]) * 0.5 / rhomax + 1) * banddata["max"]
         adj_intensity *= ((banddata["theta"] > (2 * np.pi / 180)).astype(np.float32) + 0.5) / 2
         adj_intensity *= ((banddata["theta"] < (178.0 * np.pi / 180)).astype(np.float32) + 0.5) / 2
@@ -707,7 +709,7 @@ class EBSDIndexer:
 
         for j in range(len(self.phaseLib)):
 
-            indxData['pq'][j, :] = np.sum(banddata['max'] * banddata['valid'], axis=1) / shpBandDat[-1]
+            indxData['pq'][j, :] = np.mean(banddata['max'] * banddata['valid'], axis=1) #/ shpBandDat[-1]
 
 
             p2do = np.ravel(np.nonzero(np.max(indxData["nmatch"], axis=0) < earlyexit)[0])
@@ -738,7 +740,7 @@ class EBSDIndexer:
                 indxData["nmatch"][j, whgood2] = nMatch[whgood]
                 indxData["matchattempts"][j, whgood2] = matchAttempts[whgood, ...]
                 indxData["totvotes"][j, whgood2] = totvotes[whgood]
-                bandmatchindex[whgood2, ..., j] = bandmatch[whgood, ...]
+                bandmatchindex[whgood2, ..., j] = bandmatch[whgood, ...].reshape(whgood.size,nBands )
 
 
 
@@ -750,7 +752,7 @@ class EBSDIndexer:
         q = q.reshape(nPhases, npoints, 4)
         indxData["quat"][0:nPhases, :, :] = q
         indxData[-1, :] = indxData[0, :]
-        banddataout['band_match_index'][:,:, 0:nPhases] = bandmatchindex[:,:,:].squeeze()
+        banddataout['band_match_index'][:,:, 0:nPhases] = bandmatchindex[:,:,:]#.squeeze()
         if nPhases > 1:
             for j in range(1, nPhases):
                 # indxData[-1, :] = np.where(

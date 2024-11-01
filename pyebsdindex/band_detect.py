@@ -106,7 +106,7 @@ class BandDetect():
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
                     ('pqmax', np.float32), ('width', np.float32), ('theta', np.float32), ('rho', np.float32),
-                    ('valid', np.int8),('band_match_index', np.int64, (self.nPhases))])
+                    ('valid', np.int8),('band_match_index', np.int64, (self.nPhases, ))])
 
 
     if (patterns is None) and (patDim is None):

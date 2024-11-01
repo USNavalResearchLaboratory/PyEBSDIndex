@@ -350,7 +350,7 @@ __kernel void convolution3d2d( __global const float16 *in, __constant float *ker
       {      
         pxVal = in[(yIndx+(startx - i)) * nImChunk + z];
         kVal = kern[yKIndx + i];
-        sum += pxVal*kVal;
+        sum += pxVal * ((float16) kVal);
     }
   }
   // sum = current < sum ? sum : current;
@@ -424,7 +424,7 @@ __kernel void imageMinAve( __global const float16 *im1, __global float16 *imMin,
     }   
   }
 
-  cave /= (float) ( (imszy - 2*pady) * (imszx - 2*padx)); 
+  cave /= (float16) ( (imszy - 2*pady) * (imszx - 2*padx)); 
   cave -= cmin;
   cave = select(cave, (float16) (1.0f), (cave < (float16) (1.0e-8f)) );
   imAve[z] = cave; 
@@ -450,7 +450,7 @@ __kernel void imageSubMinNormWClip( __global float16 *im1,
   const float16 im1val = im1[indx];
   float16 value = im1val - imMin[z];
   value = select(value, (float16) (0.0f), (value < (float16) (0.0f)) );
-  value *= 1.0/imAve[z];
+  value *= ((float16) (1.0))/imAve[z];
 
   //im1[indx] = (value < (float16) (0.0f)) ? (float16) (0.0f) : value;
   im1[indx] = value; 
