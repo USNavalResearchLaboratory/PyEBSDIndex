@@ -842,7 +842,7 @@ class BandIndexer():
     npats = accumulator.shape[0]
     nbands = polematch.shape[-1]
     weights = np.zeros((npats, nbands), dtype=np.float32)
-
+    #print(band_intensity)
     for p in range(npats):
       score = np.full((nbands), -1.0, np.float32)
       pmatch = np.ravel(polematch[p, :]).astype(np.int64)
@@ -862,9 +862,13 @@ class BandIndexer():
       srt = np.flip(np.argsort(score))
 
       srt6 = srt[0:min(nfit, whGood.size)]
+      #print(srt6)
       for s in srt6:
         weights[p, s] = band_intensity[p, s]
-
+      weights[p, :] /= weights[p,:].max()
+      weights[p, :] = np.exp(2*weights[p, :])-1.0
+      weights[p, :] /= weights[p, :].max()
+      #print(weights[p,:]/weights[p,:].max())
     return weights
 
   def _refine_orientation_quest(self, libpolecart, bandnorms, polesmatch, weights = None):
