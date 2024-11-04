@@ -709,8 +709,8 @@ class EBSDIndexer:
 
         for j in range(len(self.phaseLib)):
 
-            indxData['pq'][j, :] = np.mean(banddata['avemax'] * banddata['valid'], axis=1) #/ shpBandDat[-1]
-
+            indxData['pq'][j, :] = np.mean(banddata['max'] * banddata['valid'], axis=1) #/ shpBandDat[-1]
+            indxData['iq'][j, :] = np.mean(banddata['normmax'] * banddata['valid'], axis=1)  # / shpBandDat[-1]
 
             p2do = np.ravel(np.nonzero(np.max(indxData["nmatch"], axis=0) < earlyexit)[0])
 

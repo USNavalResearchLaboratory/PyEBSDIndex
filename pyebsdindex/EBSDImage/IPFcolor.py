@@ -86,10 +86,13 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
     else:
       gchan = graychannel
     gray = scalarimage.scalarimage(ebsddata, indexer,
+                       xsize=xsize,
+                       ysize=ysize,
                        addmicronbar=False,
                        datafield=gchan,
                        cmap='gray',
-                       rescalenice=True)
+                       rescalenice=True, **kwargs
+                       )
     ipf_out *= gray**gamma
 
 

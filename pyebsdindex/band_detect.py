@@ -103,8 +103,8 @@ class BandDetect():
     self.patternmask = None
     self.useCPU = True
 
-    self.dataType = np.dtype([('id', np.int32), ('max', np.float32), \
-                    ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),\
+    self.dataType = np.dtype([('id', np.int32), ('max', np.float32), ('normmax', np.float32),
+                    ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),
                     ('pqmax', np.float32), ('width', np.float32), ('theta', np.float32), ('rho', np.float32),
                     ('valid', np.int8),('band_match_index', np.int64, (self.nPhases, ))])
 
@@ -419,14 +419,16 @@ class BandDetect():
       rdnNorm = self.radonPlan.radon_faster(patterns[chnk[0]:chnk[1],:,:], self.padding, fixArtifacts=False, background=self.backgroundsub)
       rdntime += timer() - tic1
       tic1 = timer()
-      rdnConv = self.rdn_conv(rdnNorm)
+      rdnConv, imageave = self.rdn_conv(rdnNorm)
       convtime += timer()-tic1
       tic1 = timer()
       lMaxRdn= self.rdn_local_max(rdnConv)
       lmaxtime +=  timer()-tic1
       tic1 = timer()
       bandDataChunk= self.band_label(chnk[1]-chnk[0], rdnConv, rdnNorm, lMaxRdn)
+      bandDataChunk['normmax'] /= imageave.clip(1e-7)
       bandData[chnk[0]:chnk[1]] = bandDataChunk
+
       if (verbose > 1) and (chnk[1] == nPats): # need to pull the radonconv off the gpu
         rdnConv = rdnConv[:,:,0:chnk[1]-chnk[0] ]
 
@@ -542,11 +544,14 @@ class BandDetect():
 
     #print(rdnConv.min(),rdnConv.max())
     mns = (rdnConv[self.padding[0]:shprdn[1]-self.padding[0],self.padding[1]:shprdn[1]-self.padding[1],:]).min(axis=0).min(axis=0)
+    ave = np.mean(rdnConv[self.padding[0]:shprdn[1] - self.padding[0], self.padding[1]:shprdn[1] - self.padding[1],:], axis=(0,1))
+
+    ave -= mns
 
     rdnConv -= mns.reshape((1,1, shp[2]))
     rdnConv = rdnConv.clip(min=0.0)
 
-    return rdnConv
+    return rdnConv, ave
 
   def rdn_local_max(self, rdn, clparams=None, rdn_gpu=None, use_gpu=False):
 
@@ -587,6 +592,7 @@ class BandDetect():
     )
 
     bandData['max']    = bdat[0][0:nPats, :]
+    bandData['normmax'] = bdat[0][0:nPats, :]
     bandData['avemax'] = bdat[1][0:nPats, :]
     bandData['maxloc'] = bdat[2][0:nPats, :, :]
     bandData['aveloc'] = bdat[3][0:nPats, :, :]

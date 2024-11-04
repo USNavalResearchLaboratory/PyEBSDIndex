@@ -307,10 +307,11 @@ def index_pats_distributed(
         ngpu = 0
 
     if ncpu == 0:
-        ncpu = os.cpu_count()
+        ncpu = max(1,os.cpu_count()//2)
     if ncpu <= 0:
         if ngpu > 0:
-            ncpu = min(os.cpu_count(), len(indexer.phaseLib)*10) # this is a heuristic, and may be highly dependent on hardware
+            ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*10)))
+            # this is a heuristic, and may be highly dependent on hardware
         else:
             ncpu = max(1,os.cpu_count()//2)
     if ncpu != -1:

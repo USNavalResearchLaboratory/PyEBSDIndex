@@ -450,7 +450,7 @@ __kernel void imageSubMinNormWClip( __global float16 *im1,
   const float16 im1val = im1[indx];
   float16 value = im1val - imMin[z];
   value = select(value, (float16) (0.0f), (value < (float16) (0.0f)) );
-  value *= ((float16) (1.0))/imAve[z];
+  //value *= ((float16) (1.0))/imAve[z];
 
   //im1[indx] = (value < (float16) (0.0f)) ? (float16) (0.0f) : value;
   im1[indx] = value; 
