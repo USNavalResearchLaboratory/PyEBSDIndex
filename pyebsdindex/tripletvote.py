@@ -556,7 +556,9 @@ class BandIndexer():
       self._assign_bands_nb(libPolesCart, libAngTable, libFamIndx, nFam, angTol, n_band_early, bandnorms, bandRank_arg, bandFam)
 
     # check how often the indexed band matched the top voting band family.
-    acc_correct =  np.sum(np.array((polevalid > 0) & (self.completelib['familyid'][polematch] == bandFam), dtype=int),axis=1).astype(np.int32)
+    acc_correct =  np.sum(np.array((polevalid > 0) & #take valid poles
+                                   (self.completelib['familyid'][polematch.clip(0)] == bandFam), # AND with matching correctly
+                                   dtype=int),axis=1).astype(np.int32) # and sum.  
 
 
     # accumulator = accumulator[0, ...]
@@ -870,11 +872,11 @@ class BandIndexer():
       for s in srt6:
         weights[p, s] = band_intensity[p, s]
 
-
       #weights[p, :] *= 2.0/weights[p,:].max()
       #weights[p, :] = 0.5*(1+np.tanh(8.0 * (weights[p, :] - 1.0)))
+
       weights[p, :] *= 1.0 / weights[p, :].max()
-      weights[p, :] = np.exp(2*weights[p, :])-1.0
+      weights[p, :] = np.exp(2 * weights[p, :])-1.0
 
       weights[p, :] /= weights[p, :].max()
       #print(weights[p,:]/weights[p,:].max())
