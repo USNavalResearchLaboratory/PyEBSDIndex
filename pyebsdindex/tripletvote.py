@@ -854,7 +854,7 @@ class BandIndexer():
       pvalid = np.ravel(polevalid[p, :])
       whGood = (np.nonzero(pvalid > 0)[0]).astype(np.int64)
 
-      if whGood.size < 2:
+      if whGood.size < 3:
         continue
 
       acc = accumulator[p, ...]
@@ -896,7 +896,7 @@ class BandIndexer():
     weightsn = np.asarray(weights, dtype=np.float64)
     weightsn /= np.maximum(np.sum(weightsn, axis=1), 1e-12).reshape(-1, 1)
     #print(weightsn)
-    pflt = np.asarray(libpolecart[polesmatch, :], dtype=np.float64)
+    pflt = np.asarray(libpolecart[polesmatch.clip(0), :], dtype=np.float64) # using clip 0 here --> weights SHOULD be 0.0 for all unmatched
     bndnorm = np.asarray(bandnorms, dtype=np.float64)
     avequat, fit, fit_unweight = self._orientation_quest_nb(pflt, bndnorm, weightsn)
     #fit = self._fitcheck(avequat, bndnorm, pflt)
@@ -919,7 +919,7 @@ class BandIndexer():
     for p in range(npats):
 
       whgood = (np.nonzero(weights[p, :] > eps)[0]).astype(np.int64)
-      if whgood.size < 2:
+      if whgood.size < 3:
         continue
 
       wn = np.zeros((whgood.size, 1), dtype=np.float64)
@@ -1792,7 +1792,7 @@ class BandIndexer():
     for p in range(npats):
 
       whmatch = (np.nonzero(polevalid[p, :] > 0)[0]).astype(np.int64)
-      if whmatch.size < 2:
+      if whmatch.size < 3:
         continue
       # cm = np.mean(band_cm[whmatch])
 
