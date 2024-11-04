@@ -558,7 +558,7 @@ class BandIndexer():
     # check how often the indexed band matched the top voting band family.
     acc_correct =  np.sum(np.array((polevalid > 0) & #take valid poles
                                    (self.completelib['familyid'][polematch.clip(0)] == bandFam), # AND with matching correctly
-                                   dtype=int),axis=1).astype(np.int32) # and sum.  
+                                   dtype=int),axis=1).astype(np.int32) # and sum.
 
 
     # accumulator = accumulator[0, ...]
@@ -898,9 +898,9 @@ class BandIndexer():
     #print(weightsn)
     pflt = np.asarray(libpolecart[polesmatch, :], dtype=np.float64)
     bndnorm = np.asarray(bandnorms, dtype=np.float64)
-    avequat, fit = self._orientation_quest_nb(pflt, bndnorm, weightsn)
-
-    return avequat, fit
+    avequat, fit, fit_unweight = self._orientation_quest_nb(pflt, bndnorm, weightsn)
+    #fit = self._fitcheck(avequat, bndnorm, pflt)
+    return avequat, fit_unweight
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
@@ -914,6 +914,7 @@ class BandIndexer():
     qout = np.zeros((npats, 4), dtype=np.float64)
     qout[:, 0] = 1.0
     fitout = np.full((npats), np.pi, dtype=np.float64)
+    fitout_unweight = np.full((npats), np.pi, dtype=np.float64)
 
     for p in range(npats):
 
@@ -983,9 +984,10 @@ class BandIndexer():
 
       qout[p, :] = q
       fitout[p] = lam
-      # polesrot = rotlib.quat_vectorL1N(q, pflt, npoles, np.float64, p=1)
-      # pdot = np.sum(polesrot*bndnorm, axis = 1, dtype=np.float64)
-    return qout, fitout 
+
+      polesrot = rotlib.quat_vectorL1N(q, bndnorm, npoles, np.float64, p=1)
+      fitout_unweight[p] = np.mean(np.sum(polesrot*pflt, axis = 1, dtype=np.float64))
+    return qout, fitout, fitout_unweight
 
 
   @staticmethod
@@ -1763,13 +1765,22 @@ class BandIndexer():
     solSrt = np.argsort(solutionVotes)
 
     return solutions, nsolutions, solutionVotes, solSrt
-  def _fitcheck(self, q, bandnorms, cartxstalpoles):
-    bandnorms = np.atleast_2d(bandnorms)
-    cartxstalpoles = np.atleast_2d(cartxstalpoles)
-    bandnorms_xstal = rotlib.quat_vector(q, bandnorms)
-    mean_dot = np.mean(np.sum(bandnorms_xstal*cartxstalpoles, axis = 1))
+  def _fitcheck(self, quat, bandnorms, cartxstalpoles):
+
+    npat = np.int64(quat.size//4)
+    quat = quat.reshape(npat, 4)
+
+    nbands = bandnorms.shape[-2]
+    bandnorms = bandnorms.reshape(npat, nbands, 3)
+    cartxstalpoles = cartxstalpoles.reshape(npat, nbands, 3)
+
+    fitout = np.zeros((npat), dtype=np.float64)
+
+    for p in range(npat):
+      bandnorms_xstal = rotlib.quat_vector(quat[p,:], bandnorms[p,:, :])
+      fitout[p] = np.mean(np.sum(bandnorms_xstal * cartxstalpoles [p,:, :], axis = 1))
     # mean_ang = np.degrees(np.arccos(mean_dot))
-    return mean_dot
+    return fitout
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
