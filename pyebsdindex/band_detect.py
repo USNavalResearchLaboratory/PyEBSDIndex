@@ -426,7 +426,7 @@ class BandDetect():
       lmaxtime +=  timer()-tic1
       tic1 = timer()
       bandDataChunk= self.band_label(chnk[1]-chnk[0], rdnConv, rdnNorm, lMaxRdn)
-      bandDataChunk['normmax'] /= imageave.clip(1e-7)
+      bandDataChunk['normmax'] /= imageave.clip(1e-7).reshape(chnk[1]-chnk[0], 1)
       bandData[chnk[0]:chnk[1]] = bandDataChunk
 
       if (verbose > 1) and (chnk[1] == nPats): # need to pull the radonconv off the gpu
