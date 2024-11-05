@@ -118,7 +118,7 @@ class BandDetect():
         self.patDim = np.asarray(patDim)
       patternmask = None
       if 'patternmask' in kwargs :
-        patternmask = kwargs.get('patternmask')
+        self.patternmask = kwargs.get('patternmask')
 
       patternmaskindex = None
       if 'patternmaskindex' in kwargs:
@@ -126,7 +126,7 @@ class BandDetect():
       #print(patternmask)
       self.band_detect_setup(patterns, self.patDim,self.nTheta,self.nRho,\
                              self.tSigma, self.rSigma,self.rhoMaskFrac,self.nBands,
-                             patternmask = patternmask,patternmaskindex = patternmaskindex,
+                             patternmask = self.patternmask,patternmaskindex = patternmaskindex,
                              **kwargs)
 
   def band_detect_setup(self, patterns=None,patDim=None,nTheta=None,nRho=None,\
@@ -165,6 +165,10 @@ class BandDetect():
     if self.dRho is None:
       recalc_radon = True
 
+    if patternmask is not None:
+      self.patternmask = patternmask
+
+
     #recalc_radon = True
     if recalc_radon == True:
       if (self.rhoMaskFrac < 1) and (self.rhoMaskFrac > 0):
@@ -178,10 +182,10 @@ class BandDetect():
       self.radonPlan = radon_fast.Radon(imageDim=self.patDim,
                                         nTheta=self.nTheta, nRho=self.nRho,
                                         rhoMax=self.rhoMax,
-                                        mask=patternmask, maskindex=patternmaskindex)
+                                        mask=self.patternmask, maskindex=patternmaskindex)
 
-      if patternmask is not None:
-        back = np.array(patternmask > 0).astype(np.float32)
+      if self.patternmask is not None:
+        back = np.array(self.patternmask > 0).astype(np.float32)
       else:
         back = np.ones(self.patDim[-2:], dtype=np.float32)
 
