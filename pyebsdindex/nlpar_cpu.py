@@ -326,6 +326,9 @@ class NLPAR:
     sr = np.int64(self.searchradius)
     diff_offset = np.float32(self.diff_offset)
 
+    if type(diff_offset) is np.ndarray:
+      diff_offset = np.float32(diff_offset[0])
+
     if filename is not None:
       self.setfile(filepath=filename)
 
