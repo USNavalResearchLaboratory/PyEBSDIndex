@@ -107,7 +107,7 @@ class OpenClParam():
     kernel_location = path.dirname(__file__)
     warnings.filterwarnings("ignore")
     self.prg = cl.Program(self.ctx,open(path.join(kernel_location,kfile)).read()).build(options=['-cl-std=CL1.2', '-w'])
-    warnings.resetwarnings()
+    #warnings.resetwarnings()
     #print('ctx', self.gpu_id)
     return self.ctx
   def get_queue(self, gpu_id=None):
