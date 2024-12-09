@@ -105,10 +105,10 @@ class OpenClParam():
     self.ctx = cl.Context(devices = [self.gpu[self.gpu_id]])
 
     kernel_location = path.dirname(__file__)
-    with warnings.catch_warnings():
+    with warnings.catch_warnings():  # put in to supress OpenCL build warnings -- especially on NVIDIA platforms.
       warnings.simplefilter("ignore")
       self.prg = cl.Program(self.ctx,open(path.join(kernel_location,kfile)).read()).build(options=['-cl-std=CL1.2', '-w'])
-    #warnings.resetwarnings()
+
     #print('ctx', self.gpu_id)
     return self.ctx
   def get_queue(self, gpu_id=None):
