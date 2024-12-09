@@ -209,7 +209,7 @@ def addmicronbar(image,
   draw = ImageDraw.Draw(underbarim)
   fontsize = scale_bar_height_px * 1.4 #Open sans
   #fontsize = scale_bar_height_px * 1.32 #dejavu sans
-
+  fontsize = int(round(fontsize))
   imfont = ImageFont.truetype(FONTPATH, fontsize)
   #imfont = ImageFont.truetype(FONT, fontsize)
   imtext = ' ' + str(scale_bar_size) + ' ' + units
