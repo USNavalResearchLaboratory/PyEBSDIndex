@@ -55,7 +55,8 @@ class NLPAR(nlpar_cpu.NLPAR):
     return self.calcnlpar_cl(**kwargs)
 
 
-  def calcsigma(self,nn=1, saturation_protect=True,automask=True, return_nndist=False, **kwargs):
+  def calcsigma(self,nn=1, saturation_protect=True,automask=True, stem_scale=False,
+                return_nndist=False, **kwargs):
     self.sigmann = nn
     if self.sigmann > 7:
       print("Sigma optimization search limited to a search radius <= 7")
@@ -65,7 +66,9 @@ class NLPAR(nlpar_cpu.NLPAR):
 
     sig =  self.calcsigma_cl(nn=nn,
                             saturation_protect=saturation_protect,
-                            automask=automask, **kwargs)
+                            automask=automask,
+                            stem_scale = stem_scale,
+                            **kwargs)
     if return_nndist == True:
       return sig
     else:
@@ -81,7 +84,9 @@ class NLPAR(nlpar_cpu.NLPAR):
                                      saturation_protect=saturation_protect, automask=automask, **kwargs)
 
   def opt_lambda_cl(self, saturation_protect=True, automask=True, backsub=False,
-                 target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True, **kwargs):
+                 target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True,
+                 stem_scale = False,
+                 **kwargs):
 
     target_weights = np.asarray(target_weights)
 
@@ -105,7 +110,8 @@ class NLPAR(nlpar_cpu.NLPAR):
     dthresh = np.float32(dthresh)
     lamopt_values = []
 
-    sigma, d2, n2 = self.calcsigma(nn=1, saturation_protect=saturation_protect, automask=automask, normalize_d=True,
+    sigma, d2, n2 = self.calcsigma(nn=1, saturation_protect=saturation_protect, automask=automask,
+                                   stem_scale=stem_scale, normalize_d=True,
                                    return_nndist=True, **kwargs)
 
     #sigmapad = np.pad(sigma, 1, mode='reflect')
@@ -133,7 +139,9 @@ class NLPAR(nlpar_cpu.NLPAR):
     return lamopt_values.flatten()
 
 
-  def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True, normalize_d=False, gpu_id = None, verbose = 2, **kwargs):
+  def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True,
+                   stem_scale = False,
+                   normalize_d=False, gpu_id = None, verbose = 2, **kwargs):
     self.sigmann = nn
     if self.sigmann > 7:
       print("Sigma optimization search limited to a search radius <= 7")
@@ -236,6 +244,10 @@ class NLPAR(nlpar_cpu.NLPAR):
 
         data, xyloc = patternfile.read_data(patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
                                           convertToFloat=False, returnArrayOnly=True)
+        if stem_scale is True:
+          data = data - data.min() + 1
+          data = np.log(data)
+
 
         mxval = data.max()
         if saturation_protect == False:

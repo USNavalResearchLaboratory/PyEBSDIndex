@@ -1598,8 +1598,10 @@ class DM5(HDF5PatFile):
       # self.hexflag = np.int32(headerpath['Grid Type'][()][0] == 'HexGrid')
 
       ####### PLACE HOLDERS #################
-      self.xStep = 1.0 #np.float32(headerpath['X Step'][()][0])
-      self.yStep = 1.0 #np.float32(headerpath['Y Step'][()][0])
+      #self.xStep = 1.0 #np.float32(headerpath['X Step'][()][0])
+      #self.yStep = 1.0 #np.float32(headerpath['Y Step'][()][0])
+      self.xStep = ((f[self.h5patdatpth].parent)["Calibrations/Dimension/[2]"]).attrs['Scale'] #np.float32(headerpath['X Step'][()][0])
+      self.yStep = ((f[self.h5patdatpth].parent)["Calibrations/Dimension/[3]"]).attrs['Scale']
 
     return 0  # note this function uses multiple returns
 
@@ -1637,15 +1639,16 @@ class DM5(HDF5PatFile):
 
 
       readpats = np.zeros((nPatToRead, self.patternH, self.patternW))
-      readindex = np.arange(patStart, nPatToRead, dtype=np.int64)
+      readindex = np.arange(patStart, patStart+nPatToRead, dtype=np.int64)
       readindexX = readindex % self.nCols
       readindexY = readindex // self.nCols
       patterndset = f[self.h5patdatpth]
+
       for indx in range(nPatToRead):
         readpats[indx, :, :] = np.array(patterndset[readindexY[indx], readindexX[indx], :, :])
 
       readpats = readpats.reshape(nPatToRead, self.patternH, self.patternW)
-      f.close()
+
       yx = np.unravel_index(np.arange(patStart, patStart + nPatToRead), (self.nRows, self.nCols))
 
       xyloc = np.array([yx[1], yx[0]]).T.copy().astype(np.float32)
@@ -1681,20 +1684,22 @@ class DM5(HDF5PatFile):
       xyloc = np.zeros([np.int64(ncolread * nrowread), 2], dtype=np.float32)
 
       patterndset = f[self.h5patdatpth]
+      #print(rowstart, nrowread, colstart, ncolread)
+      patterns = np.array(patterndset[int(rowstart):int(rowstart+nrowread),
+                                      int(colstart):int(colstart+ncolread), :, :])
 
-      patterns = np.array(patterndset[rowstart:rowstart+nrowread,colstart:colstart+ncolread, :, :])
-      f.close()
       patterns = patterns.astype(typeout)
+      patterns = patterns.reshape(ncolread*nrowread, self.patternH, self.patternW)
 
       rng = ncolread*nrowread + colstart+(rowstart*self.nCols)
-      yx = np.unravel_index(np.arange(rng), (self.nRows, self.nCols))
+      yx = np.unravel_index(np.arange(int(rng)), (self.nRows, self.nCols))
 
       xyloc = np.array([yx[1], yx[0]]).T.copy().astype(np.float32)
       xyloc[:, 0] -= self.nCols * 0.5
       xyloc[:, 1] -= self.nRows * 0.5
       xyloc[:, 0] *= self.xStep
       xyloc[:, 1] *= self.yStep
-
+    f.close()
     if returnArrayOnly == True:
       return patterns, xyloc
     else:  # package this up in an EBSDPatterns Object
@@ -1714,3 +1719,90 @@ class DM5(HDF5PatFile):
       patsout.patterns = patterns
       patsout.xyLocations = xyloc
       return patsout  # note this function uses multiple return statements
+
+  def write_data(self, newpatterns=None, patStartCount = [0,-1], writeHead=False,
+                 flt2int='None', scalevalue = 0.98, maxScale = None):
+    writeblank = False
+
+    if not os.path.isfile(Path(self.filepath).expanduser().resolve()): # file does not exist
+      writeHead = True
+      writeblank = True
+
+    if writeHead==True:
+      self.write_header(writeBlank=writeblank)
+
+    try:
+      f = h5py.File(Path(self.filepath).expanduser(), 'r+')
+    except:
+      print("File Not Found:", str(Path(self.filepath)))
+      return -1
+
+    if isinstance(newpatterns,EBSDPatterns):
+      pats = newpatterns.patterns
+      npats = newpatterns.nPatterns
+    elif isinstance(newpatterns, np.ndarray):
+      shp = newpatterns.shape
+      ndim = newpatterns.ndim
+      if ndim == 2:
+        pats = newpatterns.reshape(1,shp[0], shp[1])
+      elif ndim == 3:
+        pats = newpatterns
+      npats = pats.shape[0]
+    max = pats.max()
+
+    if maxScale is not None:
+      max = maxScale
+
+    pStartEnd = np.asarray(patStartCount)
+    # npats == number of patterns in the newpatterns
+    # self.nPatterns == number of patterns in the file
+    # nPats to write == number of patterns to write out
+    typewrite = self.filedatatype
+    pat2write = pat_flt2int(pats, typeout=typewrite, method=flt2int, scalevalue=scalevalue, maxScale=None)
+
+    if pStartEnd.ndim == 1:  # write a continuous set of patterns.
+      patStart = np.int64(patStartCount[0])
+      nPatToWrite = np.int64(patStartCount[-1])
+      if nPatToWrite == -1:
+        nPatToWrite = npats
+      if nPatToWrite == 0:
+        nPatToWrite = 1
+      if (patStart + nPatToWrite) > self.nPatterns:
+        nPatToWrite = self.nPatterns - patStart
+
+
+
+      readindex = np.arange(patStart, patStart + nPatToWrite, dtype=np.int64)
+      readindexX = readindex % self.nCols
+      readindexY = readindex // self.nCols
+      patterndset = f[self.h5patdatpth]
+
+      for indx in range(nPatToWrite):
+        patterndset[readindexY[indx], readindexX[indx], :, :] = pat2write[indx, :, :]
+
+
+    elif pStartEnd.ndim == 2: # write a slab of patterns.
+        colstart = np.int64(pStartEnd[0,0])
+        ncolwrite = np.int64(pStartEnd[1,0])
+        rowstart = np.int64(pStartEnd[0,1])
+        nrowwrite = np.int64(pStartEnd[1,1])
+
+        patStart = [colstart, rowstart]
+        if ncolwrite < 0:
+          ncolwrite = np.int64(self.nCols - colstart)
+        if nrowwrite < 0:
+          nrowwrite = np.int64(self.nRows - rowstart)
+
+        if (colstart+ncolwrite) > self.nCols:
+          ncolwrite = np.int64(self.nCols - colstart)
+
+        if (rowstart+nrowwrite) > self.nRows:
+          nrowwrite = np.int64(self.nRows - rowstart)
+
+        patterndset = f[self.h5patdatpth]
+
+        pat2write = pat2write.reshape(nrowwrite, ncolwrite, self.patternH, self.patternW)
+
+        patterndset[int(rowstart):int(rowstart + nrowwrite),
+                            int(colstart):int(colstart + ncolwrite), :, :] = pat2write
+    f.close()

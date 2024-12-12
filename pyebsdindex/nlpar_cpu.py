@@ -191,7 +191,9 @@ class NLPAR:
       return None
 
   def opt_lambda(self,chunksize=0,saturation_protect=True,automask=True, backsub = False,
-                target_weights=(0.5, 0.34, 0.25), dthresh=0.0, autoupdate=True, verbose = 2, **kwargs):
+                target_weights=(0.5, 0.34, 0.25), dthresh=0.0, autoupdate=True,
+                stem_scale = False,
+                verbose = 2, **kwargs):
 
     target_weights = np.asarray(target_weights)
 
@@ -271,6 +273,9 @@ class NLPAR:
         #back = np.mean(data, axis=0)
         #back -= np.mean(back)
         #data -= back
+      if stem_scale is True:
+        data = data-data.min() + 1
+        data = np.log(data)
       data = data.reshape(shp[0], phw)
 
       rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
@@ -286,7 +291,7 @@ class NLPAR:
       for tw in target_weights:
         lam = 1.0
         lambopt1 = opt.minimize(loptfunc,lam,args=(d2,tw,dthresh),method='Nelder-Mead',
-                                bounds = [[0.001, 10.0]],options={'fatol': 0.0001})
+                                bounds = [[0.001, 20.0]],options={'fatol': 0.0001})
         lamopt_values_chnk.append(lambopt1['x'])
 
 
@@ -305,7 +310,8 @@ class NLPAR:
       self.sigma = sigma
     return np.mean(lamopt_values, axis = 0).flatten()
 
-  def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
+  def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None,
+               saturation_protect=True, automask=True, stem_scale = False,
                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,verbose=2, diff_offset=None,
                 **kwargs):
 
@@ -417,6 +423,10 @@ class NLPAR:
       rowcountread = np.int64(rowend-rowstartread)
       data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
+      if stem_scale is True:
+        datamin = data.min()
+        data = data - datamin + 1
+        data = np.log(data)
 
       shpdata = data.shape
 
@@ -444,6 +454,10 @@ class NLPAR:
       dataout = dataout[j-rowstartread:, :, : ]
       shpout = dataout.shape
       dataout = dataout.reshape(shpout[0]*shpout[1], pheight, pwidth)
+      if stem_scale is True:
+        dataout = np.exp(dataout)-1+datamin
+
+
       if rescale == True:
         for i in range(dataout.shape[0]):
           temp = dataout[i,:,:]
@@ -466,7 +480,7 @@ class NLPAR:
     numba.set_num_threads(nthreadpos)
     return str(patternfileout.filepath)
 
-  def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True):
+  def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True, stem_scale=False):
     self.sigmann = nn
     patternfile = self.getinfileobj()
 
@@ -499,13 +513,17 @@ class NLPAR:
     colstartcount = np.asarray([0,ncols],dtype=np.int64)
 
     for j in range(0,nrows,chunksize):
-      rowstartread = np.int64(max(0, j-nn))
+      rowstartread = np.int64(max(0, np.int64(j)-np.int64(nn)))
       rowend = min(j + chunksize+nn,nrows)
       if (rowend - rowstartread) < (3):
         rowstartread = np.int64(max(0, rowend - (3)))
       rowcountread = np.int64(rowend-rowstartread)
+      print(rowstartread, ncols, rowcountread, rowstartread+rowcountread)
       data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
                                         convertToFloat=True,returnArrayOnly=True)
+      if stem_scale is True:
+        data = data - data.min() + 1
+        data = np.log(data)
 
       shp = data.shape
       data = data.reshape(data.shape[0], phw)

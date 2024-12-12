@@ -53,7 +53,9 @@ class NLPAR(nlpar_cl.NLPAR):
   def calcnlpar(self, **kwargs):
     return self.calcnlpar_clray(**kwargs)
 
-  def calcsigma(self, nn=1, saturation_protect=True, automask=True, return_nndist=False, **kwargs):
+  def calcsigma(self, nn=1, saturation_protect=True, automask=True, return_nndist=False,
+                stem_scale=False,
+                **kwargs):
     if self.sigmann > 7:
       print("Sigma optimization search limited to a search radius <= 7")
       print("The search radius has been clipped to 7")
@@ -62,7 +64,9 @@ class NLPAR(nlpar_cl.NLPAR):
 
     sig = self.calcsigma_clray(nn=nn,
                             saturation_protect=saturation_protect,
-                            automask=automask, **kwargs)
+                            automask=automask,
+                            stem_scale = stem_scale,
+                            **kwargs)
     if return_nndist == True:
       return sig
     else:
@@ -75,7 +79,8 @@ class NLPAR(nlpar_cl.NLPAR):
   def calcsigma_clsq(self, **kwargs):
     return nlpar_cl.NLPAR.calcsigma_cl(self, **kwargs)
 
-  def calcsigma_clray(self, nn=1, saturation_protect=True, automask=True, normalize_d=False,
+  def calcsigma_clray(self, nn=1, saturation_protect=True, automask=True,
+                      stem_scale = False, normalize_d=False,
                       gpu_id = None, verbose=2, **kwargs):
     self.patternfile = self.getinfileobj()
     self.sigmann = nn
@@ -117,6 +122,7 @@ class NLPAR(nlpar_cl.NLPAR):
       return nlpar_cl.NLPAR.calcsigma_cl(self, nn=nn, saturation_protect=saturation_protect,
                                          automask=automask,
                                          normalize_d=normalize_d,
+                                         stem_scale=stem_scale,
                                          gpu_id=gpu_id, **kwargs)
 
     target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 2
@@ -217,7 +223,9 @@ class NLPAR(nlpar_cl.NLPAR):
           wrker = idlewrker.pop()
           job = jobqueue.pop()
 
-          tasks.append(wrker.runsigma_chunk.remote(job, nlparobj=nlpar_remote, saturation_protect=saturation_protect))
+          tasks.append(wrker.runsigma_chunk.remote(job, nlparobj=nlpar_remote,
+                                                   saturation_protect=saturation_protect,
+                                                   stem_scale = stem_scale))
           busywrker.append(wrker)
       if len(tasks) > 0:
         donetasks, stillbusy = ray.wait(tasks, num_returns=len(busywrker), timeout=0.1)
@@ -712,7 +720,7 @@ class NLPARGPUWorker:
 
           #elf.openCLParams = None
 
-  def runsigma_chunk(self,gpujob, nlparobj=None, **kwargs):
+  def runsigma_chunk(self,gpujob, nlparobj=None, stem_scale = False,  **kwargs):
     if gpujob is None:
         #time.sleep(0.001)
         return 'Bored', (None, None, None)
@@ -726,6 +734,9 @@ class NLPARGPUWorker:
         data, xyloc = nlparobj.patternfile.read_data(patStartCount=[[gpujob.cstart, gpujob.rstart],
                                                                     [gpujob.ncolchunk, gpujob.nrowchunk]],
                                                                     convertToFloat=False, returnArrayOnly=True)
+        if stem_scale == True:
+            data = data - data.min() + 1
+            data = np.log(data)
 
         newdata = nlparobj._sigmachunkcalc_cl(data, gpujob, clparams=self.openCLParams, **kwargs)
 
