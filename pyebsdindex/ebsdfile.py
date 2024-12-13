@@ -101,8 +101,16 @@ def writeang(filename, indexer, data,
 
 def writeoh5(filename, indexer, data,
                gridtype='SqrGrid', xstep=1.0, ystep=1.0,
-               ncols=None, nrows=None, datasetname='Scan 1'):
+               ncols=None, nrows=None, datasetname='Scan 1', version='9.1'):
     fpath = Path(filename).expanduser()
+
+    nphase = data.shape[0] - 1
+    phaseIDadd = 0
+    if version == '8.6':
+      if nphase == 1:
+        phaseIDadd = 1
+      else:
+        phaseIDadd = 1
 
     with h5py.File(fpath, 'w') as f:
 
@@ -131,7 +139,9 @@ def writeoh5(filename, indexer, data,
       f.create_dataset(datasetname + '/EBSD/Header/Pattern Center Calibration/zAdjCoeff0', data=np.array([np.float64(0.0)]))
       f.create_dataset(datasetname + '/EBSD/Header/Pattern Center Calibration/zAdjCoeff1', data=np.array([np.float64(0.0)]))
       f.create_dataset(datasetname + '/EBSD/Header/Pattern Center Calibration/zAdjCoeff2', data=np.array([np.float64(0.0)]))
-      pcount = 1
+
+
+      pcount = phaseIDadd
       nphase = len(indexer.phaseLib)
 
 
@@ -223,11 +233,7 @@ def writeoh5(filename, indexer, data,
 
 
       npoints = data[-1].shape[-1]
-      nphase = data.shape[0] - 1
-      if nphase == 1:
-         phaseIDadd = 0
-      else:
-         phaseIDadd = 1
+
       eulers = rotlib.qu2eu(data[-1]['quat'])
       phi1 = np.squeeze(eulers[:,0]).astype(np.float32)
       phi = np.squeeze(eulers[:, 1]).astype(np.float32)
@@ -240,6 +246,8 @@ def writeoh5(filename, indexer, data,
       f.create_dataset(datasetname + '/EBSD/Data/Phi2',
                        data=phi2)
       f.create_dataset(datasetname + '/EBSD/Data/IQ',
+                       data=(data[-1]['iq']).astype(np.float32))
+      f.create_dataset(datasetname + '/EBSD/Data/Pattern Quality',
                        data=(data[-1]['pq']).astype(np.float32))
 
       f.create_dataset(datasetname + '/EBSD/Data/Fit',
@@ -269,9 +277,12 @@ def writeoh5(filename, indexer, data,
       f.create_dataset(datasetname + '/EBSD/Data/Valid', data=np.zeros(npoints, dtype=np.int8))
       f.create_dataset(datasetname + '/EBSD/Data/SEM Signal', data=np.zeros(npoints, dtype=np.int32))
 
-      version = 'OIM Analysis 8.6.103 x64 [29 Sep 2022]'
-      chararray = np.chararray(1, itemsize=len(version)+1)
-      chararray[:] = version
+      if version == '8.6':
+        versiontxt = 'OIM Analysis 8.6.103 x64 [29 Sep 2022]'
+      else:
+        versiontxt = 'OIM Analysis 9.1.0'
+      chararray = np.chararray(1, itemsize=len(versiontxt)+1)
+      chararray[:] = versiontxt
       f.create_dataset('Version', data=chararray)
       man = 'EDAX'
       chararray = np.chararray(1, itemsize=len(man)+1 )
