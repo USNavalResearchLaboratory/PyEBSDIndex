@@ -101,7 +101,7 @@ def writeang(filename, indexer, data,
 
 def writeoh5(filename, indexer, data,
                gridtype='SqrGrid', xstep=1.0, ystep=1.0,
-               ncols=None, nrows=None, datasetname='Scan 1', version='9.1'):
+               ncols=None, nrows=None, datasetname='Scan 1', version='8.6'):
     fpath = Path(filename).expanduser()
 
     nphase = data.shape[0] - 1
