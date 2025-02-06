@@ -146,7 +146,11 @@ def writeoh5(filename, indexer, data,
 
 
       for phase in indexer.phaseLib:
-        f.create_dataset(datasetname + '/EBSD/Header/Phase/'+str(pcount)+'/LGsymID', data=np.array([np.int32(phase.lauecode)]))
+        f.create_dataset(datasetname + '/EBSD/Header/Phase/'+str(pcount)+'/LGsymID',
+                         data=np.array([np.int32(phase.lauecode)]))
+        f.create_dataset(datasetname + '/EBSD/Header/Phase/' + str(pcount) + '/SpaceGroupNumber',
+                         data=np.array([np.int32(phase.spacegroup)]))
+
         f.create_dataset(datasetname + '/EBSD/Header/Phase/' + str(pcount) + '/Lattice Constant a',
                          data=np.array([np.float32(phase.latticeparameter[0]*10)]))
 
