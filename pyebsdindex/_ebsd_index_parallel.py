@@ -290,6 +290,7 @@ def index_pats_distributed(
         if clparam is None:
             ngpu = 0
             ngpupnode = 0
+            indexer.bandDetectPlan.useCPU == True
         else:
             if ngpu is None:
                 ngpu = len(clparam.gpu)
@@ -380,7 +381,10 @@ def index_pats_distributed(
     # Get the function that will collect opencl parameters - if opencl
     # is not installed, this is None, and the program will automatically
     # fall back to CPU only calculation.
-    clparamfunction = band_detect.getopenclparam
+    if ngpu == 0:
+        clparamfunction = None
+    else:
+        clparamfunction = band_detect.getopenclparam
     # Set up the jobs
     njobs = (np.ceil(npats / chunksize)).astype(np.int64)
 
