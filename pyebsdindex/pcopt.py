@@ -190,7 +190,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
 
 def optimize_pso(
     pats,
-    indexer,
+    indexer =None,
     PC0=None,
     batch=False,
     search_limit=0.2,
