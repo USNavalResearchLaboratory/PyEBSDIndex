@@ -333,11 +333,16 @@ class EBSDIndexer:
         **kwargs
     ):
         """Create an EBSD indexer."""
-        self.filein = filename
-        if self.filein is not None:
-            self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
-        else:
-            self.fID = None
+
+        if isinstance(filename, ebsd_pattern.EBSDPatternFile):
+            self.filein = filename.filepath
+            self.fID = filename
+        else:     
+            self.filein = filename
+            if self.filein is not None:
+                self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
+            else:
+                self.fID = None
 
         self.phaselist = phaselist
         self.phaseLib = []
