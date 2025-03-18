@@ -38,6 +38,8 @@ import h5py
 import ray
 import random
 
+logger = logging.getLogger("ray")
+logger.setLevel(logging.ERROR)
 
 from pyebsdindex import ebsd_pattern, _pyopencl_installed
 from pyebsdindex._ebsd_index_single import EBSDIndexer, index_pats
@@ -371,7 +373,7 @@ def index_pats_distributed(
                       {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__)),
                        "CUDA_VISIBLE_DEVICES": cudagpuvis,
                       }},
-        logging_level=logging.WARNING,
+        logging_level=logging.ERROR, log_to_driver=False,
     )  # Supress INFO messages from ray.
     if verbose > 1:
         print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize, ngpuwrker, ncpuwrker)
