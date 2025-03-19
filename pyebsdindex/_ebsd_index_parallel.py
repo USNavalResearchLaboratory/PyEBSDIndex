@@ -38,8 +38,6 @@ import h5py
 import ray
 import random
 
-logger = logging.getLogger("ray")
-logger.setLevel(logging.ERROR)
 
 from pyebsdindex import ebsd_pattern, _pyopencl_installed
 from pyebsdindex._ebsd_index_single import EBSDIndexer, index_pats
@@ -140,8 +138,8 @@ def index_pats_distributed(
         If not set, we will make a guess based on the resources
         available.
     ncpu : int, optional
-        Number of CPUs to use. Default value is ``-1``, meaning all
-        available CPUs will be used.
+        Number of CPUs to use. Default value is ``-1``, meaning the
+        program will choose up to 18 processes/phase.
     return_indexer_obj : bool, optional
         Whether to return the EBSD indexer. Default is ``False``.
     ebsd_indexer_obj : EBSDIndexer, optional
@@ -150,8 +148,10 @@ def index_pats_distributed(
         indexer.
     keep_log : bool, optional
         Whether to keep the log. Default is ``False``.
-    gpu_id : int, optional
-        ID of GPU to use if :mod:`pyopencl` is installed.
+    gpu_id : int, or list of int, optional
+        ID of GPU to use if :mod:`pyopencl` is installed. Default is to
+        use all discrete GPUs, and if none are installed, fall back
+        to integrated GPU.
     verbose : int, optional
         0 - no output (default), 1 - timings, 2 - timings and the Radon
         transform of the first pattern with detected bands highlighted.
