@@ -113,7 +113,7 @@ def writeoh5(filename, indexer, data,
         phaseIDadd = 1
 
     with h5py.File(fpath, 'w') as f:
-
+      # Write standard Header Information
       f.create_dataset(datasetname +'/EBSD/Header/Camera Azimuthal Angle', data=np.array([np.float64(0.0)]))
       f.create_dataset(datasetname + '/EBSD/Header/Camera Diameter', data=np.array([np.float64(0.0)]))
       f.create_dataset(datasetname + '/EBSD/Header/Camera Elevation Angle', data=np.array([np.float64(indexer.camElev)]))
@@ -143,7 +143,6 @@ def writeoh5(filename, indexer, data,
 
       pcount = phaseIDadd
       nphase = len(indexer.phaseLib)
-
 
       for phase in indexer.phaseLib:
         f.create_dataset(datasetname + '/EBSD/Header/Phase/'+str(pcount)+'/LGsymID',
@@ -235,7 +234,7 @@ def writeoh5(filename, indexer, data,
                        data=nrows)
 
 
-
+      # Write data
       npoints = data[-1].shape[-1]
 
       eulers = rotlib.qu2eu(data[-1]['quat'])
@@ -293,3 +292,15 @@ def writeoh5(filename, indexer, data,
       chararray[:] = man
       f.create_dataset('Manufacturer', data=chararray)
       f.close()
+
+
+def _writepyebsdindexheaderh5(indexer, hdff, datagroup=None):
+  '''
+  indxer: pyebsdindex indexer object.
+  hdff: hdf5 file object
+  datagroup: string for where this should be placed in the HDF5 file
+  '''
+  if datagroup is None:
+    datagroup = '/'
+
+  thisgroup = datagroup + 'pyebsdindex/'
