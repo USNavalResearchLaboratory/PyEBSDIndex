@@ -425,18 +425,27 @@ class EBSDIndexer:
         """
         if filename is None:
             self.filein = None
-            self.bandDetectPlan.band_detect_setup(patDim=patDim)
+            #self.bandDetectPlan.band_detect_setup(patDim=patDim)
         elif isinstance(filename, ebsd_pattern.EBSDPatternFile):
-            self.fID = filename  
-            self.bandDetectPlan.band_detect_setup(
-                patDim=[self.fID.patternH, self.fID.patternW]
-            )       
+            self.fID = filename
+            if self.fID.patternH is None:
+                self.fID.read_header()
+            patDim[0:] = np.array([self.fID.patternH, self.fID.patternW])
+
             self.filein = filename.filepath   
         else:
             self.filein = filename
             self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
+            if self.fID.patternH is None:
+                self.fID.read_header()
+            patDim[0:] = np.array([self.fID.patternH, self.fID.patternW])
+
+        if (patDim[0] != self.bandDetectPlan.patDim[0]) or \
+            (patDim[1] != self.bandDetectPlan.patDim[1]):
+            # need to setup banddetect for new pattern dimensions.
+            print(patDim, self.bandDetectPlan.patDim)
             self.bandDetectPlan.band_detect_setup(
-                patDim=[self.fID.patternH, self.fID.patternW]
+                patDim=patDim
             )
 
     def index_pats(
