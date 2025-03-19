@@ -48,12 +48,16 @@ class BandDetect(band_detect.BandDetect):
     self.useCPU = False
 
 
-  def find_bands(self, patternsIn, verbose=0, clparams=None, chunksize=528, useCPU=None, **kwargs):
+  def find_bands(self, patternsIn, verbose=0, clparams=None, chunksize=528, useCPU=None,gpu_id = None, **kwargs):
     if useCPU is None:
       useCPU = self.useCPU
 
     if useCPU == True:
       return band_detect.BandDetect.find_bands(self, patternsIn, verbose=verbose, chunksize=-1, **kwargs)
+
+    if clparams is None:
+      clparams = openclparam.OpenClParam()
+      clparams.get_queue(gpu_id=gpu_id)
     #if clparams is None:
     #  print('noclparams')
     #else:
