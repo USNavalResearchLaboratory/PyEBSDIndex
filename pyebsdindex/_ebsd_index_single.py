@@ -389,7 +389,7 @@ class EBSDIndexer:
 
         if self.fID is not None:
             self.bandDetectPlan.band_detect_setup(
-                patDim=[self.fID.patternW, self.fID.patternH],
+                patDim=[self.fID.patternH, self.fID.patternW],
                 patternmask=patternmask, patternmaskindex=patternmaskindex
             )
         elif patDim is not None:
@@ -423,6 +423,7 @@ class EBSDIndexer:
         patDim : numpy.ndarray
             1D array with two values, the pattern height and width.
         """
+
         if filename is None:
             self.filein = None
             #self.bandDetectPlan.band_detect_setup(patDim=patDim)
@@ -443,7 +444,7 @@ class EBSDIndexer:
         if (patDim[0] != self.bandDetectPlan.patDim[0]) or \
             (patDim[1] != self.bandDetectPlan.patDim[1]):
             # need to setup banddetect for new pattern dimensions.
-            print(patDim, self.bandDetectPlan.patDim)
+            #print(patDim, self.bandDetectPlan.patDim)
             self.bandDetectPlan.band_detect_setup(
                 patDim=patDim
             )
