@@ -44,6 +44,8 @@ OSPLATFORM  = platform.system()
 #if OSPLATFORM  == 'Darwin':
 #    RAYIPADDRESS = '0.0.0.0'  # the localhost address does not work on macOS when on a VPN
 
+os.environ["GRPC_VERBOSITY"] = "ERROR"
+
 
 class NLPAR(nlpar_cl.NLPAR):
   def __init__( self,filename=None, **kwargs):
@@ -533,7 +535,7 @@ class NLPAR(nlpar_cl.NLPAR):
       runtime_env={"env_vars":
                      {"PYTHONPATH": os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
                       "CUDA_VISIBLE_DEVICES":cudavis}},
-      logging_level=logging.WARNING,)  # Supress INFO messages from ray.
+      logging_level=logging.WARNING, log_to_driver=False,)  # Supress INFO messages from ray.
 
     nlpar_remote = ray.put(self)
 

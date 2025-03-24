@@ -47,6 +47,8 @@ if _pyopencl_installed:
 else:
     from pyebsdindex import band_detect as band_detect
 
+os.environ["GRPC_VERBOSITY"] = "ERROR"
+
 RAYIPADDRESS = '127.0.0.1'
 #RAYIPADDRESS = '0.0.0.0'
 OSPLATFORM  = platform.system()
@@ -373,7 +375,7 @@ def index_pats_distributed(
                       {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__)),
                        "CUDA_VISIBLE_DEVICES": cudagpuvis,
                       }},
-        logging_level=logging.ERROR, log_to_driver=False,
+        logging_level=logging.WARNING, log_to_driver=False,
     )  # Supress INFO messages from ray.
     if verbose > 1:
         print("num cpu/gpu, and number of patterns per iteration:", n_cpu_nodes, ngpu, chunksize, ngpuwrker, ncpuwrker)
