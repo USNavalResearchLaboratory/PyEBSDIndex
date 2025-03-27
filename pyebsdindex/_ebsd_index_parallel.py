@@ -301,8 +301,8 @@ def index_pats_distributed(
                 gpu_id = np.arange(ngpu, dtype=int)
             cudagpuvis = ''
             for cdgpu in range(len(clparam.gpu)):
-                cudagpuvis += str(cdgpu)+','
-
+                cudagpuvis += ','+str(cdgpu)
+            cudagpuvis = cudagpuvis[1:]
             #ngpupnode = ngpu / n_cpu_nodes
     except:
         ngpu = 0
@@ -373,7 +373,7 @@ def index_pats_distributed(
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars":
                       {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__)),
-                       "CUDA_VISIBLE_DEVICES": cudagpuvis,
+                       #"CUDA_VISIBLE_DEVICES": cudagpuvis,
                       }},
         logging_level=logging.WARNING, log_to_driver=False,
     )  # Supress INFO messages from ray.
@@ -449,15 +449,17 @@ def index_pats_distributed(
     #print(ncpuwrker, ncpucpu_per_worker)
     #gpu_launched = 0
     #cpu_launched = 0
+
     while (len(gpuworkers) < ngpuwrker) and (len(gpujobs) > 0):
     #if (len(gpuworkers) < ngpuwrker) and (len(gpujobs) > 0):
 
         i = len(gpuworkers)
+        cvis = str(gpu_id[i % ngpu])
         gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
             # These actors are read/write, thus can initialize the GPU queues
             # GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
             GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
-                actorid=i, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cudagpuvis
+                actorid=i, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cvis
             )
         )
         gjob = gpujobs.pop(0)
@@ -568,11 +570,12 @@ def index_pats_distributed(
                     del gtaskindex[jid]
                     gpujobs.append(gjob)
                     if len(gpuworkers) == 0:
+                        cvis = str(gpu_id[0])
                         gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
                             # These actors are read/write, thus can initialize the GPU queues
                             # GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
                             GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
-                                actorid=0, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cudagpuvis
+                                actorid=0, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cvis
                             )
                         )
                         gjob = gpujobs.pop(0)
@@ -604,11 +607,12 @@ def index_pats_distributed(
                 del gtaskindex[jid]
                 gpujobs.append(gjob)
                 if len(gpuworkers) == 0:
+                    cvis = str(gpu_id[0])
                     gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
                         # These actors are read/write, thus can initialize the GPU queues
                         # GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
                         GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
-                            actorid=0, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cudagpuvis
+                            actorid=0, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cvis
                         )
                     )
                     if inputmode == "filemode":
