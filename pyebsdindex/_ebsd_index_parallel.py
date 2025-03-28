@@ -300,8 +300,9 @@ def index_pats_distributed(
                 ngpu = len(clparam.gpu)
                 gpu_id = np.arange(ngpu, dtype=int)
             cudagpuvis = ''
-            for cdgpu in range(len(clparam.gpu)):
-                cudagpuvis += ','+str(cdgpu)
+            for cudagpu in gpu_id:
+            #for cdgpu in range(len(clparam.gpu)):
+                cudagpuvis += ','+str(cudagpu)
             cudagpuvis = cudagpuvis[1:]
             #ngpupnode = ngpu / n_cpu_nodes
     except:
@@ -365,11 +366,12 @@ def index_pats_distributed(
     # ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
     # Need to append path for installs from source ... otherwise the ray
     # workers do not know where to find the PyEBSDIndex module.
+    cudagpuvis0 = os.getenv("CUDA_VISIBLE_DEVICES")
     os.environ["CUDA_VISIBLE_DEVICES"] = cudagpuvis
+    
     rayclust = ray.init(
         num_cpus=int(np.round(n_cpu_nodes)),
         num_gpus=ngpu,
-        #dashboard_host = RAYIPADDRESS,
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars":
                       {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__)),
@@ -717,6 +719,11 @@ def index_pats_distributed(
     if verbose > 0:
         print('\n...')
     ray.shutdown()
+
+    if cudagpuvis0 is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = cudagpuvis0
+    else:
+        os.environ.pop("CUDA_VISIBLE_DEVICES", None)
 
     if return_indexer_obj:
         return dataout, banddataout, indexer
