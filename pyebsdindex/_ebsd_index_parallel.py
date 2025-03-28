@@ -798,6 +798,7 @@ class GPUWorker:
         # self.indxstart = None
         # self.indxend = None
         # self.rate = None
+        self.cudavis = cudavis
         os.environ["CUDA_VISIBLE_DEVICES"] = cudavis
         self.actorID = actorid
         self.openCLParams = None
@@ -864,6 +865,19 @@ class GPUWorker:
         except:
             gpujob.rate = None
             return "Error", (None, None, gpujob)
+    def _getstats(self):
+
+        stats = {
+                'actor': str(self.actorID),
+                'cudavis': str(self.cudavis),
+                'platform': str(self.openCLParams.platform),
+                'gpu': str(self.openCLParams.gpu),
+                'gpu_id': str(self.openCLParams.gpu_id),
+                'context': str(self.openCLParams.ctx),
+                 }
+        return stats
+
+
 
 
 @ray.remote(num_cpus=1, num_gpus=0)
