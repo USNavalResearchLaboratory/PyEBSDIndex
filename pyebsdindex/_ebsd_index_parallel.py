@@ -368,7 +368,7 @@ def index_pats_distributed(
     os.environ["CUDA_VISIBLE_DEVICES"] = cudagpuvis
     rayclust = ray.init(
         num_cpus=int(np.round(n_cpu_nodes)),
-        num_gpus=ngpu*ngpuwrker,
+        num_gpus=ngpu,
         #dashboard_host = RAYIPADDRESS,
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars":
