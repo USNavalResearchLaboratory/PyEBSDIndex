@@ -339,7 +339,7 @@ def index_pats_distributed(
 
         ngpuwrker = ngpupro
 
-        ngpu_per_wrker =  1.0/ngpuwrker - 1.0e-6 # fraction of a GPU to give to each worker (band finding worker)
+        ngpu_per_wrker =  ngpu/ngpuwrker - 1.0e-6 # fraction of a GPU to give to each worker (band finding worker)
         ncpugpu_per_wrker = n_cpu_per_gpu/ngpuwrker - 1.0e-6 # fraction of a cpu to allocate to each gpu worker
 
         # amount of cpu to allocate to each cpu worker (indexing worker)
@@ -365,7 +365,7 @@ def index_pats_distributed(
     # ray.init(num_cpus=n_cpu_nodes,num_gpus=ngpu,_system_config={"maximum_gcs_destroyed_actor_cached_count": n_cpu_nodes})
     # Need to append path for installs from source ... otherwise the ray
     # workers do not know where to find the PyEBSDIndex module.
-
+    os.environ["CUDA_VISIBLE_DEVICES"] = cudagpuvis
     rayclust = ray.init(
         num_cpus=int(np.round(n_cpu_nodes)),
         num_gpus=ngpu*ngpuwrker,
@@ -457,8 +457,8 @@ def index_pats_distributed(
 
         gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
             # These actors are read/write, thus can initialize the GPU queues
-            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=0).remote(
-            # GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+            #GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=0).remote(
+            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
                 actorid=i, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cudagpuvis
             )
         )
@@ -573,8 +573,8 @@ def index_pats_distributed(
 
                         gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
                             # These actors are read/write, thus can initialize the GPU queues
-                            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=0).remote(
-                            #GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+                            #GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=0).remote(
+                            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
                                 actorid=0, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cudagpuvis
                             )
                         )
@@ -610,8 +610,8 @@ def index_pats_distributed(
 
                     gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
                         # These actors are read/write, thus can initialize the GPU queues
-                        GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=0).remote(
-                        # GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+                        #GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=0).remote(
+                        GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
                             actorid=0, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cudagpuvis
                         )
                     )
