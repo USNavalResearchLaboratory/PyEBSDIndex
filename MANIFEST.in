@@ -11,6 +11,7 @@ include README.md
 include RELEASE.rst
 include setup.cfg
 include setup.py
+include ./pyebsdindex/EBSDImage/*.ttf
 
 recursive-include pyebsdindex *.png *.cl *.py
 recursive-include doc Makefile make.bat *.rst *.py *.ipynb *.png *.css

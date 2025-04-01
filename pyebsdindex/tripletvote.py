@@ -552,11 +552,13 @@ class BandIndexer():
     n_band_early = np.int64(self.nband_earlyexit)
 
     # this will check the vote, and return the exact band matching to specific poles of the best fitting solution.
-    fit, polematch, nMatch, whGood, ij, R, fitb = \
+    fit, polematch, polevalid, nMatch, whGood, ij, R, fitb = \
       self._assign_bands_nb(libPolesCart, libAngTable, libFamIndx, nFam, angTol, n_band_early, bandnorms, bandRank_arg, bandFam)
 
     # check how often the indexed band matched the top voting band family.
-    acc_correct =  np.sum(np.array((polematch >= 0) & (self.completelib['familyid'][polematch] == bandFam), dtype=int),axis=1).astype(np.int32)
+    acc_correct =  np.sum(np.array((polevalid > 0) & #take valid poles
+                                   (self.completelib['familyid'][polematch.clip(0)] == bandFam), # AND with matching correctly
+                                   dtype=int),axis=1).astype(np.int32) # and sum.
 
 
     # accumulator = accumulator[0, ...]
@@ -596,13 +598,15 @@ class BandIndexer():
 
     if self.high_fidelity == True:
 
-      weights = self._calc_quest_weights(libFamID, accumulator, accumulator_nw, polematch, band_intensity, nfit=6)
-      avequat, fit = self._refine_orientation_quest(libPolesCart, bandnorms, polematch, weights = weights)
+      weights = self._calc_quest_weights(libFamID, accumulator, accumulator_nw,
+                                         polematch, polevalid, band_intensity, nfit=6)
+      avequat, fit = self._refine_orientation_quest(libPolesCart, bandnorms,
+                                                    polematch, polevalid, weights = weights)
       fit = np.arccos(np.clip(fit, -1.0, 1.0))*RADEG
     else:
       avequat = rotlib.om2qu(R)
 
-    cm2 = self._calc_cm(accumulator, polematch, libFamID)
+    cm2 = self._calc_cm(accumulator, polematch, polevalid, libFamID)
 
     if verbose > 2:
       print('refinement: ', timer() - tic)
@@ -838,17 +842,19 @@ class BandIndexer():
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
-  def _calc_quest_weights( libComFamID, accumulator, accumulator_nw, polematch, band_intensity, nfit=6):
+  def _calc_quest_weights( libComFamID, accumulator, accumulator_nw,
+                           polematch, polevalid, band_intensity, nfit=6):
     npats = accumulator.shape[0]
     nbands = polematch.shape[-1]
     weights = np.zeros((npats, nbands), dtype=np.float32)
-
+    #print(band_intensity)
     for p in range(npats):
       score = np.full((nbands), -1.0, np.float32)
       pmatch = np.ravel(polematch[p, :]).astype(np.int64)
-      whGood = (np.nonzero(pmatch >= 0)[0]).astype(np.int64)
+      pvalid = np.ravel(polevalid[p, :])
+      whGood = (np.nonzero(pvalid > 0)[0]).astype(np.int64)
 
-      if whGood.size < 2:
+      if whGood.size < 3:
         continue
 
       acc = accumulator[p, ...]
@@ -862,12 +868,22 @@ class BandIndexer():
       srt = np.flip(np.argsort(score))
 
       srt6 = srt[0:min(nfit, whGood.size)]
+      #print(srt6)
       for s in srt6:
         weights[p, s] = band_intensity[p, s]
 
+      #weights[p, :] *= 2.0/weights[p,:].max()
+      #weights[p, :] = 0.5*(1+np.tanh(8.0 * (weights[p, :] - 1.0)))
+
+      weights[p, :] *= 1.0 / weights[p, :].max()
+      weights[p, :] = np.exp(2 * weights[p, :])-1.0
+
+      weights[p, :] /= weights[p, :].max()
+      #print(weights[p,:]/weights[p,:].max())
     return weights
 
-  def _refine_orientation_quest(self, libpolecart, bandnorms, polesmatch, weights = None):
+  def _refine_orientation_quest(self, libpolecart, bandnorms,
+                                polesmatch, polesvalid,  weights = None):
     tic = timer()
     npats = bandnorms.shape[0]
     nbands = bandnorms.shape[-1]
@@ -875,16 +891,16 @@ class BandIndexer():
 
     if weights is None:
       weights = np.ones((npats, nbands), dtype=np.float64)
-      weights *= (polesmatch > 0).astype(np.float32)
+      weights *= (polesvalid > 0).astype(np.float32)
 
     weightsn = np.asarray(weights, dtype=np.float64)
     weightsn /= np.maximum(np.sum(weightsn, axis=1), 1e-12).reshape(-1, 1)
     #print(weightsn)
-    pflt = np.asarray(libpolecart[polesmatch, :], dtype=np.float64)
+    pflt = np.asarray(libpolecart[polesmatch.clip(0), :], dtype=np.float64) # using clip 0 here --> weights SHOULD be 0.0 for all unmatched
     bndnorm = np.asarray(bandnorms, dtype=np.float64)
-    avequat, fit = self._orientation_quest_nb(pflt, bndnorm, weightsn)
-
-    return avequat, fit
+    avequat, fit, fit_unweight = self._orientation_quest_nb(pflt, bndnorm, weightsn)
+    #fit = self._fitcheck(avequat, bndnorm, pflt)
+    return avequat, fit_unweight
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
@@ -898,11 +914,12 @@ class BandIndexer():
     qout = np.zeros((npats, 4), dtype=np.float64)
     qout[:, 0] = 1.0
     fitout = np.full((npats), np.pi, dtype=np.float64)
+    fitout_unweight = np.full((npats), np.pi, dtype=np.float64)
 
     for p in range(npats):
 
       whgood = (np.nonzero(weights[p, :] > eps)[0]).astype(np.int64)
-      if whgood.size < 2:
+      if whgood.size < 3:
         continue
 
       wn = np.zeros((whgood.size, 1), dtype=np.float64)
@@ -967,9 +984,10 @@ class BandIndexer():
 
       qout[p, :] = q
       fitout[p] = lam
-      # polesrot = rotlib.quat_vectorL1N(q, pflt, npoles, np.float64, p=1)
-      # pdot = np.sum(polesrot*bndnorm, axis = 1, dtype=np.float64)
-    return qout, fitout 
+
+      polesrot = rotlib.quat_vectorL1N(q, bndnorm, npoles, np.float64, p=1)
+      fitout_unweight[p] = np.mean(np.sum(polesrot*pflt, axis = 1, dtype=np.float64))
+    return qout, fitout, fitout_unweight
 
 
   @staticmethod
@@ -1216,7 +1234,8 @@ class BandIndexer():
     whGood_out = np.zeros((npats, nBnds), dtype=np.int64)-1
     Rout = np.zeros((npats,3,3), dtype=np.float32)
     Rout[:,0,0] = 1.0 ; Rout[:,1,1] = 1.0 ; Rout[:,2,2] = 1.0 ;
-    polematch_out = np.full((npats, nBnds),-1, dtype=np.int64) - 1
+    polematch_out = np.full((npats, nBnds),-1000, dtype=np.int64)
+    polevalid_out = np.full((npats, nBnds),0, dtype=np.uint8)
 
     fitout = np.full(npats, 360.0, dtype=np.float32)
     fitbout = np.full((npats, nBnds),360.0, dtype=np.float32)
@@ -1233,7 +1252,8 @@ class BandIndexer():
       for ii in range(nBnds-1):
         for jj in range(ii+1,nBnds):
           #print(ii,jj)
-          polematch = np.zeros((nBnds),dtype=np.int64) - 1
+          polematch = np.full((nBnds),-1, dtype=np.int64)
+          polevalid = np.zeros((nBnds), dtype=np.uint8)
 
           bnd1 = bandRank_arg[p, -1 - ii]
           bnd2 = bandRank_arg[p, -1 - jj]
@@ -1321,7 +1341,8 @@ class BandIndexer():
               score = scoreTry
               angFit = angfitTry
               for j in range(nBnds):
-                polematch[j] = np.argmax(test[:,j]) * ( 2*np.int32(angfitTry[j] < angTol)-1)
+                polematch[j] = np.argmax(test[:,j])
+                polevalid[j] =  np.uint8(angfitTry[j] < angTol)
               R[0, :,:] = Rtry[i,:,:]
 
 
@@ -1351,6 +1372,7 @@ class BandIndexer():
             nMatch[p] = nGood
             whGood_out[p,0:nGood] = whGood[:]
             polematch_out[p,...] = polematch[:]
+            polevalid_out[p, ...] = polevalid[:]
             Rout[p,:,:] = R[0,:,:]
             ij[p,:]  = np.asarray((ii,jj,bnd1,bnd2), dtype=np.int64)
             break
@@ -1364,6 +1386,7 @@ class BandIndexer():
               nMatch[p] = nGood
               whGood_out[p, 0:nGood] = whGood[:]
               polematch_out[p, ...] = polematch[:]
+              polevalid_out[p, ...] = polevalid[:]
               Rout[p, :, :] = R[0, :, :]
               ij[p, :] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
 
@@ -1376,6 +1399,7 @@ class BandIndexer():
                 nMatch[p] = nGood
                 whGood_out[p, 0:nGood] = whGood[:]
                 polematch_out[p, ...] = polematch[:]
+                polevalid_out[p, ...] = polevalid[:]
                 Rout[p, :, :] = R[0, :, :]
                 ij[p, :] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
 
@@ -1390,7 +1414,7 @@ class BandIndexer():
     #print(testout.T)
     #print(pflt[polematch_out,:])
     #print(dave)
-    return fitout, polematch_out,nMatch, whGood_out, ij, Rout, fitbout
+    return fitout, polematch_out,polevalid_out, nMatch, whGood_out, ij, Rout, fitbout
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
@@ -1741,25 +1765,34 @@ class BandIndexer():
     solSrt = np.argsort(solutionVotes)
 
     return solutions, nsolutions, solutionVotes, solSrt
-  def _fitcheck(self, q, bandnorms, cartxstalpoles):
-    bandnorms = np.atleast_2d(bandnorms)
-    cartxstalpoles = np.atleast_2d(cartxstalpoles)
-    bandnorms_xstal = rotlib.quat_vector(q, bandnorms)
-    mean_dot = np.mean(np.sum(bandnorms_xstal*cartxstalpoles, axis = 1))
+  def _fitcheck(self, quat, bandnorms, cartxstalpoles):
+
+    npat = np.int64(quat.size//4)
+    quat = quat.reshape(npat, 4)
+
+    nbands = bandnorms.shape[-2]
+    bandnorms = bandnorms.reshape(npat, nbands, 3)
+    cartxstalpoles = cartxstalpoles.reshape(npat, nbands, 3)
+
+    fitout = np.zeros((npat), dtype=np.float64)
+
+    for p in range(npat):
+      bandnorms_xstal = rotlib.quat_vector(quat[p,:], bandnorms[p,:, :])
+      fitout[p] = np.mean(np.sum(bandnorms_xstal * cartxstalpoles [p,:, :], axis = 1))
     # mean_ang = np.degrees(np.arccos(mean_dot))
-    return mean_dot
+    return fitout
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
-  def _calc_cm(accumulator, polematch, libFamIndx):
+  def _calc_cm(accumulator, polematch, polevalid, libFamIndx):
 
     npats = accumulator.shape[0]
     cm2 = -1 * np.ones(npats, dtype=np.float32)
 
     for p in range(npats):
 
-      whmatch = (np.nonzero(polematch[p, :] >= 0)[0]).astype(np.int64)
-      if whmatch.size < 2:
+      whmatch = (np.nonzero(polevalid[p, :] > 0)[0]).astype(np.int64)
+      if whmatch.size < 3:
         continue
       # cm = np.mean(band_cm[whmatch])
 

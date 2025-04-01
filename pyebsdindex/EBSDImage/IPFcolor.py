@@ -21,15 +21,24 @@ Author: David Rowenhorst;
 The US Naval Research Laboratory Date: 21 Aug 2020'''
 
 
+'''This package uses the Google Font Open Sans.  
+Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)
+This Font Software is licensed under the SIL Open Font License, Version 1.1 . 
+This license available with a FAQ at: https://openfontlicense.org
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+'''
 
 import matplotlib.colors as pltcolors
 import matplotlib.pyplot as plt
+
 import numpy as np
 
 from pyebsdindex import rotlib
+from pyebsdindex.EBSDImage import micronbar, scalarimage
 
 
-def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize = None):
+def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize = None,
+            addmicronbar=False, graychannel=None, gamma=1.0, **kwargs):
   nphase = len(indexer.phaseLib)
 
   npoints = ebsddata.shape[-1]
@@ -70,7 +79,27 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
   #   npts = int(xsize*ysize)
   ipf_out[0:npts*3] = ipfout[0:npts,:].flatten()
   ipf_out = ipf_out.reshape(ysize, xsize, 3)
+
+  if graychannel is not None:
+    if graychannel == 'fit':
+      gchan = 'fitinv'
+    else:
+      gchan = graychannel
+    gray = scalarimage.scalarimage(ebsddata, indexer,
+                       xsize=xsize,
+                       ysize=ysize,
+                       addmicronbar=False,
+                       datafield=gchan,
+                       cmap='gray',
+                       rescalenice=True, **kwargs
+                       )
+    ipf_out *= gray**gamma
+
+
+  if addmicronbar == True:
+    ipf_out = micronbar.addmicronbar(ipf_out, indexer.fID.xStep, rescale=True, **kwargs)
   return ipf_out
+
 
 
 
@@ -358,3 +387,8 @@ def ipf_ledgend_hex(size=512):
   anno111 = plt.text(size - 25*fsize*size/512/figsz,(triangleWY+triOrigin[1])*0.85,r'$10\bar{1}0$',fontsize=0.9*fsize)
   fig.savefig("IPFHex.pdf",bbox_inches=0, transparent=True)
   plt.close(1001)
+
+
+
+
+

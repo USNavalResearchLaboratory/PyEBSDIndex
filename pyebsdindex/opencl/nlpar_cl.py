@@ -304,8 +304,8 @@ class NLPAR(nlpar_cpu.NLPAR):
 
 
   def calcnlpar_cl(self, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
-                   filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,
-                   gpu_id = None, verbose=2, **kwargs):
+                   filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,diff_offset= None,
+                   gpu_id = None, verbose=2,   **kwargs):
 
     class OpenCLClalcError(Exception):
       pass
@@ -315,8 +315,12 @@ class NLPAR(nlpar_cpu.NLPAR):
 
     if dthresh is not None:
       self.dthresh = dthresh
+
     if self.dthresh is None:
       self.dthresh = 0.0
+
+    if diff_offset is not None:
+      self.diff_offset = diff_offset
 
     if searchradius is not None:
       self.searchradius = searchradius
@@ -330,6 +334,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     lam = np.float32(self.lam)
     dthresh = np.float32(self.dthresh)
     sr = np.int64(self.searchradius)
+    diff_offset = np.float32(self.diff_offset)
 
     if filename is not None:
       self.setfile(filepath=filename)
@@ -561,7 +566,8 @@ class NLPAR(nlpar_cpu.NLPAR):
                                  np.int64(npat_point),
                                  np.float32(mxval),
                                  np.float32(1.0/lam**2),
-                                 np.float32(dthresh) )
+                                 np.float32(dthresh),
+                                 np.float32(diff_offset))
 
           data = data.astype(np.float32) # prepare to receive data back from GPU
           data.reshape(-1)[:] = 0.0

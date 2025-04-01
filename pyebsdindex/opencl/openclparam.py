@@ -24,6 +24,7 @@ The US Naval Research Laboratory Date: 21 Aug 2020'''
 import numpy as np
 from os import path
 import pyopencl as cl
+import warnings
 from os import environ
 environ['PYOPENCL_COMPILER_OUTPUT'] = '0'
 
@@ -104,12 +105,15 @@ class OpenClParam():
     self.ctx = cl.Context(devices = [self.gpu[self.gpu_id]])
 
     kernel_location = path.dirname(__file__)
-    self.prg = cl.Program(self.ctx,open(path.join(kernel_location,kfile)).read()).build()
+    with warnings.catch_warnings():  # put in to supress OpenCL build warnings -- especially on NVIDIA platforms.
+      warnings.simplefilter("ignore")
+      self.prg = cl.Program(self.ctx,open(path.join(kernel_location,kfile)).read()).build(options=['-cl-std=CL1.2', '-w'])
+
     #print('ctx', self.gpu_id)
     return self.ctx
   def get_queue(self, gpu_id=None):
     if self.ctx is None:
-      self.get_context(gpu_id=None)
+      self.get_context(gpu_id=gpu_id)
     if self.queue is None:
       self.queue = cl.CommandQueue(self.ctx)
     return self.queue

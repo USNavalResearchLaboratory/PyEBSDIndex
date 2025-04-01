@@ -48,12 +48,16 @@ class BandDetect(band_detect.BandDetect):
     self.useCPU = False
 
 
-  def find_bands(self, patternsIn, verbose=0, clparams=None, chunksize=528, useCPU=None, **kwargs):
+  def find_bands(self, patternsIn, verbose=0, clparams=None, chunksize=528, useCPU=None,gpu_id = None, **kwargs):
     if useCPU is None:
       useCPU = self.useCPU
 
     if useCPU == True:
       return band_detect.BandDetect.find_bands(self, patternsIn, verbose=verbose, chunksize=-1, **kwargs)
+
+    if clparams is None:
+      clparams = openclparam.OpenClParam()
+      clparams.get_queue(gpu_id=gpu_id)
     #if clparams is None:
     #  print('noclparams')
     #else:
@@ -116,7 +120,7 @@ class BandDetect(band_detect.BandDetect):
 
         rdntime += timer() - tic1
         tic1 = timer()
-        rdnConv, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True, separableKernel=True)
+        rdnConv, imageave, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True, separableKernel=True)
         rdnNorm.release()
 
         convtime += timer()-tic1
@@ -128,6 +132,8 @@ class BandDetect(band_detect.BandDetect):
         bandDataChunk = self.band_labelCL(rdnConv, lMaxRdn, clparams=clparams)
         lMaxRdn.release()
         bandData['max'][chnk[0]:chnk[1]] = bandDataChunk[0][0:nPatsChunk, :]
+        bandData['normmax'][chnk[0]:chnk[1]] = (bandDataChunk[0][0:nPatsChunk, :] /
+                                                  imageave[0:nPatsChunk].reshape(nPatsChunk, 1).clip(1e-7))
         bandData['avemax'][chnk[0]:chnk[1]] = bandDataChunk[1][0:nPatsChunk, :]
         bandData['maxloc'][chnk[0]:chnk[1]] = bandDataChunk[2][0:nPatsChunk, :, :]
         bandData['aveloc'][chnk[0]:chnk[1]] = bandDataChunk[3][0:nPatsChunk, :, :]
@@ -154,7 +160,7 @@ class BandDetect(band_detect.BandDetect):
         rdnConv = None
 
         blabeltime += timer() - tic1
-
+      # correct any scaling that happened due to float-int conversion.
       bandData['avemax'] *= pscale[1]
       bandData['avemax'] += pscale[0]
       bandData['max'] *= pscale[1]
@@ -458,19 +464,24 @@ class BandDetect(band_detect.BandDetect):
 
     # for each radon, get the min value
     mns = cl.Buffer(ctx,mf.READ_WRITE,size=nImCL * 4)
+    ave = cl.Buffer(ctx, mf.READ_WRITE, size=nImCL * 4)
 
-    prg.imageMin(queue,(nImChunk,1,1),None,
-                 rdnConv_gpu, mns,np.uint32(shp[1]),np.uint32(shp[0]),
+    prg.imageMinAve(queue,(nImChunk,1,1),None,
+                 rdnConv_gpu, mns, ave, np.uint32(shp[1]),np.uint32(shp[0]),
                  np.uint32(self.padding[1]),np.uint32(self.padding[0]))
     # subtract the min value, clipping to 0.
-    prg.imageSubMinWClip(queue,(np.int32(shp[1]), np.int32(shp[0]),nImChunk),None,
-                     rdnConv_gpu,mns,np.uint32(shp[1]),np.uint32(shp[0]),
+    prg.imageSubMinNormWClip(queue,(np.int32(shp[1]), np.int32(shp[0]),nImChunk),None,
+                     rdnConv_gpu,mns, ave, np.uint32(shp[1]),np.uint32(shp[0]),
                      np.uint32(0),np.uint32(0))
 
 
 
     #rdn_gpu.release()
     mns.release()
+
+    imageave = np.ones((nImCL), dtype=np.float32)
+    cl.enqueue_copy(queue, imageave, ave, is_blocking=True)
+
     if kern_gpu is None:
       kern_gpu_y.release()
       kern_gpu_x.release()
@@ -484,9 +495,9 @@ class BandDetect(band_detect.BandDetect):
       cl.enqueue_copy(queue, resultConv, rdnConv_gpu, is_blocking=True)
       rdnConv_gpu.release()
       rdnConv_gpu = None
-      return resultConv, clparams
+      return resultConv, imageave, clparams
     else:
-      return rdnConv_gpu, clparams
+      return rdnConv_gpu, imageave, clparams
 
 
 

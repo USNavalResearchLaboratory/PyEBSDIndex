@@ -44,6 +44,8 @@ OSPLATFORM  = platform.system()
 #if OSPLATFORM  == 'Darwin':
 #    RAYIPADDRESS = '0.0.0.0'  # the localhost address does not work on macOS when on a VPN
 
+os.environ["GRPC_VERBOSITY"] = "ERROR"
+
 
 class NLPAR(nlpar_cl.NLPAR):
   def __init__( self,filename=None, **kwargs):
@@ -370,8 +372,8 @@ class NLPAR(nlpar_cl.NLPAR):
 
 
 
-  def calcnlpar_clray(self, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
-                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,
+  def calcnlpar_clray(self, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask = True,
+                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,diff_offset = None,
                 verbose = 2, gpu_id = None, **kwargs):
 
     if lam is not None:
@@ -383,6 +385,9 @@ class NLPAR(nlpar_cl.NLPAR):
       self.dthresh = dthresh
     if self.dthresh is None:
       self.dthresh = 0.0
+
+    if diff_offset is not None:
+      self.diff_offset = diff_offset
 
     if searchradius is not None:
       self.searchradius = searchradius
@@ -396,6 +401,7 @@ class NLPAR(nlpar_cl.NLPAR):
     lam = np.float32(self.lam)
     dthresh = np.float32(self.dthresh)
     sr = np.int64(self.searchradius)
+    diff_offset = np.float32(self.diff_offset)
 
     if filename is not None:
       self.setfile(filepath=filename)
@@ -477,7 +483,8 @@ class NLPAR(nlpar_cl.NLPAR):
                                          reset_sigma=reset_sigma,
                                          backsub = backsub,
                                          rescale = rescale,
-                                         gpu_id= gpu_id)
+                                         gpu_id= gpu_id,
+                                         diff_offset=diff_offset)
 
     target_mem = clparams.gpu[gpu_id].max_mem_alloc_size//6
     max_mem = clparams.gpu[gpu_id].global_mem_size*0.4
@@ -528,7 +535,7 @@ class NLPAR(nlpar_cl.NLPAR):
       runtime_env={"env_vars":
                      {"PYTHONPATH": os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
                       "CUDA_VISIBLE_DEVICES":cudavis}},
-      logging_level=logging.WARNING,)  # Supress INFO messages from ray.
+      logging_level=logging.WARNING, log_to_driver=False,)  # Supress INFO messages from ray.
 
     nlpar_remote = ray.put(self)
 
@@ -601,6 +608,7 @@ class NLPAR(nlpar_cl.NLPAR):
     sr = np.int64(self.searchradius)
     nnn = int((2 * sr + 1) ** 2)
     dthresh = np.float32(self.dthresh)
+    diff_offset = np.float32(self.diff_offset)
     #print(chunks[2], chunks[3])
     #print(lam, sr, dthresh)
 
@@ -662,7 +670,8 @@ class NLPAR(nlpar_cl.NLPAR):
                   np.int64(npat_point),
                   np.float32(mxval),
                   np.float32(1.0 / lam ** 2),
-                  np.float32(dthresh))
+                  np.float32(dthresh),
+                  np.float32(diff_offset))
 
     data = data.astype(np.float32)  # prepare to receive data back from GPU
     data.reshape(-1)[:] = 0.0
