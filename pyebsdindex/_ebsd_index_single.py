@@ -706,8 +706,7 @@ class EBSDIndexer:
         indxData["nmatch"] = 0
 
 
-        if self.phaseLib[0] is None:
-            return indxData, banddata
+
 
         if self.nband_earlyexit is None:
             earlyexit = -1
@@ -738,7 +737,7 @@ class EBSDIndexer:
 
             p2do = np.ravel(np.nonzero(np.max(indxData["nmatch"], axis=0) < earlyexit)[0])
 
-            if p2do.size ==0:
+            if (p2do.size ==0) or self.phaseLib[0] is None:
                 break
             (
                 avequat,
@@ -767,121 +766,30 @@ class EBSDIndexer:
                 bandmatchindex[whgood2, ..., j] = bandmatch[whgood, ...].reshape(whgood.size,nBands )
 
 
-
-
-        qref2detect = self._detector2refframe()
-        q = q.reshape(nPhases * npoints, 4)
-        q = rotlib.quat_multiply(q, qref2detect)
-        q = rotlib.quatnorm(q)
-        q = q.reshape(nPhases, npoints, 4)
-        indxData["quat"][0:nPhases, :, :] = q
-        indxData[-1, :] = indxData[0, :]
-        banddataout['band_match_index'][:,:, 0:nPhases] = bandmatchindex[:,:,:]#.squeeze()
-        if nPhases > 1:
-            for j in range(1, nPhases):
-                # indxData[-1, :] = np.where(
-                #    (indxData[j, :]["cm"] * indxData[j, :]["nmatch"])
-                #    > (indxData[j + 1, :]["cm"] * indxData[j + 1, :]["nmatch"]),
-                #    indxData[j, :],
-                #    indxData[j + 1, :],
-                phasetest = ((3.0 - indxData[j, :]["fit"]) * indxData[j, :]["nmatch"]) \
-                            > ((3.0 - indxData[-1, :]["fit"]) * indxData[-1, :]["nmatch"])
-                whbetter = np.nonzero(phasetest)
-                indxData[-1, whbetter] = indxData[j, whbetter]
-                #banddataout['band_match_index'][whbetter,:] =  bandmatchindex[j,whbetter,:,:].squeeze()
+        if self.phaseLib[0] is not None:
+            qref2detect = self._detector2refframe()
+            q = q.reshape(nPhases * npoints, 4)
+            q = rotlib.quat_multiply(q, qref2detect)
+            q = rotlib.quatnorm(q)
+            q = q.reshape(nPhases, npoints, 4)
+            indxData["quat"][0:nPhases, :, :] = q
+            indxData[-1, :] = indxData[0, :]
+            banddataout['band_match_index'][:,:, 0:nPhases] = bandmatchindex[:,:,:]#.squeeze()
+            if nPhases > 1:
+                for j in range(1, nPhases):
+                    # indxData[-1, :] = np.where(
+                    #    (indxData[j, :]["cm"] * indxData[j, :]["nmatch"])
+                    #    > (indxData[j + 1, :]["cm"] * indxData[j + 1, :]["nmatch"]),
+                    #    indxData[j, :],
+                    #    indxData[j + 1, :],
+                    phasetest = ((3.0 - indxData[j, :]["fit"]) * indxData[j, :]["nmatch"]) \
+                                > ((3.0 - indxData[-1, :]["fit"]) * indxData[-1, :]["nmatch"])
+                    whbetter = np.nonzero(phasetest)
+                    indxData[-1, whbetter] = indxData[j, whbetter]
+                    #banddataout['band_match_index'][whbetter,:] =  bandmatchindex[j,whbetter,:,:].squeeze()
         return indxData, banddataout
 
-    def _indexbandsphase_old(self, banddata, bandnorm, verbose=0):
 
-#
-        rhomax = self.bandDetectPlan.rhoMax * (1-self.bandDetectPlan.rhoMaskFrac)
-        shpBandDat = banddata.shape
-        npoints = int(banddata.size/(shpBandDat[-1])+0.1)
-        nPhases = len(self.phaseLib)
-        q = np.zeros((nPhases, npoints, 4))
-        indxData = np.zeros((nPhases + 1, npoints), dtype=self.dataTemplate)
-        bandmatchindex = np.zeros((nPhases, npoints,shpBandDat[-1],2), dtype=np.int32)-100
-        banddataout = banddata.copy()
-
-        indxData["phase"] = -1
-        indxData["fit"] = 180.0
-        indxData["totvotes"] = 0
-        if self.phaseLib[0] is None:
-            return indxData, banddata
-
-        if self.nband_earlyexit is None:
-            earlyexit = -1
-            for ph in self.phaselist:
-                if hasattr(ph, 'nband_earlyexit'):
-                    earlyexit = max(earlyexit, ph.nband_earlyexit)
-            if earlyexit < 0:
-                earlyexit = shpBandDat[1]  # default to all the poles.
-            self.nband_earlyexit = earlyexit
-        else:
-            earlyexit = self.nband_earlyexit
-
-        for i in range(npoints):
-            bandNorm1 = bandnorm[i, :, :]
-            bDat1 = banddata[i, :]
-            whgood = np.nonzero(bDat1["max"] > -1.0e6)[0]
-            if whgood.size >= 3:
-                bDat1 = bDat1[whgood]
-                bandNorm1 = bandNorm1[whgood, :]
-                indxData["pq"][0:nPhases, i] = np.sum(bDat1["max"], axis=0)
-                adj_intensity = (-1*np.abs(bDat1["rho"]) * 0.5 / rhomax + 1) * bDat1["max"]
-                adj_intensity *= ((bDat1["theta"] > (2*np.pi/180)).astype(np.float32)+0.5)/2
-                adj_intensity *= ((bDat1["theta"] < (178.0 * np.pi / 180)).astype(np.float32)+0.5)/2
-                #print(bDat1["max"])
-                #print(adj_intensity)
-                for j in range(len(self.phaseLib)):
-                    bandmatchindex[j,i, :, 0] = j
-
-                    (
-                        avequat,
-                        fit,
-                        cm,
-                        bandmatch,
-                        nMatch,
-                        matchAttempts,
-                        totvotes,
-                    ) = self.phaseLib[j].bandindex(
-                        bandNorm1, band_intensity=adj_intensity, band_widths=bDat1["width"], verbose=verbose,
-                    )
-                    # avequat,fit,cm,bandmatch,nMatch, matchAttempts = self.phaseLib[j].pairVoteOrientation(bandNorm1,goNumba=True)
-                    if nMatch >= 3:
-                        q[j, i, :] = avequat
-                        indxData["fit"][j, i] = fit
-                        indxData["cm"][j, i] = cm
-                        indxData["phase"][j, i] = j
-                        indxData["nmatch"][j, i] = nMatch
-                        indxData["matchattempts"][j, i] = matchAttempts
-                        indxData["totvotes"][j, i] = totvotes
-                        bandmatchindex[j,i, whgood, 1] = bandmatch
-
-                    if nMatch >= earlyexit:
-                        break
-
-        qref2detect = self._detector2refframe()
-        q = q.reshape(nPhases * npoints, 4)
-        q = rotlib.quat_multiply(q, qref2detect)
-        q = rotlib.quatnorm(q)
-        q = q.reshape(nPhases, npoints, 4)
-        indxData["quat"][0:nPhases, :, :] = q
-        indxData[-1, :] = indxData[0, :]
-        banddataout['band_match_index'][:,:,:] = bandmatchindex[0,:,:,:].squeeze()
-        if nPhases > 1:
-            for j in range(1, nPhases):
-                # indxData[-1, :] = np.where(
-                #    (indxData[j, :]["cm"] * indxData[j, :]["nmatch"])
-                #    > (indxData[j + 1, :]["cm"] * indxData[j + 1, :]["nmatch"]),
-                #    indxData[j, :],
-                #    indxData[j + 1, :],
-                phasetest = ((3.0 - indxData[j, :]["fit"]) * indxData[j, :]["nmatch"]) \
-                            > ((3.0 - indxData[-1, :]["fit"]) * indxData[-1, :]["nmatch"])
-                whbetter = np.nonzero(phasetest)
-                indxData[-1, whbetter] = indxData[j, whbetter]
-                banddataout['band_match_index'][whbetter,:] =  bandmatchindex[j,whbetter,:,:].squeeze()
-        return indxData, banddataout
     def _detector2refframe(self):
         ven = str.upper(self.vendor)
         if ven in ["EDAX", "EMSOFT", "KIKUCHIPY"]:
