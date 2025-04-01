@@ -46,7 +46,7 @@ jobs:
         include:
           - os: ubuntu-latest
             python-version: 3.9
-            DEPENDENCIES: matplotlib==3.3 numba==0.52 numpy==1.19 ray[default]==1.13
+            DEPENDENCIES: matplotlib==3.3 numba==0.53 numpy==1.19 ray[default]==2.9
             LABEL: -oldest
     steps:
       - uses: actions/checkout@v4
