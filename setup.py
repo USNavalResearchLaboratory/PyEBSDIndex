@@ -94,7 +94,7 @@ setup(
         "h5py",
         "matplotlib",
         "numpy",
-        "numba>=0.55",
+        "numba>=0.55.1",
         "scipy",
     ],
     # Files to include when distributing package (see also MANIFEST.in)
