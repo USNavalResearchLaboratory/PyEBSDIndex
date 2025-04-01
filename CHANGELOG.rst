@@ -5,6 +5,39 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
+0.3.8 (2025-04-01)
+==================
+
+Added
+-----
+- Ability to add micron bars to IPF and scalar values maps. Use the ``addmicronbar`` keyword
+to ``makeipf`` and ``scalarimage`` functions.
+- When using ``ebsd_index`` function, if the machine has multiple GPUs, the desired GPU
+can be chosen using the ``gpu_id`` keyword.
+- When making IPF maps, a grayscale mix can be added using ``graychannel`` keyword.
+- New pattern quality parameter, ``iq`` which is the mean intensity of the convolved peaks
+divided by the mean intensity of the radon.  Typical values are 1.8--2.0
+- Initial support for Thermo-Fisher ``.pat`` files.
+
+Changed
+-------
+- Minimum official support is now python 3.9
+- pyebsdinex[parallel] now uses a minimum Ray v2.9
+- oh5 files are currently written with OIM 8.6.
+OIM 9.1 oh5 files can be specified using ``version=9.1``
+- The ``fit`` value now is the _unweighted_ mean angular deviation. Previously this was
+the weighted eigen value from the QUEST algorithm.
+- Automatic CPU scheduling is changed for distributed indexing, avoiding spinning up many
+processes on large workstations.
+
+
+Fixed
+-----
+- ``ebsd_index_distributed`` should have better scheduling for multiple NVIDIA GPUs.
+- Removed warnings around OpenCL builds
+- Removed warnings with ray distributed NLPAR and indexing.
+
+
 
 0.3.7 (2024-10-16)
 ==================

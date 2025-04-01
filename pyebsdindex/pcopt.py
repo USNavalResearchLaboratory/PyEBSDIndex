@@ -37,7 +37,8 @@ __all__ = [
 RADEG = 180.0 / np.pi
 
 
-def _optfunction(PC_i, indexer, banddat):
+#def _optfunction(PC_i, indexer, banddat):
+def _optfunction(PC_i, indexer=None, banddat=None):
     tic = timer()
     PC = np.atleast_2d(PC_i)
     result = np.zeros(PC.shape[0])
@@ -59,7 +60,7 @@ def _optfunction(PC_i, indexer, banddat):
 
 
 
-        fit = indexdata[-1]['fit']
+        fit =indexdata[-1]['fit']
         nmatch = indexdata[-1]['nmatch']
         average_fit = fit + 1.0*(nbands - nmatch)
         #average_fit = -1.0*(3.0-fit)*nmatch
@@ -189,7 +190,7 @@ def optimize(pats, indexer, PC0=None, batch=False):
 
 def optimize_pso(
     pats,
-    indexer,
+    indexer =None,
     PC0=None,
     batch=False,
     search_limit=0.2,
@@ -297,6 +298,8 @@ def optimize_pso(
         cost, PCoutRet = optimizer.optimize(_optfunction, indexer=indexer, banddat=banddat,
                                             start=PC0, bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
                                             niter=niter, verbose=verbose)
+        #weightedPC = np.mean(optimizer.pbest_loc, axis = 0)
+        #print(weightedPC)
         costout = cost
         #print(cost)
     else:
@@ -383,7 +386,7 @@ class PSOOpt():
     def __init__(self,
                 dimensions=3,
                 n_particles=50,
-                c1 = 2.05,
+                c1 = 2.05, #decent defaults for a 'static' hyperparametermethod.
                 c2 = 2.05,
                 w = 0.8,
                 hyperparammethod = 'static',
@@ -391,22 +394,29 @@ class PSOOpt():
                 early_exit=None):
         self.n_particles = int(n_particles)
         self.dimensions = int(dimensions)
-        self.c1 = c1
-        self.c2 = c2
-        self.c1i = None
-        self.c2i = None
-        self.w = w
-        self.wi = None
-        self.hyperparammethod = hyperparammethod
-        self.boundmethod = boundmethod
-        self.vellimit = None
-        self.start = None
-        self.bounds = None
-        self.range = None
-        self.niter = None
-        self.pos = None
-        self.vel = None
-        self.early_exit = early_exit
+        self.c1 = c1 # attraction to personal best
+        self.c2 = c2 # attraction to global best
+        self.c1i = None # this iteration c1 (for auto tuned parameters)
+        self.c2i = None # this iteration c2 (for auto tuned parameters)
+        self.w = w # weight for current direction
+        self.wi = None # this iteration w (for auto tuned parameters)
+        self.hyperparammethod = hyperparammethod # do the hyperparameters evolve ('auto') or 'static'
+        self.boundmethod = boundmethod # how to handle when a particle reaches the boundary.
+                                       # Currently 'bounce' is only option.
+        self.vellimit = None # maximum velocity allowed. Set as 4 times mean intial velocity.
+                             # After exceeding, particles are slowed to 1/2 vellimit
+        self.start = None # iniital starting postion
+        self.bounds = None # (2 , dimensions) array setting the min/max bounds of the search space.
+        self.range = None # (dimensions) array that gives the size in float of each dimension bounds.
+        self.niter = None # max number of interations
+        self.pos = None #(n, dimensions) array: position of the swarm
+        self.vel = None #(n, dimensions) array: velocity of the swarm
+        self.pbest = None # array of particle personal best
+        self.pbest_loc = None # array of particle personal best location
+        self.gbest = None # value of swarm global best
+        self.gbest_loc = None # array of location of swarm global best
+        self.early_exit = early_exit # settings for an early exit:
+                                     # if all particles within this absolute distance, stop.
 
 
     def initializeswarm(self, start=None, bounds=None):
@@ -432,6 +442,7 @@ class PSOOpt():
         self.vel = np.random.normal(size=(self.n_particles, self.dimensions), loc=0.0, scale=1.0)
         meanv = np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
         self.vel *= np.sqrt(np.sum(self.range**2))/(20. * meanv)
+        #self.vel *= np.sqrt(np.sum(self.range**2))/(100. * meanv)
         self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
 
 
@@ -472,7 +483,7 @@ class PSOOpt():
 
 
     def updateswarmvelpos(self):
-
+        # update the swarm velocities and positions
         w = self.wi
         c1 = self.c1i
         c2 = self.c2i
@@ -486,7 +497,8 @@ class PSOOpt():
         mag = np.expand_dims(np.sqrt(np.sum(nvel**2, axis=1)), axis=1)
         wh_toofast = np.nonzero(mag > self.vellimit)[0]
         #print(nvel.shape, wh_toofast.shape, mag.shape)
-        nvel[wh_toofast, :] *= self.vellimit/mag[wh_toofast]
+        if len(wh_toofast) > 0:
+            nvel[wh_toofast, :] *= self.vellimit/(2.0*mag[wh_toofast])
 
         self.vel = nvel
         self.pos += nvel
@@ -498,13 +510,13 @@ class PSOOpt():
 
 
     def boundarycheck(self):
-
+        # function that selects current boundary method.
         if str.lower(self.boundmethod) == 'bounce':
             self.boundarybounce()
 
 
     def boundarybounce(self):
-
+        # implementation of the boundary bounce edge check.
         lb,ub = self.bounds
         for d in range(self.dimensions):
             wh_under = np.nonzero(self.pos[:,d] < lb[d])[0]
@@ -516,6 +528,7 @@ class PSOOpt():
             self.vel[wh_over, d] = -1*np.abs(self.vel[wh_over, d])
 
     def updatehyperparam(self, iter):
+        # Function that selects and implements evolution of hyperparameters.
         if str.lower(self.hyperparammethod) == 'auto':
 
             N = float(self.niter)-1
@@ -532,7 +545,7 @@ class PSOOpt():
 
         pass
     def printprogress(self, iter):
-
+        # progress printing function.
         progress = int(round(10*float(iter)/self.niter))
         print('',end='\r' )
         print('Progress [',
@@ -541,12 +554,22 @@ class PSOOpt():
               '  best loc:', np.array_str(self.gbest_loc, precision=4, suppress_small=True),
               sep='', end='')
     def optimize(self, function, start=None, bounds=None, niter=50, verbose = 1, **kwargs):
+        # actual optimization method.  Will initialize the swarm.
+        # strongly suggested that start and bounds are set.
+        # `function` is the function call that will be minimized, it should only have one argument, any other inputs
+        # need to be keywords that are present in the **kwargs. If the function keywords overlap with the keywords in
+        # the `optimize` method, or if the function does not use keyword arguments,
+        # it is suggested to make a dummy function that will resolve the ambiguity.
 
         self.initializeswarm(start, bounds)
         early_exit = self.early_exit
         if early_exit is None:
            early_exit = -1.0
 
+        #f = open("/tmp/pswarm.csv", "w")
+        #f.write("interation, pnum, posx, posy, posz \n")
+
+        # in theory the below should work -- find it to be unstable and buggy, and not actaully quicker when it does work.
         #with multiprocessing.get_context("spawn").Pool(min(multiprocessing.cpu_count(), self.n_particles)) as pool:
         pool = None
         if verbose >= 1:
@@ -556,6 +579,8 @@ class PSOOpt():
         for iter in range(niter):
             self.updatehyperparam(iter)
             self.updateswarmbest(function, pool, **kwargs)
+            #for ii in range(self.n_particles):
+            #    f.write(str(iter) +','+ str(ii) +','+ str(self.pos[ii,0]) +','+str(self.pos[ii,1]) +','+str(self.pos[ii,2])+'\n' )
             if verbose >= 1:
                 self.printprogress(iter)
                 #print(np.abs(self.vel).max())
@@ -569,7 +594,7 @@ class PSOOpt():
 
 
 
-
+        #f.close()
         #pool.close()
         #pool.terminate()
         final_best = self.gbest

@@ -7,14 +7,22 @@ __credits__ = [
 ]
 __description__ = "Python based tool for Radon based EBSD indexing"
 __name__ = "pyebsdindex"
-__version__ = "0.3.7"
+__version__ = "0.3.8"
 
 
 # Try to import only once - also will perform check that at least one GPU is found.
-
+_pyopencl_installed = False
 try:
-    import pyopencl
-    _pyopencl_installed = True
+    import pyopencl as cl
+    try:
+        platform = cl.get_platforms()
+        for p in platform:
+            gpu = p.get_devices(device_type=cl.device_type.GPU)
+            if len(gpu) > 0:
+                _pyopencl_installed = True
+    except:
+        _pyopencl_installed = False
+
 except ImportError:
     _pyopencl_installed = False
 

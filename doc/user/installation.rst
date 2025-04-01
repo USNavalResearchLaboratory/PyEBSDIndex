@@ -4,7 +4,7 @@ Installation
 
 The package can be installed with `pip <https://pypi.org/project/pyebsdindex>`__,
 `conda <https://anaconda.org/conda-forge/pyebsdindex>`__, or from source, and supports
-Python >= 3.7. All alternatives are available on Windows, macOS and Linux.
+Python >= 3.9. All alternatives are available on Windows, macOS and Linux.
 
 In order to avoid potential conflicts with other system Python packages, it is strongly
 recommended to use a virtual environment, such as ``venv`` or ``conda`` environments.
@@ -36,13 +36,10 @@ required for specific functionality:
 With conda
 ==========
 
-GPU support is included when installing from Anaconda. On Linux or Windows::
+GPU support is included when installing from Anaconda. On Linux, macOS or Windows::
 
     conda install pyebsdindex -c conda-forge
 
-On macOS (without ``ray[default]``, which has to be installed separately)::
-
-    conda install pyebsdindex-base -c conda-forge
 
 From source
 ===========
@@ -70,7 +67,8 @@ MacOS
 
 The latest versions of ``pyopencl`` installed from Anaconda do not automatically include
 linking to the MacOS OpenCL framework. If using a ``conda`` environment, it may be
-necessary to install::
+necessary to install (this should only be if installing from source. This is automatically
+included when pyebsdindex is installed from conda-forge)::
 
     conda install -c conda-forge ocl_icd_wrapper_apple
 
@@ -86,17 +84,7 @@ command within ``'...'`` such as::
 
 MacOS with Apple Silicon
 ------------------------
-
 The ``ray`` package used for distributed multi-processing only experimentally supports
-Apple's ARM64 architecture. More info is available `here
-<https://docs.ray.io/en/latest/ray-overview/installation.html>`_. In brief, to run on
-Apple ARM64, PyEBSDIndex should be installed in a ``conda`` environment. Assuming that
-``ray`` has already been installed (perhaps as a dependency) and one has activated the
-conda environment in the terminal, run the commands below (the first two commands are to
-guarantee that ``grpcio`` is fully removed, they may send a message that the packages
-are not installed)::
+Apple's ARM64 architecture. However, ray is now available on conda-forge, and does not
+require a separate install on macOS.
 
-    pip uninstall ray
-    pip uninstall grpcio
-    conda install -c conda-forge grpcio
-    pip install 'ray[default]'

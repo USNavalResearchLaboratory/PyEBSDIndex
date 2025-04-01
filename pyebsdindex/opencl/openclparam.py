@@ -113,7 +113,7 @@ class OpenClParam():
     return self.ctx
   def get_queue(self, gpu_id=None):
     if self.ctx is None:
-      self.get_context(gpu_id=None)
+      self.get_context(gpu_id=gpu_id)
     if self.queue is None:
       self.queue = cl.CommandQueue(self.ctx)
     return self.queue

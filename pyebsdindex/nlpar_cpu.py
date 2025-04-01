@@ -130,7 +130,7 @@ class NLPAR:
     if patternfile is not None: # the user has set no path.
       hdf5path = None
       
-      if patternfile.filetype in ['UP', 'EBSP']:
+      if patternfile.filetype in ['UP', 'EBSP', 'TFPAT']:
         p = Path(patternfile.filepath)
         appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
         newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
@@ -310,8 +310,12 @@ class NLPAR:
       self.sigma = sigma
     return np.mean(lamopt_values, axis = 0).flatten()
 
+<<<<<<< HEAD
   def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None,
                saturation_protect=True, automask=True, stem_scale = False,
+=======
+  def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
+>>>>>>> main
                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,verbose=2, diff_offset=None,
                 **kwargs):
 
