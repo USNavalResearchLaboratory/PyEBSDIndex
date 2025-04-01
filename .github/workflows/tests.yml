@@ -45,8 +45,8 @@ jobs:
         python-version: ['3.10', '3.11', '3.12']
         include:
           - os: ubuntu-latest
-            python-version: 3.9
-            DEPENDENCIES: matplotlib==3.3 numba==0.53 ray[default]==2.9
+            python-version: 3.10
+            DEPENDENCIES: matplotlib==3.3 numba==0.53 numpy==2.0 ray[default]==2.9
             LABEL: -oldest
     steps:
       - uses: actions/checkout@v4
