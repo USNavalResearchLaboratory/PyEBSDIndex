@@ -730,7 +730,7 @@ class EBSDIndexer:
         #print(adj_intensity.shape)
 
         indxData[:]['pq'] = np.mean(banddata['max'] * banddata['valid'], axis=1).reshape(1,-1)
-        indxData[:]['iq'] = np.mean(banddata['normmax'] * banddata['valid'], axis=1).reshape(1,-1)  
+        indxData[:]['iq'] = np.mean(banddata['normmax'] * banddata['valid'], axis=1).reshape(1,-1)
 
         if self.phaseLib[0] is  None:
             return indxData, banddataout
