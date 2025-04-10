@@ -485,6 +485,8 @@ def index_pats_distributed(
 
     gpuwrker_cycles = -500
     cpuwrker_cycles = 0
+    ngpu_retry = 0
+    ncpu_retry = 0
 
     while ncpudone < njobs:
 
@@ -564,37 +566,41 @@ def index_pats_distributed(
 
 
 
-                except:
+                except Exception as e:
                     gjob = gtaskindex[jid]
                     print('A GPU death has occured', gjob.pstart, gjob.pend)
-                    del gpuworkers[jid]
-                    del gputask[jid]
-                    del gtaskindex[jid]
-                    gpujobs.append(gjob)
-                    if len(gpuworkers) == 0:
+                    if ngpu_retry < 5:
+                        ngpu_retry +=1
+                        del gpuworkers[jid]
+                        del gputask[jid]
+                        del gtaskindex[jid]
+                        gpujobs.append(gjob)
+                        if len(gpuworkers) == 0:
 
-                        gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
-                            # These actors are read/write, thus can initialize the GPU queues
-                            #GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=0).remote(
-                            GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
-                                actorid=0, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cudagpuvis
-                            )
-                        )
-                        gjob = gpujobs.pop(0)
-                        if inputmode == "filemode":
-                            gputask.append(
-                                gpuworkers[0].findbands.remote(gjob, pats=None,
-                                   indexer=remote_indexer
+                            gpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
+                                # These actors are read/write, thus can initialize the GPU queues
+                                #GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=0).remote(
+                                GPUWorker.options(num_cpus=ncpugpu_per_wrker, num_gpus=ngpu_per_wrker).remote(
+                                    actorid=0, clparammodule=clparamfunction, gpu_id=gpu_id, cudavis=cudagpuvis
                                 )
                             )
-                        else:
-                            gputask.append(
-                                gpuworkers[0].findbands.remote(gjob,
-                                   pats=pats[gjob.pstart:gjob.pend, :, :],
-                                   indexer=remote_indexer,
+                            gjob = gpujobs.pop(0)
+                            if inputmode == "filemode":
+                                gputask.append(
+                                    gpuworkers[0].findbands.remote(gjob, pats=None,
+                                       indexer=remote_indexer
+                                    )
                                 )
-                            )
-                        gtaskindex.append(gjob)
+                            else:
+                                gputask.append(
+                                    gpuworkers[0].findbands.remote(gjob,
+                                       pats=pats[gjob.pstart:gjob.pend, :, :],
+                                       indexer=remote_indexer,
+                                    )
+                                )
+                            gtaskindex.append(gjob)
+                    else:
+                        raise e
             # toc = timer()
 
             if gpuwrker_cycles > 100: # a gpu worker got stuck -- see if I can unstick it.
@@ -705,17 +711,21 @@ def index_pats_distributed(
                     print(e)
                     cjob = ctaskindex[jid]
                     print('A CPU death has occured')
-                    ray.kill(cpuworkers[jid])
-                    del cpuworkers[jid]
-                    del cputask[jid]
-                    del ctaskindex[jid]
-                    cpujobs.append(cjob)
-                    if len(cpuworkers) == 0:
-                        cpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
-                            # These actors are read/write, thus can initialize the GPU queues
-                            CPUWorker.options(num_cpus=1, num_gpus=0).remote(0))
-                        cputask.append(cpuworkers[0].indexpoles.remote(None, None, None))
-                        ctaskindex.append(None)
+                    if ncpu_retry < 5:
+                        ncpu_retry += 1
+                        ray.kill(cpuworkers[jid])
+                        del cpuworkers[jid]
+                        del cputask[jid]
+                        del ctaskindex[jid]
+                        cpujobs.append(cjob)
+                        if len(cpuworkers) == 0:
+                            cpuworkers.append(  # make a new Ray Actor that can call the indexer defined in shared memory.
+                                # These actors are read/write, thus can initialize the GPU queues
+                                CPUWorker.options(num_cpus=1, num_gpus=0).remote(0))
+                            cputask.append(cpuworkers[0].indexpoles.remote(None, None, None))
+                            ctaskindex.append(None)
+                    else:
+                        raise e
     if verbose > 0:
         print('\n...')
     ray.shutdown()
