@@ -60,7 +60,9 @@ def _optfunction(PC_i, indexer=None, banddat=None):
 
 
 
-        fit =indexdata[-1]['fit']
+        fit = indexdata[-1]['fit']
+        iq = np.clip(np.array(indexdata[-1]['iq'])-1.5, 0, None)
+
         nmatch = indexdata[-1]['nmatch']
         average_fit = fit + 1.0*(nbands - nmatch)
         #average_fit = -1.0*(3.0-fit)*nmatch
@@ -73,7 +75,7 @@ def _optfunction(PC_i, indexer=None, banddat=None):
             average_fit = 1000
         else:
             average_fit = np.sum(average_fit[whgood[0]]) + 4.0*(nbands+1)*(npoints - n_averages)
-            average_fit /= npoints
+            average_fit /=  npoints
             #average_fit /= n_averages
             #average_fit *=  (n_averages*(nbands+1) - nbands_fit)/(n_averages*nbands)
         result[q] = average_fit

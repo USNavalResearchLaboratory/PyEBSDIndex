@@ -734,7 +734,7 @@ class EBSPFile(EBSDPatternFile):
       loc0 = 0
       counter = 0
       while loc0 == 0: # check for non-stored points.
-        loc0 = np.int64(np.fromfile(f, dtype=np.uint64, count=1))
+        loc0 = np.int64(np.fromfile(f, dtype=np.uint64, count=1))[0]
         counter += 1
       f.seek(-8*counter, 1) # move back 8 bytes (or however far we needed to move into the file to find a legitamte offset.
 
@@ -753,7 +753,7 @@ class EBSPFile(EBSDPatternFile):
 
 
         self.nPatterns = np.int64((counter))
-      elif self.version == 5:
+      elif self.version >= 5:
         f.seek(loc02N[0], 0)
         patdata = np.fromfile(f, dtype=np.uint32, count=per_pat_header)
         if patdata[0] == 1:

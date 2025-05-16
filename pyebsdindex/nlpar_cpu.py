@@ -134,7 +134,12 @@ class NLPAR:
         p = Path(patternfile.filepath)
         appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
         newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
-        patternfile.copy_file(newfilepath,empty_data=True)
+        emptydata = True
+        if patternfile.filetype in ['EBSP']:
+          if patternfile.version > 5:
+            emptydata = False
+        #print(emptydata)
+        patternfile.copy_file(newfilepath,empty_data=emptydata)
 
       if patternfile.filetype == 'HDF5':
         hdf5path_tmp = str(patternfile.h5patdatpth).split('/')
