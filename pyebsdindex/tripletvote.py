@@ -189,6 +189,7 @@ class BandIndexer():
     self.angTol = angTol
     self.nband_earlyexit = nband_earlyexit
     self.high_fidelity = True
+    self.simpleqweights = False
 
     # many objects to hold the information about the reflecting poles, angles between them ...
     self.angpairs = None # dictionary that will store the possible unique angles between all pole families.
@@ -599,7 +600,7 @@ class BandIndexer():
     if self.high_fidelity == True:
 
       weights = self._calc_quest_weights(libFamID, accumulator, accumulator_nw,
-                                         polematch, polevalid, band_intensity, nfit=6)
+                                         polematch, polevalid, band_intensity, nfit=6, simpleqweights=bool(self.simpleqweights))
       avequat, fit = self._refine_orientation_quest(libPolesCart, bandnorms,
                                                     polematch, polevalid, weights = weights)
       fit = np.arccos(np.clip(fit, -1.0, 1.0))*RADEG
@@ -843,7 +844,7 @@ class BandIndexer():
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=False)
   def _calc_quest_weights( libComFamID, accumulator, accumulator_nw,
-                           polematch, polevalid, band_intensity, nfit=6):
+                           polematch, polevalid, band_intensity, nfit=6, simpleqweights=True):
     npats = accumulator.shape[0]
     nbands = polematch.shape[-1]
     weights = np.zeros((npats, nbands), dtype=np.float32)
@@ -859,11 +860,16 @@ class BandIndexer():
 
       acc = accumulator[p, ...]
       acc_nw = accumulator_nw[p,...]
-      for q in range(whGood.size):
-        whg = np.uint64(whGood[q])
-        a1indx = np.uint64(libComFamID[pmatch[whg]])
-        score[whg] = acc[a1indx, whg]
-        score[whg] /= max(acc_nw[a1indx, whg], 1.0e-12)
+      if simpleqweights is False:
+        for q in range(whGood.size):
+          whg = np.uint64(whGood[q])
+          a1indx = np.uint64(libComFamID[pmatch[whg]])
+          score[whg] = acc[a1indx, whg]
+          score[whg] /= max(acc_nw[a1indx, whg], 1.0e-12)
+      else:
+        for q in range(whGood.size):
+          whg = np.uint64(whGood[q])
+          score[whg] = band_intensity[p, q]
 
       srt = np.flip(np.argsort(score))
 
