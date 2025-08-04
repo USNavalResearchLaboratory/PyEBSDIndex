@@ -73,6 +73,7 @@ class Radon(radon_fast.Radon):
       prg = clparams.prg
       queue = clparams.queue
       mf = clparams.memflags
+    clkern = clparams.kernels
 
     shapeIm = np.shape(image)
     if image.ndim == 2:
@@ -111,21 +112,21 @@ class Radon(radon_fast.Radon):
     if background is not None:
       back_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=background.astype(np.float32))
       if str.upper(background_method) == 'DIVIDE':
-        prg.backDiv(queue,(imstep, 1, 1),None,image_gpu,back_gpu,nImChunk)
+        clkern['backDiv'](queue,(imstep, 1, 1),None,image_gpu,back_gpu,nImChunk)
       else:
-        prg.backSub(queue,(imstep, 1, 1),None,image_gpu,back_gpu,nImChunk)
+        clkern['backSub'](queue,(imstep, 1, 1),None,image_gpu,back_gpu,nImChunk)
         #imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
         #cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
 
     cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(self.missingval), 0, radon_gpu.size)
-    prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
+    clkern['radonSum'](queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpu,radon_gpu,
                   imstep, indxstep,
                  shpRdn[0], shpRdn[1],
                  padRho, padTheta, np.uint64(self.nTheta))
 
 
     if (fixArtifacts == True):
-       prg.radonFixArt(queue,(nImChunk,shpRdn[0]),None,radon_gpu,
+       clkern['radonFixArt'](queue,(nImChunk,shpRdn[0]),None,radon_gpu,
                        shpRdn[0],shpRdn[1],padTheta)
 
 

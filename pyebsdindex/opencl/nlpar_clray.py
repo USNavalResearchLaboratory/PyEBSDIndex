@@ -265,6 +265,7 @@ class NLPAR(nlpar_cl.NLPAR):
     data = np.ascontiguousarray(data)
     ctx = clparams.ctx
     prg = clparams.prg
+    clkern = clparams.kernels
     clparams.get_queue()
 
 
@@ -328,11 +329,11 @@ class NLPAR(nlpar_cl.NLPAR):
     data_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=data)
 
     if data.dtype.type is np.float32:
-      prg.nlloadpat32flt(clparams.queue, (np.uint64(data.size),), None, data_gpu, datapad_gpu, wait_for=[evnt])
+      clkern['nlloadpat32flt'](clparams.queue, (np.uint64(data.size),), None, data_gpu, datapad_gpu, wait_for=[evnt])
     if data.dtype.type is np.ubyte:
-      prg.nlloadpat8bit(clparams.queue, (np.uint64(data.size),), None, data_gpu, datapad_gpu, wait_for=[evnt])
+      clkern['nlloadpat8bit'](clparams.queue, (np.uint64(data.size),), None, data_gpu, datapad_gpu, wait_for=[evnt])
     if data.dtype.type is np.uint16:
-      prg.nlloadpat16bit(clparams.queue, (np.uint64(data.size),), None, data_gpu, datapad_gpu, wait_for=[evnt])
+      clkern['nlloadpat16bit'](clparams.queue, (np.uint64(data.size),), None, data_gpu, datapad_gpu, wait_for=[evnt])
     toc = timer()
     #print(toc - tic)
 
@@ -341,14 +342,14 @@ class NLPAR(nlpar_cl.NLPAR):
 
     sigmachunk_gpu =  cl.Buffer(ctx, mf.WRITE_ONLY, size=sigmachunk.nbytes)
     cl.enqueue_barrier(clparams.queue)
-    prg.calcsigma(clparams.queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
+    clkern['calcsigma'](clparams.queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
                            datapad_gpu, mask_gpu,sigmachunk_gpu,
                            dist_local, count_local,
                            np.int64(nn), np.int64(npatsteps), np.int64(npat_point),
                            np.float32(mxval) )
 
     cl.enqueue_barrier(clparams.queue)
-    prg.normd(clparams.queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
+    clkern['normd'](clparams.queue, (np.uint32(ncolchunk), np.uint32(nrowchunk)), None,
                     sigmachunk_gpu,
                     count_local, dist_local,
                     np.int64(nn))
@@ -581,6 +582,7 @@ class NLPAR(nlpar_cl.NLPAR):
     data = np.ascontiguousarray(data)
     ctx = clparams.ctx
     prg = clparams.prg
+    clkern = clparams.kernels
     clparams.get_queue()
 
 
@@ -648,17 +650,17 @@ class NLPAR(nlpar_cl.NLPAR):
     cl.enqueue_barrier(clparams.queue)
     data_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=data)
     if data.dtype.type is np.float32:
-      prg.nlloadpat32flt(clparams.queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
+      clkern['nlloadpat32flt'](clparams.queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
     if data.dtype.type is np.ubyte:
-      prg.nlloadpat8bit(clparams.queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
+      clkern['nlloadpat8bit'](clparams.queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
     if data.dtype.type is np.uint16:
-      prg.nlloadpat16bit(clparams.queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
+      clkern['nlloadpat16bit'](clparams.queue, (np.uint64(data.size), 1), None, data_gpu, datapad_gpu)#, wait_for=[fill1,fill2])
 
     calclim = np.array([cstartcalc, rstartcalc, ncolchunk, nrowchunk], dtype=np.int64)
     crlimits_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=calclim)
     cl.enqueue_barrier(clparams.queue)
     data_gpu.release()
-    prg.calcnlpar(clparams.queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
+    clkern['calcnlpar'](clparams.queue, (np.uint32(ncolcalc), np.uint32(nrowcalc)), None,
                   # prg.calcnlpar(clparams.queue, (1, 1), None,
                   datapad_gpu,
                   mask_gpu,
