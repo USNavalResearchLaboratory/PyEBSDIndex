@@ -316,7 +316,7 @@ def index_pats_distributed(
         ncpu = max(1,os.cpu_count()//2)
     if ncpu <= 0:
         if ngpu > 0:
-            ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*10)))
+            ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*16)))
             # this is a heuristic, and may be highly dependent on hardware
         else:
             ncpu = max(1,os.cpu_count()//4)
@@ -566,8 +566,7 @@ def index_pats_distributed(
 
 
                     else: # no more gpu tasks to submit
-                        #del gpuworkers[jid]
-                        #ray.kill(gpuworkers[jid])
+                        gpuworkers[jid].exit.remote()
                         del gpuworkers[jid]
                         del gputask[jid]
                         del gtaskindex[jid]
@@ -701,6 +700,7 @@ def index_pats_distributed(
                             #cputask[jid] = None
                             #ctaskindex[jid] = None
                             #ray.kill(cpuworkers[jid])
+                            cpuworkers[jid].exit.remote()
                             del cpuworkers[jid]
                             del cputask[jid]
                             del ctaskindex[jid]
@@ -912,6 +912,9 @@ class GPUWorker:
                  }
         return stats
 
+    def exit(self):
+        ray.actor.exit_actor()
+
 
 
 
@@ -937,6 +940,8 @@ class CPUWorker:
             print(e)
             cpujob.rate = None
             return "Error", (None,None, cpujob)
+    def exit(self):
+        ray.actor.exit_actor()
 
 
 class CPUGPUJob:
@@ -955,4 +960,5 @@ class CPUGPUJob:
         self.endtime = timer()
         self.extime += self.endtime - self.starttime
         self.rate = self.npat/(self.extime + 1e-12)
+
 

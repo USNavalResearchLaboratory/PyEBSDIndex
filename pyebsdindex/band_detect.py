@@ -746,6 +746,9 @@ class BandDetect():
     # subrdn.ylim(-self.rhoMax, self.rhoMax)
     subpat = fig.add_subplot(122)
     pat1 = patterns[-1, :, :].copy().squeeze().astype(float)
+    if self.backgroundsub is not None:
+      pat1 -= self.backgroundsub
+      pat1 -= pat1.min()
     minpat = pat1.min()
     pdim = pat1.shape
     pat1 = np.concatenate((pat1.flatten(), [minpat]))

@@ -130,9 +130,9 @@ def index_pats(
     nBands : int, optional
         Number of detected bands to use in triplet voting. Default
         is 9. Unused if ``ebsd_indexer_obj`` is passed.
-    backgroundSub : bool, optional
+    backgroundSub : bool, ndarray optional
         Whether to subtract a static background prior to indexing.
-        Default is ``False``.
+        Default is ``False``. Set to a ndarray to use your own background.
     patstart : int, optional
         Starting index of the patterns to index. Default is ``0``.
     npats : int, optional
@@ -237,10 +237,13 @@ def index_pats(
         if not np.all(indexer.bandDetectPlan.patDim == np.array(pdim)):
             indexer.update_file(patDim=pats.shape[-2:])
 
-    if backgroundSub:
-        indexer.bandDetectPlan.collect_background(
-            fileobj=indexer.fID, patsIn=pats, nsample=1000
-        )
+    if type(backgroundSub) is np.ndarray:
+        indexer.bandDetectPlan.backgroundsub = backgroundSub
+    else:
+        if backgroundSub:
+            indexer.bandDetectPlan.collect_background(
+                fileobj=indexer.fID, patsIn=pats, nsample=1000
+            )
 
     #indexer.bandDetectPlan.radonPlan.masksetup(mask=patternmask, maskindex=patternmaskindex)
 
