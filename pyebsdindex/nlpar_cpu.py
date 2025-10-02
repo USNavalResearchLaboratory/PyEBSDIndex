@@ -532,7 +532,11 @@ class NLPAR:
     if filename is not None:
       self.setfile(filename)
     lam = self.opt_lambda( automask = True, autoupdate=True, backsub = False, **kwargs)
-    nlparfile = self.calcnlpar(searchradius = searchradius, lam = lam[int(lindex)], saturation_protect=True, automask=True,
+    if 'lam' in kwargs:
+      pass
+    else:
+      kwargs['lam'] = lam[int(lindex)]
+    nlparfile = self.calcnlpar(searchradius = searchradius, saturation_protect=True, automask=True,
                                 fileout=fileout, backsub=False, **kwargs)
     return nlparfile
   def backsub(self, data):

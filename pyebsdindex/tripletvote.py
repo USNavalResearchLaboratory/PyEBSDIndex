@@ -142,7 +142,7 @@ def addphase(libtype=None, phasename=None,
       else:
         latticeparameter = np.array(latticeparameter)
       if polefamilies is None:
-        polefamilies = np.array([ [1, 0, -1, 0], [0, 0, 0, 2],[1, 0, -1, 1], [1, 0, -1, 2], [1, 1, -2, 0],
+        polefamilies = np.array([ [1, 0, -1, 0], [0, 0, 0, 2],[1, 0, -1, 1],[1, 0, -1, 2], [1, 1, -2, 0],
                                  [1, 0, -1, 3], [1, 1,-2, 2], [2,0,-2,1]]).astype(np.int32)
       else:
         polefamilies = np.atleast_2d(np.array(polefamilies))
