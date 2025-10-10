@@ -272,8 +272,8 @@ def writeoh5(filename, indexer, data,
       f.create_dataset(datasetname + '/EBSD/Data/CI',
                        data=(ci).astype(np.float32))
 
-      x = (np.arange(ncols[0] * nrows[0], dtype=int) % ncols[0]).astype(np.float32) * xstep[0]
-      y = (np.arange(ncols[0] * nrows[0], dtype=int) // ncols[0]).astype(np.float32) * ystep[0]
+      x = (np.arange(ncols[0] * nrows[0], dtype=int) % int(ncols[0])).astype(np.float32) * xstep[0]
+      y = (np.arange(ncols[0] * nrows[0], dtype=int) // int(ncols[0])).astype(np.float32) * ystep[0]
 
       f.create_dataset(datasetname + '/EBSD/Data/X Position', data=x)
       f.create_dataset(datasetname + '/EBSD/Data/Y Position', data=y)

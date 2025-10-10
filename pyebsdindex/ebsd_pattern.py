@@ -866,7 +866,7 @@ class EBSPFile(EBSDPatternFile):
         self.nCols = np.uint64(ncol)
 
 
-        self.yStep = yall[0] - yall[self.nCols]
+        self.yStep = np.abs(yall[0] - yall[self.nCols])
 
         if self.yStep > 1e-6:
           nrow = (yall.max() - yall.min()) / self.yStep
