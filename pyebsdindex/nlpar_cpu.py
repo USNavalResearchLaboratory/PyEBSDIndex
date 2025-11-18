@@ -759,6 +759,13 @@ class NLPAR:
         #print('_______', '\n')
     return dataout
 
+  def opt_lambda_cpu(self,**kwargs): # helper function
+    return self.opt_lambda(**kwargs)
+
+  def calcnlpar_cpu(self, **kwargs):  # helper function
+    return self.calcnlpar(**kwargs)
+
+
   def _calcchunks(self, patdim, ncol, nrow, target_bytes=2e9, col_overlap=0, row_overlap=0, col_offset=0, row_offset=0):
 
     col_overlap = min(col_overlap, ncol - 1)
