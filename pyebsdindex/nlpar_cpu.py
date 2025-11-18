@@ -310,14 +310,11 @@ class NLPAR:
       self.sigma = sigma
     return np.mean(lamopt_values, axis = 0).flatten()
 
-<<<<<<< HEAD
   def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None,
                saturation_protect=True, automask=True, stem_scale = False,
-=======
-  def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
->>>>>>> main
-               filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,verbose=2, diff_offset=None,
-                **kwargs):
+               filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,verbose=2,
+               diff_offset=None,
+               **kwargs):
 
     if lam is not None:
       self.lam = lam
