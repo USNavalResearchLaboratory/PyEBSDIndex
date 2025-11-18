@@ -111,11 +111,7 @@ def writeoh5(filename, indexer, data,
         phaseIDadd = 1
       else:
         phaseIDadd = 1
-<<<<<<< HEAD
 
-    with h5py.File(fpath, 'w') as f:
-=======
->>>>>>> main
 
     with h5py.File(fpath, 'w') as f:
       # Write standard Header Information
