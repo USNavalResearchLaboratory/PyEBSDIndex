@@ -482,7 +482,7 @@ class NLPAR:
         calclim = np.array([cstartcalc, rstartcalc, ncolcalc, nrowcalc], dtype=np.int64)
 
         data, xyloc = patternfile.read_data(patStartCount=[[ cstart, rstart], [ncolchunk, nrowchunk]],
-                                          convertToFloat=False, returnArrayOnly=True)
+                                          convertToFloat=True, returnArrayOnly=True)
 
         shpdata = data.shape
 
@@ -509,7 +509,7 @@ class NLPAR:
         # nlpar_nb(data, lam, sr, dthresh, sigma, nrows, ncols, calclim=np.array([-1, -1, -1, -1], dtype= np.int64),
         #         indices=np.array([-1], dtype= np.int64), saturation_protect=True,
         #         diff_offset=np.float32(0.0))
-
+        dataout = dataout.reshape(nrowchunk, ncolchunk, -1)
         dataout = dataout[rstartcalc: rstartcalc + nrowcalc,
                             cstartcalc:cstartcalc + ncolcalc, :]
         shpout = dataout.shape
@@ -846,7 +846,7 @@ class NLPAR:
       winstart_x = max((i - sr),0) - max((i + sr - (ncols - 1)),0)
       winend_x = min((i + sr),(ncols - 1)) + max((sr - i),0) + 1
       pairdict = numba.typed.Dict.empty(key_type=numba.core.types.uint64,value_type=numba.core.types.float32)
-      for jj in range(calclim[2]):
+      for jj in range(calclim[3]):
         j = calclim[1]+jj
         winstart_y = max((j - sr),0) - max((j + sr - (nrows - 1)),0)
         winend_y = min((j + sr),(nrows - 1)) + max((sr - j),0) + 1
@@ -880,7 +880,7 @@ class NLPAR:
                   d1 = data[indx_nn,indices[q]]
                   if (d1 < mxval) and (d0 < mxval):
                     n2 += np.float32(1.0)
-                    d2 += (d0 - d1) ** np.int32(2)
+                    d2 += np.float32(d0 - d1) ** np.int32(2)
                 d2 -= n2*(sigma0+sigma1)
                 dnorm = (sigma1 + sigma0)*np.sqrt(np.float32(2.0)*n2)
                 if dnorm > np.float32(1.e-8):
