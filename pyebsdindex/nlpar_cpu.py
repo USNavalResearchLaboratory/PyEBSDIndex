@@ -24,7 +24,7 @@
 # Patrick T. Brewick, Stuart I. Wright, David J. Rowenhorst. Ultramicroscopy, 200:50–61, May 2019.
 
 
-
+import psutil
 from pathlib import Path
 from timeit import default_timer as timer
 
@@ -255,7 +255,7 @@ class NLPAR:
 
     dthresh = np.float32(dthresh)
     lamopt_values = []
-    
+
     for j in range(0,nrows,chunksize):
 
       if verbose >= 2:
@@ -360,20 +360,30 @@ class NLPAR:
     pheight = np.int64(patternfile.patternH)
     phw = pheight*pwidth
 
+    # if chunksize <= 0:
+    #   chunksize = np.maximum(1, np.round(1e9 / phw / ncols) ) # keeps the chunk at about 8GB
+    #   chunksize = np.minimum(nrows, chunksize)
+    #   print("Chunk size set to nrows:", int(chunksize))
+    # chunksize = np.int64(chunksize)
     if chunksize <= 0:
-      chunksize = np.maximum(1, np.round(1e9 / phw / ncols) ) # keeps the chunk at about 8GB
-      chunksize = np.minimum(nrows, chunksize)
-      print("Chunk size set to nrows:", int(chunksize))
-    chunksize = np.int64(chunksize)
+        sysram = (psutil.virtual_memory()).total
+        chunksize = np.minimum(32e9, sysram/4)
 
 
+    chunks = self._calcchunks( [pwidth, pheight], ncols, nrows, target_bytes=chunksize,
+                              col_overlap=sr, row_overlap=sr)
+    chunksize = (chunks[2][:, 1] - chunks[2][:, 0]).reshape(1, -1) * \
+                (chunks[3][:, 1] - chunks[3][:, 0]).reshape(-1, 1)
+    nchunks = chunksize.size
+    # return chunks, chunksize
+    mxchunk = np.int64(chunksize.max())
 
     if (automask is True) and (self.mask is None):
       self.mask = (self.automask(pheight,pwidth))
     if self.mask is None:
       self.mask = np.ones((pheight,pwidth), dtype=np.uint8)
 
-    indices = np.asarray( (self.mask.flatten().nonzero())[0], np.uint64)
+    indices = np.asarray( (self.mask.flatten().nonzero())[0], np.int64)
     calcsigma = False
     if self.sigma is None:
       calcsigma = True
@@ -402,8 +412,7 @@ class NLPAR:
       else: # not int, so no rescale.
         rescale = False
 
-    #chunks = self._calcchunks( [pwidth, pheight], ncols, nrows, target_bytes=target_mem,
-    #                          col_overlap=sr, row_overlap=sr)
+
 
     nthreadpos = numba.get_num_threads()
     #numba.set_num_threads(18)
@@ -412,60 +421,170 @@ class NLPAR:
     if verbose >= 1:
       print("lambda:", self.lam, "search radius:", self.searchradius, "dthresh:", self.dthresh)
 
-    for j in range(0,nrows,chunksize):
-      #print('Row start', j)
-      if verbose >= 2:
-        print("begin row: ", j, "/", nrows, sep='', end='\r')
+    # set up  a job queue
+    ndone = 0
+    jqueue = []
+    jobid = 0
+    # if verbose >= 2:
+    #   print('\n', end='')
+    for rowchunk in range(chunks[1]):
+        rstart = chunks[3][rowchunk, 0]
+        rend = chunks[3][rowchunk, 1]
+        nrowchunk = rend - rstart
 
-      rowstartread = np.int64(max(0, j-sr))
-      rowend = min(j + chunksize+sr,nrows)
+        rstartcalc = sr if (rowchunk > 0) else 0
+        rendcalc = nrowchunk - sr if (rowchunk < (chunks[1] - 1)) else nrowchunk
+        nrowcalc = np.int64(rendcalc - rstartcalc)
 
-      if (rowend - rowstartread) < (2*sr+1):
-        rowstartread = np.int64(max(0, rowend - (2*sr+1)))
-      rowcountread = np.int64(rowend-rowstartread)
-      data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
-                                        convertToFloat=True,returnArrayOnly=True)
+        for colchunk in range(chunks[0]):
+            cstart = chunks[2][colchunk, 0]
+            cend = chunks[2][colchunk, 1]
+            ncolchunk = cend - cstart
 
-      shpdata = data.shape
+            cstartcalc = sr if (colchunk > 0) else 0
+            cendcalc = ncolchunk - sr if (colchunk < (chunks[0] - 1)) else ncolchunk
+            ncolcalc = np.int64(cendcalc - cstartcalc)
 
-      if backsub is True:
-        data = self.backsub(data)
+            job = {"rstart": rstart,
+                   "rend": rend,
+                   "nrowchunk": nrowchunk,
+                   "rstartcalc": rstartcalc,
+                   "rendcalc": rendcalc,
+                   "nrowcalc": nrowcalc,
+                   "cstart": cstart,
+                   "cend": cend,
+                   "ncolchunk": ncolchunk,
+                   "cstartcalc": cstartcalc,
+                   "cendcalc": cendcalc,
+                   "ncolcalc": ncolcalc,
+                   "nattempts": -1,
+                   "jobid": jobid}
+            jobid += 1
+            jqueue.append(job)
 
 
-      data = data.reshape(shpdata[0], phw)
 
-      rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
-      if calcsigma is True:
-        sigchunk, tmp = self.sigma_numba(data,1,rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
-        del tmp
-        tmp = (sigma[rowstartread:rowend,:] < sigchunk).choose(sigchunk,sigma[rowstartread:rowend,:])
-        sigma[rowstartread:rowend,:] = tmp
-      else:
-        sigchunk = sigma[rowstartread:rowend,:]
+    while len(jqueue) > 0:
+        j = jqueue.pop(0)
+        j["nattempts"] += 1
 
-      #dataout = data
+        rstart = j["rstart"]
+        cstart = j["cstart"]
+        rend = j["rend"]
+        cend = j["cend"]
+        cstartcalc = j["cstartcalc"]
+        rstartcalc = j["rstartcalc"]
+        ncolchunk = j["ncolchunk"]
+        nrowchunk = j["nrowchunk"]
+        ncolcalc = j["ncolcalc"]
+        nrowcalc = j["nrowcalc"]
 
-      dataout = self.nlpar_nb(data,lam, sr, dthresh, sigchunk,
-                              rowcountread,ncols,indices,saturation_protect, diff_offset=diff_offset)
+        calclim = np.array([cstartcalc, rstartcalc, ncolcalc, nrowcalc], dtype=np.int64)
 
-      dataout = dataout.reshape(rowcountread, ncols, phw)
-      dataout = dataout[j-rowstartread:, :, : ]
-      shpout = dataout.shape
-      dataout = dataout.reshape(shpout[0]*shpout[1], pheight, pwidth)
-      if rescale == True:
-        for i in range(dataout.shape[0]):
-          temp = dataout[i,:,:]
-          temp -= temp.min()
-          temp *= np.float32(mxval)/temp.max()
-          dataout[i,:,:] = temp
+        data, xyloc = patternfile.read_data(patStartCount=[[ cstart, rstart], [ncolchunk, nrowchunk]],
+                                          convertToFloat=False, returnArrayOnly=True)
 
-      patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
-                                     flt2int='clip',scalevalue=1.0 )
-      #self.patternfileout.write_data(newpatterns=dataout,patStartCount=[j*ncols,shpout[0]*shpout[1]],
-      #                               flt2int='clip',scalevalue=1.0 )
-      #return dataout
-      #sigma[j:j+rowstartcount[1],:] += \
-      #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
+        shpdata = data.shape
+
+        if backsub is True:
+            data = self.backsub(data)
+
+        data = data.reshape(shpdata[0], phw)
+
+        if calcsigma is True:
+            sigchunk, tmp = self.sigma_numba(data, 1, nrowchunk, ncolchunk,
+                                             [0,nrowchunk], [0,ncolchunk],
+                                             indices, saturation_protect)
+            del tmp
+            tmp = np.minimum(sigma[rstart:rend,cstart:cend], sigchunk)
+            sigma[rstart:rend,cstart:cend] = tmp
+        else:
+            sigchunk = sigma[rstart:rend, cstart:cend ]
+
+
+
+        dataout = self.nlpar_nb(data, lam, sr, dthresh, sigchunk,
+                                nrowchunk, ncolchunk, calclim, indices, saturation_protect, diff_offset=diff_offset)
+
+        # nlpar_nb(data, lam, sr, dthresh, sigma, nrows, ncols, calclim=np.array([-1, -1, -1, -1], dtype= np.int64),
+        #         indices=np.array([-1], dtype= np.int64), saturation_protect=True,
+        #         diff_offset=np.float32(0.0))
+
+        dataout = dataout[rstartcalc: rstartcalc + nrowcalc,
+                            cstartcalc:cstartcalc + ncolcalc, :]
+        shpout = dataout.shape
+        dataout = dataout.reshape(shpout[0] * shpout[1], pheight, pwidth)
+        if rescale == True:
+            for i in range(dataout.shape[0]):
+                temp = dataout[i, :, :]
+                temp -= temp.min()
+                temp *= np.float32(mxval) / temp.max()
+                dataout[i, :, :] = temp
+
+        patternfileout.write_data(newpatterns=dataout,
+                                  patStartCount=[[np.int64(cstart + cstartcalc), np.int64(rstart + rstartcalc)],
+                                                 [ncolcalc, nrowcalc]],
+                                  flt2int='clip', scalevalue=1.0)
+        ndone += 1
+        if verbose >= 2:
+            print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
+
+
+    # for j in range(0,nrows,chunksize):
+    #   #print('Row start', j)
+    #   if verbose >= 2:
+    #     print("begin row: ", j, "/", nrows, sep='', end='\r')
+    #
+    #   rowstartread = np.int64(max(0, j-sr))
+    #   rowend = min(j + chunksize+sr,nrows)
+    #
+    #   if (rowend - rowstartread) < (2*sr+1):
+    #     rowstartread = np.int64(max(0, rowend - (2*sr+1)))
+    #   rowcountread = np.int64(rowend-rowstartread)
+    #   data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
+    #                                     convertToFloat=True,returnArrayOnly=True)
+    #
+    #   shpdata = data.shape
+    #
+    #   if backsub is True:
+    #     data = self.backsub(data)
+    #
+    #
+    #   data = data.reshape(shpdata[0], phw)
+    #
+    #   rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
+    #   if calcsigma is True:
+    #     sigchunk, tmp = self.sigma_numba(data,1,rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
+    #     del tmp
+    #     tmp = (sigma[rowstartread:rowend,:] < sigchunk).choose(sigchunk,sigma[rowstartread:rowend,:])
+    #     sigma[rowstartread:rowend,:] = tmp
+    #   else:
+    #     sigchunk = sigma[rowstartread:rowend,:]
+    #
+    #   #dataout = data
+    #
+    #   dataout = self.nlpar_nb(data,lam, sr, dthresh, sigchunk,
+    #                           rowcountread,ncols,indices,saturation_protect, diff_offset=diff_offset)
+    #
+    #
+    #   dataout = dataout.reshape(rowcountread, ncols, phw)
+    #   dataout = dataout[j-rowstartread:, :, : ]
+    #   shpout = dataout.shape
+    #   dataout = dataout.reshape(shpout[0]*shpout[1], pheight, pwidth)
+    #   if rescale == True:
+    #     for i in range(dataout.shape[0]):
+    #       temp = dataout[i,:,:]
+    #       temp -= temp.min()
+    #       temp *= np.float32(mxval)/temp.max()
+    #       dataout[i,:,:] = temp
+    #
+    #   patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
+    #                                  flt2int='clip',scalevalue=1.0 )
+    #   #self.patternfileout.write_data(newpatterns=dataout,patStartCount=[j*ncols,shpout[0]*shpout[1]],
+    #   #                               flt2int='clip',scalevalue=1.0 )
+    #   #return dataout
+    #   #sigma[j:j+rowstartcount[1],:] += \
+    #   #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
 
 
     if verbose >= 2:
@@ -674,7 +793,9 @@ class NLPAR:
 
   @staticmethod
   @numba.jit(nopython=True,cache=True,fastmath=False,parallel=True)
-  def nlpar_nb(data,lam, sr, dthresh, sigma, nrows,ncols,indices,saturation_protect=True, diff_offset = np.float32(0.0)):
+  def nlpar_nb(data, lam, sr, dthresh, sigma, nrows, ncols, calclim = np.array([-1, -1, -1, -1], dtype= np.int64),
+                indices_in=np.array([-1], dtype= np.int64), saturation_protect=True,
+                diff_offset=np.float32(0.0)):
     def getpairid(idx0, idx1):
       idx0_t = int(idx0)
       idx1_t = int(idx1)
@@ -684,9 +805,33 @@ class NLPAR:
         pairid = idx1_t + (idx0_t << 32)
       return numba.uint64(pairid)
 
+    # set some defaults
+    # calclim = np.array([cstartcalc, rstartcalc, ncolcalc, nrowcalc], dtype=np.int64)
+    if calclim[0] <= -1:
+        calclim[0] = 0
+    if calclim[1] <= -1:
+        calclim[1] = 0
+    if calclim[2] <= -1:
+        calclim[2] = ncols-calclim[0]
+    if calclim[3] <= -1:
+        calclim[3] = nrows-calclim[1]
+
+
+
     lam2 = 1.0 / lam**2
     dataout = np.zeros_like(data, np.float32)
     shpdata = data.shape
+
+    # set defaults ... normally will not be needed.
+    if indices_in.size == 1:
+        if indices_in[0] == -1:
+            indices = np.arange(shpdata[1], dtype=np.int64)
+        else:
+            indices = indices_in.astype(np.int64)
+    else:
+        indices = indices_in.astype(np.int64)
+
+
     shpind = indices.shape
     winsz = np.int32((2*sr+1)**2)
     diff_step =  np.zeros((winsz), dtype=np.float32)
@@ -696,11 +841,13 @@ class NLPAR:
       mxval += np.float32(1.0)
     else:
       mxval *= np.float32(0.999)
-    for i in numba.prange(ncols):
+    for ii in numba.prange(calclim[2]):
+      i = calclim[0]+ii
       winstart_x = max((i - sr),0) - max((i + sr - (ncols - 1)),0)
       winend_x = min((i + sr),(ncols - 1)) + max((sr - i),0) + 1
       pairdict = numba.typed.Dict.empty(key_type=numba.core.types.uint64,value_type=numba.core.types.float32)
-      for j in range(nrows):
+      for jj in range(calclim[2]):
+        j = calclim[1]+jj
         winstart_y = max((j - sr),0) - max((j + sr - (nrows - 1)),0)
         winend_y = min((j + sr),(nrows - 1)) + max((sr - j),0) + 1
 
