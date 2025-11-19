@@ -402,6 +402,9 @@ class NLPAR:
       else: # not int, so no rescale.
         rescale = False
 
+    #chunks = self._calcchunks( [pwidth, pheight], ncols, nrows, target_bytes=target_mem,
+    #                          col_overlap=sr, row_overlap=sr)
+
     nthreadpos = numba.get_num_threads()
     #numba.set_num_threads(18)
     #numba.set_num_threads(18)
