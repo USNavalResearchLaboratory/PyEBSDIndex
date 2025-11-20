@@ -111,15 +111,13 @@ class NLPAR(nlpar_cpu.NLPAR):
     #sigmapad = np.pad(sigma, 1, mode='reflect')
     #d2normcl(d2, n2, sigmapad)
 
-   #print(d2.min(), d2.max(), d2.mean())
-
-    lamopt_values_chnk = []
+    stride = 1 if sigma.size < 1e6 else 2
     for tw in target_weights:
-      stride = 1 if sigma.size < 1e6 else 10
 
       lam = 1.0
-      lambopt1 = sp_opt.minimize(loptfunc, lam, args=(d2[0::stride, :], tw, dthresh), method='Nelder-Mead',
+      lambopt1 = sp_opt.minimize(loptfunc, lam, args=(d2[0::stride,0::stride, :], tw, dthresh), method='Nelder-Mead',
                               bounds=[[0.001, 10.0]], options={'fatol': 0.0001})
+
       lamopt_values.append(lambopt1['x'])
 
     #lamopt_values.append(lamopt_values_chnk)
@@ -127,7 +125,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     print("Range of lambda values: ", lamopt_values.flatten())
     print("Optimal Choice: ", np.median(lamopt_values))
     if autoupdate == True:
-      self.lam = np.median(np.mean(lamopt_values, axis=0))
+      self.lam = np.median(lamopt_values)
     if self.sigma is None:
       self.sigma = sigma
     return lamopt_values.flatten()
@@ -288,12 +286,20 @@ class NLPAR(nlpar_cpu.NLPAR):
         #sigmachunk_gpu.release()
 
         queue.finish()
-        countnn[rstart:rend, cstart:cend] = countchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
-        dist[rstart:rend, cstart:cend] = distchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
+        #countnn[rstart:rend, cstart:cend] = countchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
+        countchunkt = countchunk[0:int(ncolchunk*nrowchunk)].reshape(nrowchunk, ncolchunk, nnn)
+        distchunkt = distchunk[0:int(ncolchunk*nrowchunk)].reshape(nrowchunk, ncolchunk, nnn)
+        countnn[rstart:rend, cstart:cend] = np.select([countchunkt >0],
+                                                      [countchunkt], default=countnn[rstart:rend, cstart:cend] )
+        dist[rstart:rend, cstart:cend] = np.select([countchunkt > 0],
+                                                      [distchunkt], default=dist[rstart:rend, cstart:cend])
+
+        #dist[rstart:rend, cstart:cend] = distchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
         sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigmachunk)
+        ndone += 1
         if verbose >= 2:
           print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
-        ndone +=1
+
     dist_local.release()
     count_local.release()
     datapad_gpu.release()

@@ -201,27 +201,12 @@ class NLPAR:
     target_weights = np.asarray(target_weights)
 
     def loptfunc(lam,d2,tw,dthresh):
-      temp = (d2 > dthresh).choose(dthresh, d2)
+      temp = np.maximum(d2, dthresh)
       dw = np.exp(-(temp) / lam ** 2)
       w = np.sum(dw, axis=2) + 1e-12
 
       metric = np.mean(np.abs(tw - 1.0 / w))
       return metric
-
-
-    @numba.njit(fastmath=True, cache=True,parallel=True)
-    def d2norm(d2, n2, dij, sigma):
-      shp = d2.shape
-      s2 = sigma**2
-      for j in numba.prange(shp[0]):
-        for i in range(shp[1]):
-          for q in range(shp[2]):
-            if n2[j,i,q] > 0:
-              ii = dij[j,i,q,1]
-              jj = dij[j,i,q,0]
-              s2_12 = (s2[j,i]+s2[jj,ii])
-              d2[j,i,q] -= n2[j,i,q] * s2_12
-              d2[j,i,q] /= s2_12*np.sqrt(2.0*n2[j,i,q])
 
     patternfile = self.getinfileobj()
     patternfile.read_header()
@@ -233,12 +218,6 @@ class NLPAR:
     phw = pheight * pwidth
 
     nn = 1
-    if chunksize <= 0:
-      chunksize = np.maximum(1, np.round(1e9 / phw / ncols) ) # keeps the chunk at about 4GB
-      chunksize = np.minimum(nrows,chunksize)
-      print("Chunk size set to nrows:", int(chunksize))
-    chunksize = np.int64(chunksize)
-
     nn = np.uint64(nn)
 
     if (automask is True) and (self.mask is None):
@@ -247,68 +226,67 @@ class NLPAR:
       self.mask = np.ones((pheight,pwidth),dtype=np.uint8)
 
     self.mask = (self.mask).astype(np.uint8)
-    indices = np.asarray((self.mask.flatten().nonzero())[0],np.uint64)
-
-    sigma = np.zeros((nrows,ncols),dtype=np.float32)+1e24
-    colstartcount = np.asarray([0,ncols],dtype=np.int64)
-
 
     dthresh = np.float32(dthresh)
+
+
+    # for j in range(0,nrows,chunksize):
+    #
+    #   if verbose >= 2:
+    #     print("begin row: ", j, "/", nrows, sep='', end='\r')
+    #   #print('Block',j)
+    #
+    #   #rowstartread = np.int64(max(0,j - nn))
+    #   rowstartread = np.int64(j)
+    #   rowend = min(j + chunksize + nn,nrows)
+    #   rowcountread = np.int64(rowend - rowstartread)
+    #   data, xyloc = patternfile.read_data(patStartCount=[[0,rowstartread],[ncols,rowcountread]],
+    #                                     convertToFloat=True,returnArrayOnly=True)
+    #
+    #   shp = data.shape
+    #
+    #   if backsub is True:
+    #     data = self.backsub(data)
+    #     #back = np.mean(data, axis=0)
+    #     #back -= np.mean(back)
+    #     #data -= back
+    #   data = data.reshape(shp[0], phw)
+    #
+    #   rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
+    #   sigchunk, (d2,n2, dij) = self.sigma_numba(data,nn,rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
+    #   tmp = (sigma[j:j + rowstartcount[1],:] < sigchunk).choose( sigchunk, sigma[j:j + rowstartcount[1],:])
+    #   sigma[j:j + rowstartcount[1],:] = tmp
+
+
+    sigma, (d2,n2) = self.calcsigma(chunksize=chunksize, nn=nn, saturation_protect = saturation_protect, automask = automask)
+
+    #print(d2.max(), d2.min())
+    #d2 = d2norm(d2, n2, dij, sigma)
+    #print(d2.max(), d2.min())
+
+
     lamopt_values = []
+    stride = 1 if sigma.size < 1e6 else 2 #for large scans cut down on the optimization time.
+    for tw in target_weights:
 
-    for j in range(0,nrows,chunksize):
-
-      if verbose >= 2:
-        print("begin row: ", j, "/", nrows, sep='', end='\r')
-      #print('Block',j)
-
-      #rowstartread = np.int64(max(0,j - nn))
-      rowstartread = np.int64(j)
-      rowend = min(j + chunksize + nn,nrows)
-      rowcountread = np.int64(rowend - rowstartread)
-      data, xyloc = patternfile.read_data(patStartCount=[[0,rowstartread],[ncols,rowcountread]],
-                                        convertToFloat=True,returnArrayOnly=True)
-
-      shp = data.shape
-
-      if backsub is True:
-        data = self.backsub(data)
-        #back = np.mean(data, axis=0)
-        #back -= np.mean(back)
-        #data -= back
-      data = data.reshape(shp[0], phw)
-
-      rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
-      sigchunk, (d2,n2, dij) = self.sigma_numba(data,nn,rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
-      tmp = (sigma[j:j + rowstartcount[1],:] < sigchunk).choose( sigchunk, sigma[j:j + rowstartcount[1],:])
-      sigma[j:j + rowstartcount[1],:] = tmp
-
-
-      d2norm(d2, n2, dij, sigchunk)
-
-
-      lamopt_values_chnk = []
-      for tw in target_weights:
         lam = 1.0
-        lambopt1 = opt.minimize(loptfunc,lam,args=(d2,tw,dthresh),method='Nelder-Mead',
+        lambopt1 = opt.minimize(loptfunc,lam,args=(d2[0::stride,0::stride,:],tw,dthresh),method='Nelder-Mead',
                                 bounds = [[0.001, 10.0]],options={'fatol': 0.0001})
-        lamopt_values_chnk.append(lambopt1['x'])
 
+        lamopt_values.append(lambopt1['x'])
 
-      lamopt_values.append(lamopt_values_chnk)
 
     if verbose >= 2:
       print('', end='')
     lamopt_values = np.asarray(lamopt_values)
-    if verbose >=1:
-      print("Range of lambda values: ", np.mean(lamopt_values, axis = 0).flatten())
-      print("Optimal Choice: ", np.median(np.mean(lamopt_values, axis = 0)))
 
+    print("Range of lambda values: ", lamopt_values.flatten())
+    print("Optimal Choice: ", np.median(lamopt_values))
     if autoupdate == True:
-      self.lam = np.median(np.mean(lamopt_values, axis = 0))
+        self.lam = np.median(lamopt_values)
     if self.sigma is None:
       self.sigma = sigma
-    return np.mean(lamopt_values, axis = 0).flatten()
+    return lamopt_values.flatten()
 
   def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,verbose=2, diff_offset=None,
@@ -593,7 +571,7 @@ class NLPAR:
     numba.set_num_threads(nthreadpos)
     return str(patternfileout.filepath)
 
-  def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True):
+  def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True, verbose = 2, **kwargs):
     self.sigmann = nn
     patternfile = self.getinfileobj()
 
@@ -605,14 +583,16 @@ class NLPAR:
     pheight = np.uint64(patternfile.patternH)
     phw = pheight*pwidth
 
-    if chunksize <= 0:
-      chunksize = np.round(2e9/phw/ncols) # keeps the chunk at about 8GB
-      chunksize = np.minimum(nrows,chunksize)
-      print("Chunk size set to nrows:", int(chunksize))
-    chunksize = np.int64(chunksize)
-
-
     nn = np.uint64(nn)
+    nnn = np.uint64((2*nn+1)**2)
+    if chunksize <= 0:
+        sysram = (psutil.virtual_memory()).total
+        chunksize = np.minimum(32e9, sysram // 4)
+    chunksize = np.int64(chunksize)
+    chunks = self._calcchunks([pwidth, pheight], ncols, nrows, target_bytes=chunksize,
+                              col_overlap=nn, row_overlap=nn)
+
+
 
     if (automask is True) and (self.mask is None):
       self.mask = (self.automask(pheight,pwidth))
@@ -621,34 +601,46 @@ class NLPAR:
 
     indices = np.asarray( (self.mask.flatten().nonzero())[0], np.uint64)
 
-    sigma = np.zeros((nrows, ncols), dtype=np.float32)
-    #d_nn = np.zeros((nrows, ncols, int((2*nn+1)**2)), dtype=np.float32)
-    colstartcount = np.asarray([0,ncols],dtype=np.int64)
+    sigma = np.zeros((nrows, ncols), dtype=np.float32)+1e18
 
-    for j in range(0,nrows,chunksize):
-      rowstartread = np.int64(max(0, j-nn))
-      rowend = min(j + chunksize+nn,nrows)
-      if (rowend - rowstartread) < (3):
-        rowstartread = np.int64(max(0, rowend - (3)))
-      rowcountread = np.int64(rowend-rowstartread)
-      data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
-                                        convertToFloat=True,returnArrayOnly=True)
+    n2 = np.zeros((nrows, ncols, nnn), dtype=np.float32)
+    d2 = np.zeros((nrows, ncols, nnn), dtype=np.float32)
 
-      shp = data.shape
-      data = data.reshape(data.shape[0], phw)
+    ndone = 0
+    nchunks = int(chunks[1] * chunks[0])
 
-      #data = None
-      if rowend == nrows:
-        rowstartcount = np.asarray([j-rowstartread,rowcountread - (j-rowstartread) ], dtype=np.int64)
-      else:
-        rowstartcount = np.asarray([j-rowstartread,chunksize ], dtype=np.int64)
+    for rowchunk in range(chunks[1]):
+        rstart = chunks[3][rowchunk, 0]
+        rend = chunks[3][rowchunk, 1]
+        nrowchunk = rend - rstart
 
-      sigchunk, temp = self.sigma_numba(data,nn, rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
+        for colchunk in range(chunks[0]):
+            cstart = chunks[2][colchunk, 0]
+            cend = chunks[2][colchunk, 1]
+            ncolchunk = cend - cstart
+            data, xyloc = patternfile.read_data(patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
+                                                convertToFloat=True, returnArrayOnly=True)
 
-      sigma[j:j+rowstartcount[1],:] += \
-        sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
+            shp = data.shape
+            data = data.reshape(data.shape[0], phw)
 
-    return sigma
+
+
+            sigchunk, (d2chunk, n2chunk) = self.sigma_numba(data,nn, nrowchunk,ncolchunk,
+                                                       np.array([0,nrowchunk ], dtype=np.uint64),
+                                                                    np.array([0,ncolchunk],dtype=np.uint64),
+                                                                    indices,saturation_protect)
+
+            sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigchunk)
+            # temp = (d2 > thresh).choose(dthresh, d2)
+            n2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  0], [n2chunk], default=n2[rstart:rend, cstart:cend,:])
+            d2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  0], [d2chunk], default=d2[rstart:rend, cstart:cend,:])
+            #dij[rstart:rend, cstart:cend, :] = dijchunk
+            ndone += 1
+            if verbose >= 2:
+                print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
+
+    return sigma, (d2, n2)
 
   def auto_nlpar(self, filename = None, fileout=None, searchradius=None, lindex = 1, **kwargs):
     if filename is not None:
@@ -787,9 +779,20 @@ class NLPAR:
             count += 1
 
         sigma[j,i] = np.sqrt(mind)
-        #if sigma[j,i] > 1e12:
-        #  print(sigma[j,i], dout[j,i,:], nout[i,j,:])
-    return sigma,( dout, nout, dij)
+
+    # normalize the distances for lambda optimization.
+    shp = dout.shape
+    s2 = sigma ** 2
+    for j in numba.prange(shp[0]):
+        for i in range(shp[1]):
+            for q in range(shp[2]):
+                if nout[j, i, q] > 0:
+                    ii = dij[j, i, q, 1]
+                    jj = dij[j, i, q, 0]
+                    s2_12 = (s2[j, i] + s2[jj, ii])
+                    dout[j, i, q] -= nout[j, i, q] * s2_12
+                    dout[j, i, q] /= s2_12 * np.sqrt(2.0 * nout[j, i, q])
+    return sigma,(dout, nout)
 
   @staticmethod
   @numba.jit(nopython=True,cache=True,fastmath=False,parallel=True)

@@ -244,10 +244,12 @@ class NLPAR(nlpar_cl.NLPAR):
             nrowcalc = job.nrowcalc
             ncolcalc = job.ncolcalc
 
-            countnn[rstart:rend, cstart:cend] = countchunk[0:int(ncolchunk * nrowchunk), :].reshape(nrowchunk,
-                                                                                        ncolchunk, nnn)
-            dist[rstart:rend, cstart:cend] = distchunk[0:int(ncolchunk * nrowchunk), :].reshape(nrowchunk, ncolchunk,
-                                                                                                nnn)
+            countchunkt = countchunk[0:int(ncolchunk*nrowchunk)].reshape(nrowchunk, ncolchunk, nnn)
+            distchunkt = distchunk[0:int(ncolchunk*nrowchunk)].reshape(nrowchunk, ncolchunk, nnn)
+            countnn[rstart:rend, cstart:cend] = np.select([countchunkt > 0],
+                                                          [countchunkt], default=countnn[rstart:rend, cstart:cend])
+            dist[rstart:rend, cstart:cend] = np.select([countchunkt > 0],
+                                                       [distchunkt], default=dist[rstart:rend, cstart:cend])
             sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigmachunk)
 
             idlewrker.append(busywrker.pop(indx))
