@@ -260,7 +260,7 @@ class NLPAR:
     #   sigma[j:j + rowstartcount[1],:] = tmp
 
 
-    sigma, (d2,n2) = self.calcsigma_cpu(chunksize=chunksize, nn=nn,
+    sigma, d2,n2 = self.calcsigma_cpu(chunksize=chunksize, nn=nn,
                                     saturation_protect = saturation_protect, automask = automask,stem_scale = stem_scale )
 
     #print(d2.max(), d2.min())
@@ -479,12 +479,12 @@ class NLPAR:
         data = data.reshape(shpdata[0], phw)
 
         if calcsigma is True:
-            sigchunk, tmp = self.sigma_numba(data, 1, nrowchunk, ncolchunk,
+            sigchunk = self.sigma_numba(data, 1, nrowchunk, ncolchunk,
                                              [0,nrowchunk], [0,ncolchunk],
-                                             indices, saturation_protect)
-            del tmp
-            tmp = np.minimum(sigma[rstart:rend,cstart:cend], sigchunk)
-            sigma[rstart:rend,cstart:cend] = tmp
+                                             indices, saturation_protect)[0]
+
+            sigchunk = np.minimum(sigma[rstart:rend,cstart:cend], sigchunk)
+            sigma[rstart:rend,cstart:cend] = sigchunk
         else:
             sigchunk = sigma[rstart:rend, cstart:cend ]
 
@@ -641,7 +641,7 @@ class NLPAR:
 
 
 
-            sigchunk, (d2chunk, n2chunk) = self.sigma_numba(data,nn, nrowchunk,ncolchunk,
+            sigchunk, d2chunk, n2chunk = self.sigma_numba(data,nn, nrowchunk,ncolchunk,
                                                        np.array([0,nrowchunk ], dtype=np.uint64),
                                                                     np.array([0,ncolchunk],dtype=np.uint64),
                                                                     indices,saturation_protect)
@@ -655,7 +655,7 @@ class NLPAR:
             if verbose >= 2:
                 print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
 
-    return sigma, (d2, n2)
+    return sigma, d2, n2
 
   def auto_nlpar(self, filename = None, fileout=None, searchradius=None, lindex = 1, **kwargs):
     if filename is not None:
@@ -807,7 +807,7 @@ class NLPAR:
                     s2_12 = (s2[j, i] + s2[jj, ii])
                     dout[j, i, q] -= nout[j, i, q] * s2_12
                     dout[j, i, q] /= s2_12 * np.sqrt(2.0 * nout[j, i, q])
-    return sigma,(dout, nout)
+    return sigma, dout, nout
 
   @staticmethod
   @numba.jit(nopython=True,cache=True,fastmath=False,parallel=True)
