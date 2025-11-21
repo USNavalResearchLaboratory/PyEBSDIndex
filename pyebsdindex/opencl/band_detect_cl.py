@@ -242,6 +242,7 @@ class BandDetect(band_detect.BandDetect):
       ctx = clparams.ctx
       prg = clparams.prg
       queue = clparams.queue
+      clkern = clparams.kernels
       mf = clparams.memflags
     else:
       clparams = openclparam.OpenClParam()
@@ -251,7 +252,9 @@ class BandDetect(band_detect.BandDetect):
       ctx = clparams.ctx
       prg = clparams.prg
       queue = clparams.queue
+      clkern = clparams.kernels
       mf = clparams.memflags
+
 
     shapeIm = np.shape(image)
     if image.ndim == 2:
@@ -284,11 +287,11 @@ class BandDetect(band_detect.BandDetect):
 
 
     if image.dtype.type is np.float32:
-      prg.loadfloat32(queue, (shapeIm[2], shapeIm[1], nIm), None, image_gpu, image_gpuflt, nImCL)
+      clkern['loadfloat32'](queue, (shapeIm[2], shapeIm[1], nIm), None, image_gpu, image_gpuflt, nImCL)
     if image.dtype.type is np.ubyte:
-      prg.loadubyte8(queue, (shapeIm[2], shapeIm[1], nIm), None, image_gpu, image_gpuflt, nImCL)
+       clkern['loadubyte8'](queue, (shapeIm[2], shapeIm[1], nIm), None, image_gpu, image_gpuflt, nImCL)
     if image.dtype.type is np.uint16:
-      prg.loaduint16(queue, (shapeIm[2], shapeIm[1], nIm), None, image_gpu, image_gpuflt, nImCL)
+      clkern['loaduint16'](queue, (shapeIm[2], shapeIm[1], nIm), None, image_gpu, image_gpuflt, nImCL)
     queue.flush()
     image_gpu.release()
     image_gpu = None
@@ -297,7 +300,7 @@ class BandDetect(band_detect.BandDetect):
 
     if background is not None:
       back_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=background.astype(np.float32))
-      prg.backSub(queue,(imstep, 1, 1),None,image_gpuflt,back_gpu,nImChunk)
+      clkern['backSub'](queue,(imstep, 1, 1),None,image_gpuflt,back_gpu,nImChunk)
       #imBack = np.zeros((shapeIm[1], shapeIm[2], nImCL),dtype=np.float32)
       #cl.enqueue_copy(queue,imBack,image_gpu,is_blocking=True)
 
@@ -311,14 +314,14 @@ class BandDetect(band_detect.BandDetect):
 
     rdnIndx_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.radonPlan.indexPlan)
     cl.enqueue_fill_buffer(queue, radon_gpu, np.float32(self.radonPlan.missingval), 0, radon_gpu.size)
-    prg.radonSum(queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpuflt,radon_gpu,
+    clkern['radonSum'](queue,(nImChunk,rdnstep),None,rdnIndx_gpu,image_gpuflt,radon_gpu,
                   imstep, indxstep,
                  shpRdn[0], shpRdn[1],
                  padRho, padTheta, np.uint64(self.nTheta))
 
 
     if (fixArtifacts == True):
-       prg.radonFixArt(queue,(nImChunk,shpRdn[0]),None,radon_gpu,
+       clkern['radonFixArt'](queue,(nImChunk,shpRdn[0]),None,radon_gpu,
                        shpRdn[0],shpRdn[1],padTheta)
 
     rdnIndx_gpu.release()
@@ -349,21 +352,17 @@ class BandDetect(band_detect.BandDetect):
     if clparams is not None:
       if clparams.queue is None:
         clparams.get_queue()
-      gpu = clparams.gpu
-      gpu_id = clparams.gpu_id
-      ctx = clparams.ctx
-      prg = clparams.prg
-      queue = clparams.queue
-      mf = clparams.memflags
     else:
       clparams = openclparam.OpenClParam()
       clparams.get_queue()
-      gpu = clparams.gpu
-      gpu_id = clparams.gpu_id
-      ctx = clparams.ctx
-      prg = clparams.prg
-      queue = clparams.queue
-      mf = clparams.memflags
+
+    gpu = clparams.gpu
+    gpu_id = clparams.gpu_id
+    ctx = clparams.ctx
+    clkern = clparams.kernels
+    prg = clparams.prg
+    queue = clparams.queue
+    mf = clparams.memflags
 
     nT = self.nTheta
     nTp = nT + 2 * self.padding[1]
@@ -415,10 +414,11 @@ class BandDetect(band_detect.BandDetect):
     #prg.radonPadRho2(queue,(shp[2],shp[1],1),None,rdn_gpu,
     #                  np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[0]+1))
 
-    prg.radonPadRho2(queue, (shp[2], shp[1], 1), None, rdn_gpu,
+    clkern['radonPadRho2'](queue, (shp[2], shp[1], 1), None, rdn_gpu,
                  np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(shp[0]//2-1))
 
     kern_gpu = None
+
     if separableKernel == False:
       # for now I will assume that the kernel(s) can fit in local memory on the GPU
       # also going to assume that there is only one kernel -- this will be something to fix at some point.
@@ -426,7 +426,7 @@ class BandDetect(band_detect.BandDetect):
       kshp = np.asarray(k0.shape, dtype=np.int32)
       pad = kshp/2
       kern_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0)
-      prg.convolution3d2d(queue,(np.int32((shp[1]-2*pad[1])),np.int32((shp[0]-2*pad[0])), nImChunk),None,
+      clkern['convolution3d2d'](queue,(np.int32((shp[1]-2*pad[1])),np.int32((shp[0]-2*pad[0])), nImChunk),None,
                         rdn_gpu, kern_gpu,np.int32(shp[1]),np.int32(shp[0]),np.int32(shp[2]),
                         np.int32(kshp[1]), np.int32(kshp[0]), np.int32(pad[1]), np.int32(pad[0]), rdnConv_gpu)
 
@@ -447,7 +447,7 @@ class BandDetect(band_detect.BandDetect):
       kshp = np.asarray(k0x.shape,dtype=np.int32)
 
       kern_gpu_x = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0x)
-      prg.convolution3d2d(queue,(np.int32((shp[1]-2*pad[1])),np.int32((shp[0]-2*pad[0])), nImChunk),None,
+      clkern['convolution3d2d'](queue,(np.int32((shp[1]-2*pad[1])),np.int32((shp[0]-2*pad[0])), nImChunk),None,
                           rdn_gpu,kern_gpu_x,np.int32(shp[1]),np.int32(shp[0]),np.int32(shp[2]),
                           np.int32(kshp[1]),np.int32(kshp[0]),np.int32(pad[1]),np.int32(pad[0]),tempConvbuff)
 
@@ -458,7 +458,7 @@ class BandDetect(band_detect.BandDetect):
       kshp = np.asarray(k0y.shape,dtype=np.int32)
 
       kern_gpu_y = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=k0y)
-      prg.convolution3d2d(queue,(np.int32((shp[1]-2*pad[1])),np.int32((shp[0]-2*pad[0])), nImChunk),None,
+      clkern['convolution3d2d'](queue,(np.int32((shp[1]-2*pad[1])),np.int32((shp[0]-2*pad[0])), nImChunk),None,
                           tempConvbuff,kern_gpu_y,np.int32(shp[1]),np.int32(shp[0]),np.int32(shp[0]),
                           np.int32(kshp[1]),np.int32(kshp[0]),np.int32(pad[1]),np.int32(pad[0]),rdnConv_gpu)
 
@@ -466,11 +466,11 @@ class BandDetect(band_detect.BandDetect):
     mns = cl.Buffer(ctx,mf.READ_WRITE,size=nImCL * 4)
     ave = cl.Buffer(ctx, mf.READ_WRITE, size=nImCL * 4)
 
-    prg.imageMinAve(queue,(nImChunk,1,1),None,
+    clkern['imageMinAve'](queue,(nImChunk,1,1),None,
                  rdnConv_gpu, mns, ave, np.uint32(shp[1]),np.uint32(shp[0]),
                  np.uint32(self.padding[1]),np.uint32(self.padding[0]))
     # subtract the min value, clipping to 0.
-    prg.imageSubMinNormWClip(queue,(np.int32(shp[1]), np.int32(shp[0]),nImChunk),None,
+    clkern['imageSubMinNormWClip'](queue,(np.int32(shp[1]), np.int32(shp[0]),nImChunk),None,
                      rdnConv_gpu,mns, ave, np.uint32(shp[1]),np.uint32(shp[0]),
                      np.uint32(0),np.uint32(0))
 
@@ -514,21 +514,16 @@ class BandDetect(band_detect.BandDetect):
     if clparams is not None:
       if clparams.queue is None:
         clparams.get_queue()
-      gpu = clparams.gpu
-      gpu_id = clparams.gpu_id
-      ctx = clparams.ctx
-      prg = clparams.prg
-      queue = clparams.queue
-      mf = clparams.memflags
     else:
       clparams = openclparam.OpenClParam()
       clparams.get_queue()
-      gpu = clparams.gpu
-      gpu_id = clparams.gpu_id
-      ctx = clparams.ctx
-      prg = clparams.prg
-      queue = clparams.queue
-      mf = clparams.memflags
+    gpu = clparams.gpu
+    gpu_id = clparams.gpu_id
+    ctx = clparams.ctx
+    prg = clparams.prg
+    clkern = clparams.kernels
+    queue = clparams.queue
+    mf = clparams.memflags
 
 
 
@@ -585,12 +580,14 @@ class BandDetect(band_detect.BandDetect):
     #                         np.int64(self.padding[1]),np.int64(self.padding[0]),
     #                         np.int64(self.peakPad[1]),np.int64(1))
     # calculate the max in the x direction
-    prg.morphDilateKernelBF(queue, (np.uint32(shp[1]), np.uint32(nR), nImChunk), None, rdn_gpu, lmaxX,
+
+
+    clkern['morphDilateKernelBF'](queue, (np.uint32(shp[1]), np.uint32(nR), nImChunk), None, rdn_gpu, lmaxX,
                             np.int64(shp[1]), np.int64(shp[0]),
                             np.int64(0), np.int64(self.padding[0]),
                             np.int64(self.peakPad[1]), np.int64(1))
     # take the max in the x output, use as input, and calculate in the y direction
-    prg.morphDilateKernelBF(queue, (np.uint32(nT), np.uint32(nR), nImChunk), None, lmaxX, lmaxXY,
+    clkern['morphDilateKernelBF'](queue, (np.uint32(nT), np.uint32(nR), nImChunk), None, lmaxX, lmaxXY,
                             np.int64(shp[1]), np.int64(shp[0]),
                             np.int64(self.padding[1]), np.int64(self.padding[0]),
                             np.int64(1), np.int64(self.peakPad[0]))
@@ -598,7 +595,7 @@ class BandDetect(band_detect.BandDetect):
     local_max = np.zeros((shp),dtype=np.ubyte)
     local_max_gpu = cl.Buffer(ctx,mf.WRITE_ONLY,size=local_max.nbytes)
 
-    prg.im1EQim2(queue,(np.uint32(nT),np.uint32(nR),nImCL),None, lmaxXY, rdn_gpu, local_max_gpu,
+    clkern['im1EQim2'](queue,(np.uint32(nT),np.uint32(nR),nImCL),None, lmaxXY, rdn_gpu, local_max_gpu,
                  np.uint64(shp[1]),np.uint64(shp[0]),
                  np.uint64(self.padding[1]),np.uint64(self.padding[0]))
 
@@ -608,7 +605,7 @@ class BandDetect(band_detect.BandDetect):
     maskrnd = maskrnd.astype(np.ubyte)
     maskrnd_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=maskrnd)
 
-    prg.maxmask(queue, (np.uint32(nT), np.uint32(nR)), None, local_max_gpu, maskrnd_gpu,
+    clkern['maxmask'](queue, (np.uint32(nT), np.uint32(nR)), None, local_max_gpu, maskrnd_gpu,
                  np.uint64(shp[1]), np.uint64(nImChunk),
                  np.uint64(self.padding[1]), np.uint64(self.padding[0]))
 
@@ -662,7 +659,7 @@ class BandDetect(band_detect.BandDetect):
       prg = clparams.prg
       queue = clparams.queue
       mf = clparams.memflags
-
+    clkern = clparams.kernels
 
     nT = self.nTheta
     nTp = nT + 2 * self.padding[1]
@@ -719,7 +716,7 @@ class BandDetect(band_detect.BandDetect):
     #rhoMaskTrim = np.int64((shp[0] - 2 * self.padding[0]) * self.rhoMaskFrac + self.padding[0])
     rhoMaskTrim = np.int64(self.padding[0])
 
-    prg.maxlabel(queue,(nIm, 1,1),(1,1,1),
+    clkern['maxlabel'](queue,(nIm, 1,1),(1,1,1),
                  lMaxRdn_gpu,rdnConv_gpu,
                  maxloc_gpu, maxval_gpu,
                  aveloc_gpu,aveval_gpu,

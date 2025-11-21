@@ -21,12 +21,17 @@
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
 """Optimization of the pattern center (PC) of EBSD patterns."""
-
+import os
 import numpy as np
-import multiprocessing
+#import multiprocessing
+
+
 import functools
 import scipy.optimize as opt
+import scipy.stats.qmc as scipyqmc
 from timeit import default_timer as timer
+
+from pyebsdindex import _ray_installed
 
 
 __all__ = [
@@ -60,22 +65,33 @@ def _optfunction(PC_i, indexer=None, banddat=None):
 
 
 
-        fit =indexdata[-1]['fit']
+        fit = indexdata[-1]['fit']
+        iq = np.array(indexdata[-1]['iq'])
+        #if iq.max() > 1.5:
+        #    iq = np.clip(iq - 1.5, 0.0, None)
+
+        #print(iq)
         nmatch = indexdata[-1]['nmatch']
         average_fit = fit + 1.0*(nbands - nmatch)
         #average_fit = -1.0*(3.0-fit)*nmatch
         whgood = np.nonzero(fit < 90.0)
-
+        #average_fit *= iq
         n_averages = len(whgood[0])
 
 
         if n_averages < 0.9:
             average_fit = 1000
         else:
-            average_fit = np.sum(average_fit[whgood[0]]) + 4.0*(nbands+1)*(npoints - n_averages)
-            average_fit /= npoints
-            #average_fit /= n_averages
-            #average_fit *=  (n_averages*(nbands+1) - nbands_fit)/(n_averages*nbands)
+            iq = iq[whgood[0]] # weight averages by the iq value
+            if iq.max() > 1.5:
+                iq -= 1.0
+                iq = np.clip(iq, 0.0001, None)
+            iq /= iq.max()
+            average_fit = np.sum(average_fit[whgood[0]]*iq)
+            average_fit /= sum(iq)
+            average_fit += (4.0*(nbands+1)*(npoints - n_averages))/n_averages
+            #average_fit /=  npoints
+
         result[q] = average_fit
     #print(timer()-tic)
     return result
@@ -436,8 +452,12 @@ class PSOOpt():
         self.bounds = bounds
         self.range = self.bounds[1] - self.bounds[0]
 
-        self.pos = np.random.uniform(low=bounds[0], high=bounds[1], size=(self.n_particles, self.dimensions))
+        #self.pos = np.random.uniform(low=bounds[0], high=bounds[1], size=(self.n_particles, self.dimensions))
+        samppler = scipyqmc.Halton(self.dimensions)
+        self.pos = samppler.random(self.n_particles) * self.range + self.bounds[0]
+
         self.pos[0, :] = start
+
 
         self.vel = np.random.normal(size=(self.n_particles, self.dimensions), loc=0.0, scale=1.0)
         meanv = np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
@@ -463,18 +483,20 @@ class PSOOpt():
             temp = self.pos[part_i, :]
             val[part_i] = fun2opt(temp, **kwargs)
         #print(timer()-tic)
-        #pos = self.pos.copy()
-        #tic = timer()
-        #results = pool.map(functools.partial(fun2opt, **kwargs),list(pos) )
-        #print(timer()-tic)
-        #print(len(results[0]), type(results[0]))
-        #print(len(results))
-        #val = np.concatenate(results)
+
+        # pos = list(self.pos.copy())
+        #
+        # tic = timer()
+        # results = pool.map(functools.partial(fun2opt, **kwargs),pos )
+        # #print(timer()-tic)
+        # #print(len(results[0]), type(results[0]))
+        # #print(len(results))
+        # val = np.concatenate(results)
 
         wh_newpbest = np.nonzero(val < self.pbest)[0]
-
-        self.pbest[wh_newpbest] = val[wh_newpbest]
-        self.pbest_loc[wh_newpbest, :] = self.pos[wh_newpbest, :]
+        if wh_newpbest.size > 0:
+            self.pbest[wh_newpbest] = val[wh_newpbest]
+            self.pbest_loc[wh_newpbest, :] = self.pos[wh_newpbest, :]
 
         wh_minpbest = np.argmin(self.pbest)
         if self.pbest[wh_minpbest] < self.gbest:
@@ -570,7 +592,8 @@ class PSOOpt():
         #f.write("interation, pnum, posx, posy, posz \n")
 
         # in theory the below should work -- find it to be unstable and buggy, and not actaully quicker when it does work.
-        #with multiprocessing.get_context("spawn").Pool(min(multiprocessing.cpu_count(), self.n_particles)) as pool:
+
+            #with multiprocessing.Pool() as pool:
         pool = None
         if verbose >= 1:
             print('n_particles:', self.n_particles, 'c1:', self.c1, 'c2:', self.c2, 'w:', self.w )

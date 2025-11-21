@@ -130,9 +130,9 @@ def index_pats(
     nBands : int, optional
         Number of detected bands to use in triplet voting. Default
         is 9. Unused if ``ebsd_indexer_obj`` is passed.
-    backgroundSub : bool, optional
+    backgroundSub : bool, ndarray optional
         Whether to subtract a static background prior to indexing.
-        Default is ``False``.
+        Default is ``False``. Set to a ndarray to use your own background.
     patstart : int, optional
         Starting index of the patterns to index. Default is ``0``.
     npats : int, optional
@@ -237,10 +237,13 @@ def index_pats(
         if not np.all(indexer.bandDetectPlan.patDim == np.array(pdim)):
             indexer.update_file(patDim=pats.shape[-2:])
 
-    if backgroundSub:
-        indexer.bandDetectPlan.collect_background(
-            fileobj=indexer.fID, patsIn=pats, nsample=1000
-        )
+    if type(backgroundSub) is np.ndarray:
+        indexer.bandDetectPlan.backgroundsub = backgroundSub
+    else:
+        if backgroundSub:
+            indexer.bandDetectPlan.collect_background(
+                fileobj=indexer.fID, patsIn=pats, nsample=1000
+            )
 
     #indexer.bandDetectPlan.radonPlan.masksetup(mask=patternmask, maskindex=patternmaskindex)
 
@@ -248,6 +251,7 @@ def index_pats(
         patsin=pats,
         patstart=patstart,
         npats=npats,
+        PC = PC,
         clparams=clparams,
         verbose=verbose,
         chunksize=chunksize,
@@ -539,13 +543,15 @@ class EBSDIndexer:
         if npats == -1:
             npats = npoints
 
+        PCpat = self._fillPCarray(PC, npats)
+
         gpuid = gpu_id
         try: # just in case the user sends in the gpu_id as a list/array
             gpuid = gpu_id[0]
         except:
             pass
 
-        banddata, bandnorm = self._detectbands(pats, PC, xyloc=xyloc, clparams=clparams, verbose=verbose,
+        banddata, bandnorm = self._detectbands(pats, PCpat, xyloc=xyloc, clparams=clparams, verbose=verbose,
                                                chunksize=chunksize, gpu_id=gpuid)
         tic = timer()
 
@@ -813,6 +819,20 @@ class EBSDIndexer:
 
         return quatref2detect
 
+    def _fillPCarray(self, PC, npats):
+        if PC is None:
+            PC = np.array(self.PC)
+        else:
+            PC = np.array(PC)
+        shpPC = PC.shape
+        if len(shpPC) == 1:
+            PC = PC.reshape(-1, shpPC[0])
+        shpPC = PC.shape
+
+        PCpat = np.zeros((npats, shpPC[1]))
+        PCpat[:, :] = PC[-1, :]
+        PCpat[0:shpPC[0], :] = PC
+        return PCpat
 #    def pcCorrect(self, xy=[[0.0, 0.0]]):
 #        # TODO: At somepoint we will put some methods here for
 #        #  correcting the PC depending on the location within the scan.

@@ -8,48 +8,48 @@ def writeang(filename, indexer, data,
              gridtype = 'SqrGrid', xstep=1.0, ystep=1.0,
              ncols = None, nrows=None):
   fpath = Path(filename).expanduser()
-  with open(fpath,'w',encoding = 'utf-8') as f:
-    f.write('# HEADER: Start \r\n')
-    f.write('# TEM_PIXperUM          1.000000\r\n')
-    f.write('# x-star                ' + str(indexer.PC[0])+'\r\n')
-    f.write('# y-star                ' + str(indexer.PC[1])+'\r\n')
-    f.write('# z-star                ' + str(indexer.PC[2])+'\r\n')
-    f.write('# SampleTiltAngle       ' + str(indexer.sampleTilt)+'\r\n')
-    f.write('# CameraElevationAngle  ' + str(indexer.camElev)+'\r\n')
-    f.write('# '+'\r\n')
+  with open(fpath,'w',encoding = 'utf-8', newline='\r\n') as f:
+    f.write('# HEADER: Start \n')
+    f.write('# TEM_PIXperUM          1.000000\n')
+    f.write('# x-star                ' + str(indexer.PC[0])+'\n')
+    f.write('# y-star                ' + str(indexer.PC[1])+'\n')
+    f.write('# z-star                ' + str(indexer.PC[2])+'\n')
+    f.write('# SampleTiltAngle       ' + str(indexer.sampleTilt)+'\n')
+    f.write('# CameraElevationAngle  ' + str(indexer.camElev)+'\n')
+    f.write('# '+'\n')
     pcount = 1
     nphase = len(indexer.phaseLib)
     for phase in reversed(indexer.phaseLib):
-      f.write('# Phase '+str(nphase - pcount + 1)+'\r\n')
-      f.write('# MaterialName \t' + str(phase.phasename)+'\r\n')
-      f.write('# Formula '+'\t \r\n')
-      f.write('# Info '+'\t\t \r\n')
-      f.write('# Symmetry              ' + str(phase.lauecode) + '\r\n')
-      #f.write('# PointGroupID              ' + str(phase.pointgroupid) + '\r\n')
+      f.write('# Phase '+str(nphase - pcount + 1)+'\n')
+      f.write('# MaterialName \t' + str(phase.phasename)+'\n')
+      f.write('# Formula '+'\t \n')
+      f.write('# Info '+'\t\t \n')
+      f.write('# Symmetry              ' + str(phase.lauecode) + '\n')
+      #f.write('# PointGroupID              ' + str(phase.pointgroupid) + '\n')
       latticeparameter = np.array(phase.latticeparameter).astype(float) * np.array([10.0, 10.0, 10.0, 1.0, 1.0, 1.0])
-      f.write('# LatticeConstants      '+ ' '.join(str(' {:.3f}'.format(x)) for x in latticeparameter)+'\r\n')
-      f.write('# NumberFamilies             ' + str(phase.npolefamilies) + '\r\n')
+      f.write('# LatticeConstants      '+ ' '.join(str(' {:.3f}'.format(x)) for x in latticeparameter)+'\n')
+      f.write('# NumberFamilies             ' + str(phase.npolefamilies) + '\n')
       poles = np.array(phase.polefamilies).astype(int)
       if (phase.lauecode == 62) or (phase.lauecode == 6):
         if poles.shape[-1] == 4:
           poles = poles[:,[0,1,3]]
 
       for i in range(phase.npolefamilies):
-        f.write('# hklFamilies   \t' + (' '.join(str(x).rjust(2,' ') for x in poles[i, :])) + ' 1 0.00000 1' + '\r\n')
+        f.write('# hklFamilies   \t' + (' '.join(str(x).rjust(2,' ') for x in poles[i, :])) + ' 1 0.00000 1' + '\n')
 
 
-      f.write('# '+'\r\n')
+      f.write('# '+'\n')
       pcount += 1
 
-    f.write('# '+'\r\n')
-    f.write('# GRID: '+gridtype+'\r\n')
+    f.write('# '+'\n')
+    f.write('# GRID: '+gridtype+'\n')
     if indexer.fID is not None:
       if indexer.fID.xStep > 1e-6:
         xstep = indexer.fID.xStep
         ystep = indexer.fID.yStep
 
-    f.write('# XSTEP: ' + str(xstep)+'\r\n')
-    f.write('# YSTEP: ' + str(ystep)+'\r\n')
+    f.write('# XSTEP: ' + str(xstep)+'\n')
+    f.write('# YSTEP: ' + str(ystep)+'\n')
     if ncols is None:
       ncols = 1
       nrows = data.shape[-1]
@@ -64,12 +64,12 @@ def writeang(filename, indexer, data,
 
     ncols = int(ncols)
     nrows = int(nrows)
-    f.write('# NCOLS_ODD: ' + str(ncols)+'\r\n')
-    f.write('# NCOLS_EVEN: ' + str(ncols)+'\r\n')
-    f.write('# NROWS: ' + str(nrows)+'\r\n')
-    f.write('# VERSION 7'+'\r\n')
-    f.write('# COLUMN_COUNT: 10'+'\r\n')
-    f.write('# HEADER: End'+'\r\n')
+    f.write('# NCOLS_ODD: ' + str(ncols)+'\n')
+    f.write('# NCOLS_EVEN: ' + str(ncols)+'\n')
+    f.write('# NROWS: ' + str(nrows)+'\n')
+    f.write('# VERSION 7'+'\n')
+    f.write('# COLUMN_COUNT: 10'+'\n')
+    f.write('# HEADER: End'+'\n')
 
     nphase = data.shape[0]-1
     if nphase == 1:
@@ -97,7 +97,7 @@ def writeang(filename, indexer, data,
       line += ' {:}'.format(phase) + ''
       line += '1'.rjust(7, ' ')+''
       line += ('{:.3f}'.format(fit)).rjust(7, ' ')
-      f.write(line+'\r\n')
+      f.write(line+'\n')
 
 def writeoh5(filename, indexer, data,
                gridtype='SqrGrid', xstep=1.0, ystep=1.0,
@@ -273,8 +273,8 @@ def writeoh5(filename, indexer, data,
       f.create_dataset(datasetname + '/EBSD/Data/CI',
                        data=(ci).astype(np.float32))
 
-      x = (np.arange(ncols[0] * nrows[0], dtype=int) % ncols[0]).astype(np.float32) * xstep[0]
-      y = (np.arange(ncols[0] * nrows[0], dtype=int) // ncols[0]).astype(np.float32) * ystep[0]
+      x = (np.arange(ncols[0] * nrows[0], dtype=int) % int(ncols[0])).astype(np.float32) * xstep[0]
+      y = (np.arange(ncols[0] * nrows[0], dtype=int) // int(ncols[0])).astype(np.float32) * ystep[0]
 
       f.create_dataset(datasetname + '/EBSD/Data/X Position', data=x)
       f.create_dataset(datasetname + '/EBSD/Data/Y Position', data=y)
