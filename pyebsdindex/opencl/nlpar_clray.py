@@ -486,16 +486,16 @@ class NLPAR(nlpar_cl.NLPAR):
     # print(gpu_id)
     clparams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
     clparams.get_queue()
-    if clparams.gpu[gpu_id].host_unified_memory:
-      return nlpar_cl.NLPAR.calcnlpar_cl(self, saturation_protect=saturation_protect,
-                                         automask=automask,
-                                         filename=filename,
-                                         fileout=fileout,
-                                         reset_sigma=reset_sigma,
-                                         backsub = backsub,
-                                         rescale = rescale,
-                                         gpu_id= gpu_id,
-                                         diff_offset=diff_offset)
+    # if clparams.gpu[gpu_id].host_unified_memory:
+    #   return nlpar_cl.NLPAR.calcnlpar_cl(self, saturation_protect=saturation_protect,
+    #                                      automask=automask,
+    #                                      filename=filename,
+    #                                      fileout=fileout,
+    #                                      reset_sigma=reset_sigma,
+    #                                      backsub = backsub,
+    #                                      rescale = rescale,
+    #                                      gpu_id= gpu_id,
+    #                                      diff_offset=diff_offset)
 
     target_mem = clparams.gpu[gpu_id].max_mem_alloc_size//6
     max_mem = clparams.gpu[gpu_id].global_mem_size*0.4
