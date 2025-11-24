@@ -34,6 +34,7 @@ import scipy.optimize as opt
 
 from pyebsdindex import ebsd_pattern
 
+
 #from os import environ
 #environ["NUMBA_CACHE_DIR"] = str(tempdir)
 
@@ -195,9 +196,8 @@ class NLPAR:
     else:
       return None
 
-  def opt_lambda(self,chunksize=0,saturation_protect=True,automask=True, backsub = False,
-                target_weights=(0.5, 0.34, 0.25), dthresh=0.0, autoupdate=True,
-                stem_scale = False,
+  def opt_lambda_cpu(self, target_weights=(0.5, 0.34, 0.25), dthresh=0.0, autoupdate=True,
+                automask = True,
                 verbose = 2, **kwargs):
 
     target_weights = np.asarray(target_weights)
@@ -260,8 +260,7 @@ class NLPAR:
     #   sigma[j:j + rowstartcount[1],:] = tmp
 
 
-    sigma, d2,n2 = self.calcsigma_cpu(chunksize=chunksize, nn=nn,
-                                    saturation_protect = saturation_protect, automask = automask,stem_scale = stem_scale )
+    sigma, d2,n2 = self.calcsigma_cpu(**kwargs)
 
     #print(d2.max(), d2.min())
     #d2 = d2norm(d2, n2, dij, sigma)
@@ -291,7 +290,7 @@ class NLPAR:
       self.sigma = sigma
     return lamopt_values.flatten()
 
-  def calcnlpar(self, chunksize=0, searchradius=None, lam = None, dthresh = None,
+  def calcnlpar_cpu(self, chunksize=0, searchradius=None, lam = None, dthresh = None,
                saturation_protect=True, automask=True, stem_scale = False,
                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,verbose=2,
                diff_offset=None,
@@ -468,8 +467,10 @@ class NLPAR:
                                           convertToFloat=True, returnArrayOnly=True)
         if stem_scale is True:
             datamin = data.min()
-            data = data - datamin + 1
-            data = np.log(data)
+            # data = data - datamin + 1
+            # data = np.log(data)
+            data = data - datamin
+            data = np.sqrt(data)
 
         shpdata = data.shape
 
@@ -500,7 +501,8 @@ class NLPAR:
         dataout = dataout[rstartcalc: rstartcalc + nrowcalc,
                             cstartcalc:cstartcalc + ncolcalc, :]
         if stem_scale is True:
-            dataout = np.exp(dataout) - 1 + datamin
+            #dataout = np.exp(dataout) - 1 + datamin
+            dataout = dataout**2 + datamin
         shpout = dataout.shape
         dataout = dataout.reshape(shpout[0] * shpout[1], pheight, pwidth)
         if rescale == True:
@@ -582,7 +584,8 @@ class NLPAR:
     numba.set_num_threads(nthreadpos)
     return str(patternfileout.filepath)
 
-  def calcsigma(self,chunksize=0,nn=1,saturation_protect=True,automask=True, stem_scale=False,  verbose = 2, **kwargs):
+  def calcsigma_cpu(self,chunksize=0,nn=1,saturation_protect=True,automask=True, stem_scale=False,  verbose = 2, **kwargs):
+
     self.sigmann = nn
     patternfile = self.getinfileobj()
 
@@ -633,9 +636,10 @@ class NLPAR:
                                                 convertToFloat=True, returnArrayOnly=True)
 
             if stem_scale is True:
-                data = data - data.min() + 1
-                data = np.log(data)
-
+                #data = data - data.min() + 1
+                #data = np.log(data)
+                data = data - data.min()
+                data = np.sqrt(data)
             shp = data.shape
             data = data.reshape(data.shape[0], phw)
 
@@ -927,11 +931,15 @@ class NLPAR:
         #print('_______', '\n')
     return dataout
 
-  def opt_lambda_cpu(self,**kwargs): # helper function
-    return self.opt_lambda(**kwargs)
+  def calcsigma(self,**kwargs): # helper function
+    return self.calcsigma_cpu(**kwargs)
 
-  def calcnlpar_cpu(self, **kwargs):  # helper function
-    return self.calcnlpar(**kwargs)
+
+  def opt_lambda(self, **kwargs): # helper function
+    return self.opt_lambda_cpu(**kwargs)
+
+  def calcnlpar(self, **kwargs):  # helper function
+    return self.calcnlpar_cpu(**kwargs)
 
 
   def _calcchunks(self, patdim, ncol, nrow, target_bytes=2e9, col_overlap=0, row_overlap=0, col_offset=0, row_offset=0):

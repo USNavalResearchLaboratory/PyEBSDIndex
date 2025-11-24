@@ -56,7 +56,7 @@ class NLPAR(nlpar_cpu.NLPAR):
 
 
   def calcsigma(self,nn=1, saturation_protect=True,automask=True, stem_scale=False,
-                return_nndist=False, **kwargs):
+                   **kwargs):
     self.sigmann = nn
     if self.sigmann > 7:
       print("Sigma optimization search limited to a search radius <= 7")
@@ -64,23 +64,24 @@ class NLPAR(nlpar_cpu.NLPAR):
       nn = 7
       self.sigmann = nn
 
-    sig =  self.calcsigma_cl(nn=nn,
+    sig, dnn, cnn =  self.calcsigma_cl(nn=nn,
                             saturation_protect=saturation_protect,
                             automask=automask,
                             stem_scale = stem_scale,
                             **kwargs)
-    if return_nndist == True:
-      return sig
-    else:
-      return sig[0]
+
+
+    return sig, dnn, cnn
+
   def opt_lambda_cpu(self, **kwargs):
-    return nlpar_cpu.NLPAR.opt_lambda(self, **kwargs)
+    return nlpar_cpu.NLPAR.opt_lambda_cpu(self, **kwargs)
+
 
   def calcnlpar_cpu(self, **kwargs):
-    return nlpar_cpu.NLPAR.calcnlpar(self, **kwargs)
+    return nlpar_cpu.NLPAR.calcnlpar_cpu(self, **kwargs)
 
   def calcsigma_cpu(self,nn=1, saturation_protect=True,automask=True, **kwargs):
-    return nlpar_cpu.NLPAR.calcsigma(self, nn=nn,
+    return nlpar_cpu.NLPAR.calcsigma_cpu(self, nn=nn,
                                      saturation_protect=saturation_protect, automask=automask, **kwargs)
 
   def opt_lambda_cl(self, saturation_protect=True, automask=True, backsub=False,
@@ -139,7 +140,7 @@ class NLPAR(nlpar_cpu.NLPAR):
 
   def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True,
                    stem_scale = False,
-                   normalize_d=False, gpu_id = None, verbose = 2, **kwargs):
+                   normalize_d=True, gpu_id = None, verbose = 2, **kwargs):
     self.sigmann = nn
     if self.sigmann > 7:
       print("Sigma optimization search limited to a search radius <= 7")
@@ -301,10 +302,10 @@ class NLPAR(nlpar_cpu.NLPAR):
         #countnn[rstart:rend, cstart:cend] = countchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
         countchunkt = countchunk[0:int(ncolchunk*nrowchunk)].reshape(nrowchunk, ncolchunk, nnn)
         distchunkt = distchunk[0:int(ncolchunk*nrowchunk)].reshape(nrowchunk, ncolchunk, nnn)
-        countnn[rstart:rend, cstart:cend] = np.select([countchunkt >0],
-                                                      [countchunkt], default=countnn[rstart:rend, cstart:cend] )
-        dist[rstart:rend, cstart:cend] = np.select([countchunkt > 0],
-                                                      [distchunkt], default=dist[rstart:rend, cstart:cend])
+        countnn[rstart:rend, cstart:cend,:] = np.select([countchunkt >0],
+                                                      [countchunkt], default=countnn[rstart:rend, cstart:cend,:] )
+        dist[rstart:rend, cstart:cend,:] = np.select([countchunkt > 0],
+                                                      [distchunkt], default=dist[rstart:rend, cstart:cend,:])
 
         #dist[rstart:rend, cstart:cend] = distchunk[0:int(ncolchunk*nrowchunk), :].reshape(nrowchunk, ncolchunk, nnn)
         sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigmachunk)
@@ -318,6 +319,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     queue.flush()
     queue = None
     self.sigma = sigma
+    
     return sigma, dist, countnn
 
 

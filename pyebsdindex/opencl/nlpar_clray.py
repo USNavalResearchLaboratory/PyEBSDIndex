@@ -55,7 +55,7 @@ class NLPAR(nlpar_cl.NLPAR):
   def calcnlpar(self, **kwargs):
     return self.calcnlpar_clray(**kwargs)
 
-  def calcsigma(self, nn=1, saturation_protect=True, automask=True, return_nndist=False,
+  def calcsigma(self, nn=1, saturation_protect=True, automask=True, return_nndist=True,
                 stem_scale=False,
                 **kwargs):
     if self.sigmann > 7:
@@ -82,7 +82,7 @@ class NLPAR(nlpar_cl.NLPAR):
     return nlpar_cl.NLPAR.calcsigma_cl(self, **kwargs)
 
   def calcsigma_clray(self, nn=1, saturation_protect=True, automask=True,
-                      stem_scale = False, normalize_d=False,
+                      stem_scale = False, normalize_d=True,
                       gpu_id = None, verbose=2, **kwargs):
     self.patternfile = self.getinfileobj()
     self.sigmann = nn
@@ -741,8 +741,11 @@ class NLPARGPUWorker:
                                                                     [gpujob.ncolchunk, gpujob.nrowchunk]],
                                                                     convertToFloat=False, returnArrayOnly=True)
         if stem_scale == True:
-            data = data - data.min() + 1
-            data = np.log(data)
+            #data = data - data.min() + 1
+            #data = np.log(data)
+            data = data - data.min()
+            data = np.sqrt(data)
+
 
         newdata = nlparobj._sigmachunkcalc_cl(data, gpujob, clparams=self.openCLParams, **kwargs)
 
