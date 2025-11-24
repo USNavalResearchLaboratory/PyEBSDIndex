@@ -64,15 +64,15 @@ class NLPAR(nlpar_cl.NLPAR):
       nn = 7
       self.sigmann = nn
 
-    sig = self.calcsigma_clray(nn=nn,
+    sig, dnn, cnn = self.calcsigma_clray(nn=nn,
                             saturation_protect=saturation_protect,
                             automask=automask,
                             stem_scale = stem_scale,
                             **kwargs)
     if return_nndist == True:
-      return sig
+      return sig, dnn, cnn
     else:
-      return sig[0]
+      return sig
 
 
   def calcnlpar_clsq(self, **kwargs):
@@ -120,12 +120,12 @@ class NLPAR(nlpar_cl.NLPAR):
     ngpuwrker = 6
     clparams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
     clparams.get_queue()
-    if clparams.gpu[gpu_id].host_unified_memory:
-      return nlpar_cl.NLPAR.calcsigma_cl(self, nn=nn, saturation_protect=saturation_protect,
-                                         automask=automask,
-                                         normalize_d=normalize_d,
-                                         stem_scale=stem_scale,
-                                         gpu_id=gpu_id, **kwargs)
+    # if clparams.gpu[gpu_id].host_unified_memory:
+    #   return nlpar_cl.NLPAR.calcsigma_cl(self, nn=nn, saturation_protect=saturation_protect,
+    #                                      automask=automask,
+    #                                      normalize_d=normalize_d,
+    #                                      stem_scale=stem_scale,
+    #                                      gpu_id=gpu_id, **kwargs)
 
     target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 2
     max_mem = clparams.gpu[gpu_id].global_mem_size * 0.5

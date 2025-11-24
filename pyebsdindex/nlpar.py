@@ -34,6 +34,7 @@ from pyebsdindex import _ray_installed
 from pyebsdindex import _pyopencl_installed
 
 gpuisthere = False
+gpusharedmem = True
 if _pyopencl_installed:
   # check for at least one gpu
   import pyopencl as cl
@@ -44,6 +45,10 @@ if _pyopencl_installed:
         g = p.get_devices(device_type=cl.device_type.GPU)
         if len(g) > 0:
           gpuisthere = True
+
+          for gpu in g:
+            if gpu.host_unified_memory == False:
+              gpusharedmem = False
           g = None
           break
     plt = None
@@ -52,7 +57,11 @@ if _pyopencl_installed:
 
 
 if _ray_installed and gpuisthere:
-  from pyebsdindex.opencl.nlpar_clray import NLPAR
+  if gpusharedmem:
+    from pyebsdindex.opencl.nlpar_cl import NLPAR
+  else:
+    from pyebsdindex.opencl.nlpar_clray import NLPAR
+
 elif gpuisthere and not _ray_installed:
   from pyebsdindex.opencl.nlpar_cl import NLPAR
 else:

@@ -197,7 +197,7 @@ class NLPAR:
       return None
 
   def opt_lambda_cpu(self, target_weights=(0.5, 0.34, 0.25), dthresh=0.0, autoupdate=True,
-                automask = True,
+                saturation_protect=True, automask=True, stem_scale = False, backsub=False,
                 verbose = 2, **kwargs):
 
     target_weights = np.asarray(target_weights)

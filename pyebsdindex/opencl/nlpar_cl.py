@@ -43,14 +43,10 @@ class NLPAR(nlpar_cpu.NLPAR):
     self.useCPU = False
 
 
-  def opt_lambda(self,saturation_protect=True, automask=True, backsub=False,
-                 target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True, **kwargs):
-    return self.opt_lambda_cl(saturation_protect=saturation_protect,
-                              automask=automask,
-                              backsub=backsub,
-                              target_weights=target_weights,
-                              dthresh=dthresh,
-                              autoupdate=autoupdate, **kwargs)
+  def opt_lambda(self, target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True,
+                 saturation_protect=True, automask=True, stem_scale = False, backsub=False, **kwargs):
+    return self.opt_lambda_cl(**kwargs)
+
   def calcnlpar(self, **kwargs):
     return self.calcnlpar_cl(**kwargs)
 
