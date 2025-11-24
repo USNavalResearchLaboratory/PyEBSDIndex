@@ -20,7 +20,7 @@ jobs:
     name: check manifest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v6
         with:
@@ -49,7 +49,7 @@ jobs:
             DEPENDENCIES: matplotlib==3.3 numba==0.55.1 ray[default]==2.9
             LABEL: -oldest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
