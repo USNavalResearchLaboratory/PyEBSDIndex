@@ -492,7 +492,9 @@ class NLPAR:
 
 
         dataout = self.nlpar_nb(data, lam, sr, dthresh, sigchunk,
-                                nrowchunk, ncolchunk, calclim, indices, saturation_protect, diff_offset=diff_offset)
+                                nrowchunk, ncolchunk,
+                                calclim=calclim, indices_in=indices,
+                                saturation_protect=saturation_protect, diff_offset=diff_offset)
 
         # nlpar_nb(data, lam, sr, dthresh, sigma, nrows, ncols, calclim=np.array([-1, -1, -1, -1], dtype= np.int64),
         #         indices=np.array([-1], dtype= np.int64), saturation_protect=True,
@@ -815,7 +817,7 @@ class NLPAR:
 
   @staticmethod
   @numba.jit(nopython=True,cache=True,fastmath=False,parallel=True)
-  def nlpar_nb(data, lam, sr, dthresh, sigma, nrows, ncols, calclim = np.array([-1, -1, -1, -1], dtype= np.int64),
+  def nlpar_nb(data, lam, sr, dthresh, sigma, nrows, ncols, calclim = np.array([-1, -1, -1, -1], dtype=np.int64),
                 indices_in=np.array([-1], dtype= np.int64), saturation_protect=True,
                 diff_offset=np.float32(0.0)):
     def getpairid(idx0, idx1):
