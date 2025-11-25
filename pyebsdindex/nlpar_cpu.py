@@ -817,8 +817,8 @@ class NLPAR:
 
   @staticmethod
   @numba.jit(nopython=True,cache=True,fastmath=False,parallel=True)
-  def nlpar_nb(data, lam, sr, dthresh, sigma, nrows, ncols, calclim =[-1, -1, -1, -1],
-                indices_in=[-1], saturation_protect=True,
+  def nlpar_nb(data, lam, sr, dthresh, sigma, nrows, ncols, calclim = np.array([-1, -1, -1, -1], dtype=np.int64),
+                indices_in=np.array([-1], dtype= np.int64), saturation_protect=True,
                 diff_offset=np.float32(0.0)):
     def getpairid(idx0, idx1):
       idx0_t = int(idx0)
@@ -847,13 +847,13 @@ class NLPAR:
     shpdata = data.shape
 
     # set defaults ... normally will not be needed.
-    if np.array(indices_in).size == 1:
+    if indices_in.size == 1:
         if indices_in[0] == -1:
             indices = np.arange(shpdata[1], dtype=np.int64)
         else:
-            indices = np.array(indices_in).astype(np.int64)
+            indices = indices_in.astype(np.int64)
     else:
-        indices = np.array(indices_in).astype(np.int64)
+        indices = indices_in.astype(np.int64)
 
 
     shpind = indices.shape
