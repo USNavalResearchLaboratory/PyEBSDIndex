@@ -647,7 +647,7 @@ class NLPAR:
 
 
 
-            sigchunk, d2chunk, n2chunk = self.sigma_numba2(data,nn, nrowchunk,ncolchunk,
+            sigchunk, d2chunk, n2chunk = self.sigma_numba(data,nn, nrowchunk,ncolchunk,
                                                        np.array([0,nrowchunk ], dtype=np.uint64),
                                                                     np.array([0,ncolchunk],dtype=np.uint64),
                                                                     indices,saturation_protect)
