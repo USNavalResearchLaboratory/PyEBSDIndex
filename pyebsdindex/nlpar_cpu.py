@@ -647,15 +647,15 @@ class NLPAR:
 
 
 
-            sigchunk, d2chunk, n2chunk = self.sigma_numba(data,nn, nrowchunk,ncolchunk,
+            sigchunk, d2chunk, n2chunk = self.sigma_numba2(data,nn, nrowchunk,ncolchunk,
                                                        np.array([0,nrowchunk ], dtype=np.uint64),
                                                                     np.array([0,ncolchunk],dtype=np.uint64),
                                                                     indices,saturation_protect)
 
             sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigchunk)
             # temp = (d2 > thresh).choose(dthresh, d2)
-            n2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  0], [n2chunk], default=n2[rstart:rend, cstart:cend,:])
-            d2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  0], [d2chunk], default=d2[rstart:rend, cstart:cend,:])
+            n2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  1], [n2chunk], default=n2[rstart:rend, cstart:cend,:])
+            d2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  1], [d2chunk], default=d2[rstart:rend, cstart:cend,:])
             #dij[rstart:rend, cstart:cend, :] = dijchunk
             ndone += 1
             if verbose >= 2:
@@ -786,7 +786,7 @@ class NLPAR:
               for q in range(shpind[0]):
                 d0 = data[indx_0, indices[q]]
                 d1 = data[indx_nn, indices[q]]
-                if (d1 < mxval) and (d0 < mxval):
+                if (d1 < mxval) and (d0 < mxval): # this is a saturation protection
                   n2 += 1.0
                   d2 += (d0 - d1)**2
               nout[j,i,count] = n2
@@ -813,6 +813,96 @@ class NLPAR:
                     s2_12 = (s2[j, i] + s2[jj, ii])
                     dout[j, i, q] -= nout[j, i, q] * s2_12
                     dout[j, i, q] /= s2_12 * np.sqrt(2.0 * nout[j, i, q])
+    return sigma, dout, nout
+
+  @staticmethod
+  @numba.jit(nopython=True, cache=True, fastmath=False, parallel=True)
+  def sigma_numba2(data, nn, nrows, ncols, rowstartcount, colstartcount, indices, saturation_protect=True):
+    sigma = np.zeros((nrows, ncols), dtype=np.float32)
+    dout = np.zeros((nrows, ncols, (nn * 2 + 1) ** 2), dtype=np.float32)
+    nout = np.zeros((nrows, ncols, (nn * 2 + 1) ** 2), dtype=np.float32)
+    dij = np.zeros((nrows, ncols, (nn * 2 + 1) ** 2, 2), dtype=np.uint64)
+    ncount = np.zeros((nrows, ncols), dtype=np.uint64)
+    shpdata = data.shape
+
+    n0 = np.float32(shpdata[-1])
+    shpind = indices.shape
+    mxval = np.max(data)
+    if saturation_protect == False:
+      mxval += 1.0
+    else:
+      mxval *= 0.9961
+
+    for j in numba.prange(rowstartcount[0], rowstartcount[0] + rowstartcount[1]):
+      nn_r_start = j - nn if (j - nn) >= 0 else 0
+      nn_r_end = (j + nn if (j + nn) < nrows else nrows - 1) + 1
+      for i in numba.prange(colstartcount[0], colstartcount[0] + colstartcount[1]):
+        nn_c_start = i - nn if (i - nn) >= 0 else 0
+        nn_c_end = (i + nn if (i + nn) < ncols else ncols - 1) + 1
+
+        mind = np.float32(1e24)
+        indx_0 = i + ncols * j
+        count = 0
+        for j_nn in range(nn_r_start, nn_r_end):
+          for i_nn in range(nn_c_start, nn_c_end):
+            dij[j, i, count, 0] = np.uint64(j_nn)
+            dij[j, i, count, 1] = np.uint64(i_nn)  # want to save this for labmda optimization
+            indx_nn = i_nn + ncols * j_nn
+            d2 = np.float32(0.0)
+            n2 = np.float32(1.0e-12)
+            nout[j, i, count] = n0  # want to save this for labmda optimization
+            if not ((i == i_nn) and (j == j_nn)):
+              for q in range(shpind[0]):
+                d0 = data[indx_0, indices[q]]
+                d1 = data[indx_nn, indices[q]]
+                if (d1 < mxval) and (d0 < mxval):  # this is a saturation protection
+                  n2 += 1.0
+                  d2 += (d0 - d1) ** 2
+
+
+              if d2 >= 1.e-3:  # sometimes EDAX collects the same pattern twice
+                s0 = d2 / np.float32(n2 * 2.0)
+                if s0 < mind:
+                  mind = s0
+                dout[j, i, count] = d2  # want to save this for labmda optimization
+                nout[j, i, count] = n2
+                count += 1
+              #else:
+              #  d2 = 1e12
+
+
+        #ncount[j,i] = count
+        #print('------')
+        dtemp = dout[j,i,0:count].ravel()
+        #print(dtemp)
+        ntemp = (nout[j,i,0:count].ravel()).astype(np.float32)
+        #print(ntemp)
+        dtemp = dtemp/(ntemp * 2.0)
+        #print(dtemp)
+
+        mediandtemp = np.median(dtemp)
+        madtemp = np.median(np.absolute(dtemp-mediandtemp))
+        #print(mediandtemp, madtemp)
+        #print('------')
+        zsc_mod = np.absolute(0.6745*(dtemp-mediandtemp)/madtemp)
+        #print([j, i], dtemp, zsc_mod)
+        if zsc_mod.min() >= 3.5:
+          sigma[j, i] = np.sqrt(mind)
+        else:
+          sigma[j, i] = np.sqrt(np.mean(dtemp[zsc_mod < 3.5 ]))
+          #print(sigma[j, i], dtemp, zsc_mod)
+    # normalize the distances for lambda optimization.
+    shp = dout.shape
+    s2 = sigma ** 2
+    for j in numba.prange(shp[0]):
+      for i in range(shp[1]):
+        for q in range(shp[2]):
+          if nout[j, i, q] > 0:
+            ii = dij[j, i, q, 1]
+            jj = dij[j, i, q, 0]
+            s2_12 = (s2[j, i] + s2[jj, ii])
+            dout[j, i, q] -= nout[j, i, q] * s2_12
+            dout[j, i, q] /= s2_12 * np.sqrt(2.0 * nout[j, i, q])
     return sigma, dout, nout
 
   @staticmethod
