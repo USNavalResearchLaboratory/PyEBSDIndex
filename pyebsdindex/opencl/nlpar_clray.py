@@ -55,20 +55,17 @@ class NLPAR(nlpar_cl.NLPAR):
   def calcnlpar(self, **kwargs):
     return self.calcnlpar_clray(**kwargs)
 
-  def calcsigma(self, nn=1, saturation_protect=True, automask=True, return_nndist=False, **kwargs):
+  def calcsigma(self, nn=1, **kwargs):
     if self.sigmann > 7:
       print("Sigma optimization search limited to a search radius <= 7")
       print("The search radius has been clipped to 7")
       nn = 7
       self.sigmann = nn
 
-    sig = self.calcsigma_clray(nn=nn,
-                            saturation_protect=saturation_protect,
-                            automask=automask, **kwargs)
-    if return_nndist == True:
-      return sig
-    else:
-      return sig[0]
+    sig, dnn, cnn = self.calcsigma_clray(nn=nn,
+                            **kwargs)
+
+    return sig, dnn, cnn
 
 
   def calcnlpar_clsq(self, **kwargs):
@@ -77,10 +74,24 @@ class NLPAR(nlpar_cl.NLPAR):
   def calcsigma_clsq(self, **kwargs):
     return nlpar_cl.NLPAR.calcsigma_cl(self, **kwargs)
 
-  def calcsigma_clray(self, nn=1, saturation_protect=True, automask=True, normalize_d=False,
+  def calcsigma_clray(self, nn=1, saturation_protect=None, automask=None,
+                      stem_scale = None,
                       gpu_id = None, verbose=2, **kwargs):
     self.patternfile = self.getinfileobj()
     self.sigmann = nn
+
+    if saturation_protect is not None:
+      self.saturation_protect = saturation_protect
+    saturation_protect = self.saturation_protect if np.isscalar(self.saturation_protect) else self.saturation_protect[0]
+
+    if automask is not None:
+      self.automask = automask
+    automask = self.automask if np.isscalar(self.automask) else self.automask[0]
+
+    if stem_scale is not None:
+      self.stem_scale = stem_scale
+    stem_scale = self.stem_scale if np.isscalar(self.stem_scale) else self.stem_scale[0]
+
 
     if self.sigmann > 7:
       print("Sigma optimization search limited to a search radius <= 7")
@@ -115,11 +126,12 @@ class NLPAR(nlpar_cl.NLPAR):
     ngpuwrker = 6
     clparams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
     clparams.get_queue()
-    if clparams.gpu[gpu_id].host_unified_memory:
-      return nlpar_cl.NLPAR.calcsigma_cl(self, nn=nn, saturation_protect=saturation_protect,
-                                         automask=automask,
-                                         normalize_d=normalize_d,
-                                         gpu_id=gpu_id, **kwargs)
+    # if clparams.gpu[gpu_id].host_unified_memory:
+    #   return nlpar_cl.NLPAR.calcsigma_cl(self, nn=nn, saturation_protect=saturation_protect,
+    #                                      automask=automask,
+    #                                      normalize_d=normalize_d,
+    #                                      stem_scale=stem_scale,
+    #                                      gpu_id=gpu_id, **kwargs)
 
     target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 2
     max_mem = clparams.gpu[gpu_id].global_mem_size * 0.5
@@ -137,7 +149,7 @@ class NLPAR(nlpar_cl.NLPAR):
     npat_point = int(pwidth * pheight)
 
     if (automask is True) and (self.mask is None):
-      self.mask = (self.automask(pheight, pwidth))
+      self.mask = (self.makeautomask(pheight, pwidth))
     if self.mask is None:
       self.mask = np.ones((pheight, pwidth), dtype=np.uint8)
 
@@ -219,7 +231,7 @@ class NLPAR(nlpar_cl.NLPAR):
           wrker = idlewrker.pop()
           job = jobqueue.pop()
 
-          tasks.append(wrker.runsigma_chunk.remote(job, nlparobj=nlpar_remote, saturation_protect=saturation_protect))
+          tasks.append(wrker.runsigma_chunk.remote(job, nlparobj=nlpar_remote))
           busywrker.append(wrker)
       if len(tasks) > 0:
         donetasks, stillbusy = ray.wait(tasks, num_returns=len(busywrker), timeout=0.1)
@@ -244,10 +256,12 @@ class NLPAR(nlpar_cl.NLPAR):
             nrowcalc = job.nrowcalc
             ncolcalc = job.ncolcalc
 
-            countnn[rstart:rend, cstart:cend] = countchunk[0:int(ncolchunk * nrowchunk), :].reshape(nrowchunk,
-                                                                                        ncolchunk, nnn)
-            dist[rstart:rend, cstart:cend] = distchunk[0:int(ncolchunk * nrowchunk), :].reshape(nrowchunk, ncolchunk,
-                                                                                                nnn)
+            countchunkt = countchunk[0:int(ncolchunk*nrowchunk)].reshape(nrowchunk, ncolchunk, nnn)
+            distchunkt = distchunk[0:int(ncolchunk*nrowchunk)].reshape(nrowchunk, ncolchunk, nnn)
+            countnn[rstart:rend, cstart:cend] = np.select([countchunkt > 0],
+                                                          [countchunkt], default=countnn[rstart:rend, cstart:cend])
+            dist[rstart:rend, cstart:cend] = np.select([countchunkt > 0],
+                                                       [distchunkt], default=dist[rstart:rend, cstart:cend])
             sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigmachunk)
 
             idlewrker.append(busywrker.pop(indx))
@@ -259,10 +273,21 @@ class NLPAR(nlpar_cl.NLPAR):
       print('\n', end='')
     return sigma, dist, countnn
 
-  def _sigmachunkcalc_cl(self, data, calclim, clparams=None, saturation_protect=True):
+  def _sigmachunkcalc_cl(self, data, calclim, clparams=None):
     nn = self.sigmann
+    saturation_protect = self.saturation_protect if np.isscalar(self.saturation_protect) else self.saturation_protect[0]
+    stem_scale = self.stem_scale if np.isscalar(self.stem_scale) else self.stem_scale[0]
 
     data = np.ascontiguousarray(data)
+
+
+    if stem_scale == True:
+      # data = data - data.min() + 1
+      # data = np.log(data)
+      dmin = data.min()
+      data = data - dmin
+      data = np.sqrt(data).astype(np.float32)
+
     ctx = clparams.ctx
     prg = clparams.prg
     clkern = clparams.kernels
@@ -288,7 +313,7 @@ class NLPAR(nlpar_cl.NLPAR):
     pwidth = data.shape[2]
     npat_point = pheight*pwidth
 
-    mask = self.mask
+    mask = np.array(self.mask)
 
     npad = clvectlen * int(np.ceil(mask.size/clvectlen))
     maskpad = np.zeros((npad) , np.float32)
@@ -373,22 +398,26 @@ class NLPAR(nlpar_cl.NLPAR):
 
 
 
-  def calcnlpar_clray(self, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask = True,
+  def calcnlpar_clray(self, searchradius=None, lam = None, dthresh = None,
+                saturation_protect=None, automask = None, stem_scale = None,
                 filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,diff_offset = None,
                 verbose = 2, gpu_id = None, **kwargs):
 
     if lam is not None:
       self.lam = lam
-
-    self.saturation_protect = saturation_protect
+    lam = self.lam if np.isscalar(self.lam) else self.lam[0]
+    lam = np.float32(lam)
 
     if dthresh is not None:
       self.dthresh = dthresh
     if self.dthresh is None:
       self.dthresh = 0.0
+    dthresh = self.dthresh if np.isscalar(self.dthresh) else self.dthresh[0]
+    dthresh = np.float32(dthresh)
 
     if diff_offset is not None:
       self.diff_offset = diff_offset
+    diff_offset = np.float32(self.diff_offset)
 
     if searchradius is not None:
       self.searchradius = searchradius
@@ -398,11 +427,21 @@ class NLPAR(nlpar_cl.NLPAR):
       print("The search radius has been clipped to 10")
       searchradius = 10
       self.searchradius = searchradius
+    sr = self.searchradius if np.isscalar(self.searchradius) else self.searchradius[0]
+    sr = np.int64(sr)
 
-    lam = np.float32(self.lam)
-    dthresh = np.float32(self.dthresh)
-    sr = np.int64(self.searchradius)
-    diff_offset = np.float32(self.diff_offset)
+    if saturation_protect is not None:
+      self.saturation_protect = saturation_protect
+    saturation_protect = self.saturation_protect if np.isscalar(self.saturation_protect) else self.saturation_protect[0]
+
+    if automask is not None:
+      self.automask = automask
+    automask = self.automask if np.isscalar(self.automask) else self.automask[0]
+
+    if stem_scale is not None:
+      self.stem_scale = stem_scale
+    stem_scale = self.stem_scale if np.isscalar(self.stem_scale) else self.stem_scale[0]
+
 
     if filename is not None:
       self.setfile(filepath=filename)
@@ -432,14 +471,14 @@ class NLPAR(nlpar_cl.NLPAR):
         self.sigma = None
 
     if self.sigma is None:
-      self.sigma = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, gpu_id=gpu_id)[0]
+      self.sigma = self.calcsigma_cl(nn=1, gpu_id=gpu_id)[0]
 
     sigma = np.asarray(self.sigma).astype(np.float32)
 
 
 
     if (automask is True) and (self.mask is None):
-      self.mask = (self.automask(pheight, pwidth))
+      self.mask = (self.makeautomask(pheight, pwidth))
     if self.mask is None:
       self.mask = np.ones((pheight, pwidth), dtype=np.uint8)
 
@@ -476,16 +515,16 @@ class NLPAR(nlpar_cl.NLPAR):
     # print(gpu_id)
     clparams.get_context(gpu_id=gpu_id, kfile = 'clnlpar.cl')
     clparams.get_queue()
-    if clparams.gpu[gpu_id].host_unified_memory:
-      return nlpar_cl.NLPAR.calcnlpar_cl(self, saturation_protect=saturation_protect,
-                                         automask=automask,
-                                         filename=filename,
-                                         fileout=fileout,
-                                         reset_sigma=reset_sigma,
-                                         backsub = backsub,
-                                         rescale = rescale,
-                                         gpu_id= gpu_id,
-                                         diff_offset=diff_offset)
+    # if clparams.gpu[gpu_id].host_unified_memory:
+    #   return nlpar_cl.NLPAR.calcnlpar_cl(self, saturation_protect=saturation_protect,
+    #                                      automask=automask,
+    #                                      filename=filename,
+    #                                      fileout=fileout,
+    #                                      reset_sigma=reset_sigma,
+    #                                      backsub = backsub,
+    #                                      rescale = rescale,
+    #                                      gpu_id= gpu_id,
+    #                                      diff_offset=diff_offset)
 
     target_mem = clparams.gpu[gpu_id].max_mem_alloc_size//6
     max_mem = clparams.gpu[gpu_id].global_mem_size*0.4
@@ -604,20 +643,34 @@ class NLPAR(nlpar_cl.NLPAR):
     pheight = data.shape[1]
     pwidth = data.shape[2]
 
-
-
-    lam = np.float32(self.lam)
-    sr = np.int64(self.searchradius)
+    lam = self.lam if np.isscalar(self.lam) else self.lam[0]
+    lam = np.float32(lam)
+    sr = self.searchradius if np.isscalar(self.searchradius) else self.searchradius[0]
+    sr = np.int64(sr)
     nnn = int((2 * sr + 1) ** 2)
-    dthresh = np.float32(self.dthresh)
-    diff_offset = np.float32(self.diff_offset)
+    dthresh = self.dthresh if np.isscalar(self.dthresh) else self.dthresh[0]
+    dthresh = np.float32(dthresh)
+    diff_offset = self.diff_offset if np.isscalar(self.diff_offset) else self.diff_offset[0]
+    diff_offset = np.float32(diff_offset)
+
+    saturation_protect = self.saturation_protect if np.isscalar(self.saturation_protect) else self.saturation_protect[0]
+
+    stem_scale = self.stem_scale if np.isscalar(self.stem_scale) else self.stem_scale[0]
+
+    if stem_scale == True:
+      # data = data - data.min() + 1
+      # data = np.log(data)
+      mndat = data.min()
+      data = data - mndat
+      data = np.sqrt(data).astype(np.float32)
+
     #print(chunks[2], chunks[3])
     #print(lam, sr, dthresh)
 
 
     # precalculate some needed arrays for the GPU
     mxval = data.max()
-    if self.saturation_protect == False:
+    if saturation_protect == False:
       mxval += 1.0
     else:
       mxval *= 0.9961
@@ -681,6 +734,14 @@ class NLPAR(nlpar_cl.NLPAR):
     cl.enqueue_copy(clparams.queue, data, datapadout_gpu,  is_blocking=True)
     sigmachunk_gpu.release()
     clparams.queue.finish()
+
+    if stem_scale == True:
+      # data = data - data.min() + 1
+      # data = np.log(data)
+      data = data**2
+      data += mndat
+
+
     if self.rescale == True:
       for i in range(data.shape[0]):
         temp = data[i, :, :]
@@ -716,7 +777,7 @@ class NLPARGPUWorker:
 
           #elf.openCLParams = None
 
-  def runsigma_chunk(self,gpujob, nlparobj=None, **kwargs):
+  def runsigma_chunk(self,gpujob, nlparobj=None,  **kwargs):
     if gpujob is None:
         #time.sleep(0.001)
         return 'Bored', (None, None, None)
@@ -730,6 +791,9 @@ class NLPARGPUWorker:
         data, xyloc = nlparobj.patternfile.read_data(patStartCount=[[gpujob.cstart, gpujob.rstart],
                                                                     [gpujob.ncolchunk, gpujob.nrowchunk]],
                                                                     convertToFloat=False, returnArrayOnly=True)
+
+
+
 
         newdata = nlparobj._sigmachunkcalc_cl(data, gpujob, clparams=self.openCLParams, **kwargs)
 
@@ -762,12 +826,15 @@ class NLPARGPUWorker:
                                                                     [gpujob.ncolchunk, gpujob.nrowchunk]],
                                                                     convertToFloat=False, returnArrayOnly=True)
 
+
+
         newdata = nlparobj._nlparchunkcalc_cl(data, gpujob, clparams=self.openCLParams)
 
         if self.openCLParams.queue is not None:
             print("queue still here")
             self.openCLParams.queue.finish()
             self.openCLParams.queue = None
+
 
         nlparobj.patternfileout.write_data(newpatterns=newdata,
                                        patStartCount=[[gpujob.cstart + gpujob.cstartcalc,

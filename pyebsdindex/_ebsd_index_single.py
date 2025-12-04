@@ -743,6 +743,10 @@ class EBSDIndexer:
 
         for j in range(len(self.phaseLib)):
 
+
+            indxData['pq'][j, :] = np.mean(banddata['max'] * banddata['valid'], axis=1) #/ shpBandDat[-1]
+            indxData['iq'][j, :] = np.mean(banddata['normmax'] * banddata['valid'], axis=1)  # / shpBandDat[-1]
+
             p2do = np.ravel(np.nonzero(np.max(indxData["nmatch"], axis=0) < earlyexit)[0])
 
             if (p2do.size ==0) is None:
@@ -772,6 +776,7 @@ class EBSDIndexer:
                 indxData["matchattempts"][j, whgood2] = matchAttempts[whgood, ...]
                 indxData["totvotes"][j, whgood2] = totvotes[whgood]
                 bandmatchindex[whgood2, ..., j] = bandmatch[whgood, ...].reshape(whgood.size,nBands )
+
 
 
 

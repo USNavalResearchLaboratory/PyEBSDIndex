@@ -112,6 +112,7 @@ def writeoh5(filename, indexer, data,
       else:
         phaseIDadd = 1
 
+
     with h5py.File(fpath, 'w') as f:
       # Write standard Header Information
       f.create_dataset(datasetname +'/EBSD/Header/Camera Azimuthal Angle', data=np.array([np.float64(0.0)]))
