@@ -45,12 +45,22 @@ __all__ = [
 
 
 class NLPAR:
-  def __init__(self, filename=None,  lam=0.7, searchradius=3,dthresh=0.0, diff_offset=0.0,
+  def __init__(self, filename=None,
+               lam=0.7,
+               searchradius=3,
+               dthresh=0.0,
+               diff_offset=0.0,
+               saturation_protect=True,
+               stem_scale=False,
+               automask=True,
                nrows = None, ncols = None, **kwargs):
     self.lam = lam
     self.searchradius = searchradius
     self.dthresh = dthresh
     self.diff_offset = diff_offset,
+    self.saturation_protect = saturation_protect,
+    self.stem_scale = stem_scale,
+    self.automask = automask,
     self.filepath = None
     self.hdfdatapath = None
     self.filepathout = None
@@ -68,139 +78,30 @@ class NLPAR:
     if ncols is not None:
       self.ncols = ncols
 
-
-  def setfile(self,filepath=None):
-    self.filepath = None
-    self.hdfdatapath = None
-    pathtemp = np.atleast_1d(filepath)
-    fpath = pathtemp[0]
-    hdf5path = None
-    if pathtemp.size > 1:
-      hdf5path = pathtemp[1]
-    if fpath is not None:
-      self.filepath = Path(fpath)
-      self.hdfdatapath = hdf5path
-
-  def setoutfile(self, patternfile, filepath=None):
-    """Set the output file.
-
-    Parameters
-    ----------
-    patternfile
-      Input pattern file object from ebsd_pattern.
-    filepath
-      String.
-
-    Notes
-    -----
-    In the future I want to be able to specify the HDF5 data path to
-    store the output data, but that is proving to be a bit of a mess.
-    For now, a copy of the original HDF5 is made, and the NLPAR patterns
-    will be overwritten on top of the originals.
-    """
-    self.filepathout = None
-    self.hdfdatapathout = None
-    pathtemp = np.atleast_1d(filepath)
-    fpath = pathtemp[0]
-    hdf5path = None
-    #if pathtemp.size > 1:
-    #  hdf5path = pathtemp[1]
-    #print(fpath, hdf5path)
-    if fpath is not None: # the user has set an output file path.
-      self.filepathout = Path(fpath).expanduser().resolve()
-      self.hdfdatapathout =  hdf5path
-      if patternfile.filetype != 'HDF5': #check that the input and output are not the same.
-        pathok = self.filepathout.exists()
-        if pathok:
-          pathok = not self.filepathout.samefile(patternfile.filepath)
-          if not pathok:
-            raise ValueError('Error: File input and output are exactly the same.')
-            return
-
-        patternfile.copy_file([self.filepathout,self.hdfdatapathout], empty_data=True)
-        return  # fpath and (maybe) hdf5 path were set manually.
-      else: # this is a hdf5 file
-        if self.hdfdatapathout is None:
-          patternfile.copy_file(self.filepathout, empty_data=True)
-          self.hdfdatapathout = patternfile.h5patdatpth
-          return
-        else:
-          patternfile.copy_file([self.filepathout, self.hdfdatapathout], empty_data=True)
-          return
-
-    if patternfile is not None: # the user has set no path.
-      hdf5path = None
-      
-      if patternfile.filetype in ['UP', 'EBSP', 'TFPAT']:
-        p = Path(patternfile.filepath)
-        appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
-        newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
-        emptydata = True
-        if patternfile.filetype in ['EBSP']:
-          if patternfile.version > 5:
-            emptydata = False
-        #print(emptydata)
-        patternfile.copy_file(newfilepath,empty_data=emptydata)
-
-      if patternfile.filetype == 'HDF5':
-        hdf5path_tmp = str(patternfile.h5patdatpth).split('/')
-        if hdf5path_tmp[0] == '':
-          hdf5path_org =  hdf5path_tmp[1]
-        else:
-          hdf5path_org = hdf5path_tmp[0]
-        p = Path(patternfile.filepath)
-        appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
-        hdf5path = hdf5path_org+appnd
-        newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
-        #patternfile.copy_file([newfilepath, hdf5path_org], newh5path=hdf5path)
-        patternfile.copy_file([newfilepath], empty_data=True)
-        hdf5path = patternfile.h5patdatpth
-
-      self.filepathout = newfilepath
-      self.hdfdatapathout = hdf5path
-      return
-
-  def getinfileobj(self):
-    if self.filepath is not None:
-      fID = ebsd_pattern.get_pattern_file_obj([self.filepath, self.hdfdatapath])
-      if (fID.nRows is not None):
-        if (self.nrows is None):
-          self.nrows = fID.nRows
-        else:
-          fID.nRows = self.nrows
-
-      if (fID.nCols is not None):
-        if (self.ncols is None):
-          self.ncols = fID.nCols
-        else:
-          fID.nCols = self.ncols
-
-      return fID
-
+  def auto_nlpar(self, filename = None, fileout=None, lindex = 1, **kwargs):
+    if filename is not None:
+      self.setfile(filename)
+    lam = self.opt_lambda(autoupdate=True, **kwargs)
+    if 'lam' in kwargs:
+      pass
     else:
-      return None
+      kwargs['lam'] = lam[int(lindex)]
+    nlparfile = self.calcnlpar(fileout=fileout, **kwargs)
+    return nlparfile
 
-  def getoutfileobj(self):
-    if self.filepathout is not None:
-      fID = ebsd_pattern.get_pattern_file_obj([self.filepathout, self.hdfdatapathout])
-      if self.nrows is not None:
-        fID.nRows = self.nrows
-      else:
-        self.nrows = fID.nRows
 
-      if self.ncols is not None:
-        fID.nCols = self.ncols
-      else:
-        self.ncols = fID.nCols
-      return fID
-    else:
-      return None
 
-  def opt_lambda_cpu(self, target_weights=(0.5, 0.34, 0.25), dthresh=0.0, autoupdate=True,
-                saturation_protect=True, automask=True, stem_scale = False, backsub=False,
+  def opt_lambda_cpu(self, target_weights=(0.5, 0.34, 0.25), autoupdate=True, dthresh=None,
+                # see __init__ for default dthresh values
                 verbose = 2, **kwargs):
+    # will accept all keywords to calcsigma_cpu. See NLPAR __init__ for default values
 
     target_weights = np.asarray(target_weights)
+
+    if dthresh is not None:
+      self.dthresh = dthresh
+    dthresh = self.dthresh if np.isscalar(self.dthresh) else self.dthresh[0]
+    dthresh = np.float64(dthresh)
 
     def loptfunc(lam,d2,tw,dthresh):
       temp = np.maximum(d2, dthresh)
@@ -221,14 +122,6 @@ class NLPAR:
 
     nn = 1
     nn = np.uint64(nn)
-
-    if (automask is True) and (self.mask is None):
-      self.mask = (self.automask(pheight,pwidth))
-    if self.mask is None:
-      self.mask = np.ones((pheight,pwidth),dtype=np.uint8)
-
-    self.mask = (self.mask).astype(np.uint8)
-
     dthresh = np.float32(dthresh)
 
 
@@ -260,7 +153,7 @@ class NLPAR:
     #   sigma[j:j + rowstartcount[1],:] = tmp
 
 
-    sigma, d2,n2 = self.calcsigma_cpu(**kwargs)
+    sigma, d2,n2 = self.calcsigma_cpu(nn=nn, **kwargs)
 
     #print(d2.max(), d2.min())
     #d2 = d2norm(d2, n2, dij, sigma)
@@ -290,31 +183,136 @@ class NLPAR:
       self.sigma = sigma
     return lamopt_values.flatten()
 
+  def calcsigma_cpu(self,chunksize=0,nn=1,saturation_protect=None,automask=None, stem_scale=None,
+                    # See NLPAR __init__ for default values
+                    verbose = 2, **kwargs):
+
+    self.sigmann = nn
+
+    if saturation_protect is not None:
+      self.saturation_protect = saturation_protect
+    saturation_protect = self.saturation_protect if np.isscalar(self.saturation_protect) else self.saturation_protect[0]
+
+    if automask is not None:
+      self.automask = automask
+    automask = self.automask if np.isscalar(self.automask) else self.automask[0]
+
+    if stem_scale is not None:
+      self.stem_scale = stem_scale
+    stem_scale = self.stem_scale if np.isscalar(self.stem_scale) else self.stem_scale[0]
+
+
+
+    patternfile = self.getinfileobj()
+
+
+    nrows = np.int64(self.nrows)#np.uint64(patternfile.nRows)
+    ncols = np.int64(self.ncols)#np.uint64(patternfile.nCols)
+
+    pwidth = np.uint64(patternfile.patternW)
+    pheight = np.uint64(patternfile.patternH)
+    phw = pheight*pwidth
+
+    nn = np.uint64(nn)
+    nnn = np.uint64((2*nn+1)**2)
+    if chunksize <= 0:
+        sysram = (psutil.virtual_memory()).total
+        chunksize = np.minimum(32e9, sysram // 4)
+    chunksize = np.int64(chunksize)
+    chunks = self._calcchunks([pwidth, pheight], ncols, nrows, target_bytes=chunksize,
+                              col_overlap=nn, row_overlap=nn)
+
+
+
+    if (automask is True) and (self.mask is None):
+      self.mask = (self.makeautomask(pheight,pwidth))
+    if self.mask is None:
+      self.mask = np.ones((pheight,pwidth), dtype=np.uint8)
+
+    indices = np.asarray( (self.mask.flatten().nonzero())[0], np.uint64)
+
+    sigma = np.zeros((nrows, ncols), dtype=np.float32)+1e18
+
+    n2 = np.zeros((nrows, ncols, nnn), dtype=np.float32)
+    d2 = np.zeros((nrows, ncols, nnn), dtype=np.float32)
+
+    ndone = 0
+    nchunks = int(chunks[1] * chunks[0])
+
+    for rowchunk in range(chunks[1]):
+        rstart = chunks[3][rowchunk, 0]
+        rend = chunks[3][rowchunk, 1]
+        nrowchunk = rend - rstart
+
+        for colchunk in range(chunks[0]):
+            cstart = chunks[2][colchunk, 0]
+            cend = chunks[2][colchunk, 1]
+            ncolchunk = cend - cstart
+            data, xyloc = patternfile.read_data(patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
+                                                convertToFloat=True, returnArrayOnly=True)
+
+            if stem_scale is True:
+                #data = data - data.min() + 1
+                #data = np.log(data)
+                data = data - data.min()
+                data = np.sqrt(data)
+            shp = data.shape
+            data = data.reshape(data.shape[0], phw)
+
+
+            sigchunk, d2chunk, n2chunk = self.sigma_numba(data,nn, nrowchunk,ncolchunk,
+                                                       np.array([0,nrowchunk ], dtype=np.uint64),
+                                                                    np.array([0,ncolchunk],dtype=np.uint64),
+                                                                    indices,saturation_protect)
+
+            sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigchunk)
+            # temp = (d2 > thresh).choose(dthresh, d2)
+            n2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  0], [n2chunk], default=n2[rstart:rend, cstart:cend,:])
+            d2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  0], [d2chunk], default=d2[rstart:rend, cstart:cend,:])
+            #dij[rstart:rend, cstart:cend, :] = dijchunk
+            ndone += 1
+            if verbose >= 2:
+                print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
+
+    return sigma, d2, n2
+
   def calcnlpar_cpu(self, chunksize=0, searchradius=None, lam = None, dthresh = None,
-               saturation_protect=True, automask=True, stem_scale = False,
+               saturation_protect=None, automask=None, stem_scale = None, # see NLPAR __init__ for default values
                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,verbose=2,
                diff_offset=None,
                **kwargs):
 
+    if searchradius is not None:
+      self.searchradius = searchradius
+    sr = self.searchradius if np.isscalar(self.searchradius) else self.searchradius[0]
+    sr = np.int64(sr)
+
     if lam is not None:
       self.lam = lam
+    lam = self.lam if np.isscalar(self.lam) else self.lam[0]
+    lam = np.float32(lam)
+
 
     if dthresh is not None:
       self.dthresh = dthresh
+    dthresh = self.dthresh if np.isscalar(self.dthresh) else self.dthresh[0]
+    dthresh = np.float32(dthresh)
 
     if diff_offset is not None:
       self.diff_offset = diff_offset
+    diff_offset = self.diff_offset if np.isscalar(self.diff_offset) else self.diff_offset[0]
 
-    if searchradius is not None:
-      self.searchradius = searchradius
+    if saturation_protect is not None:
+      self.saturation_protect = saturation_protect
+    saturation_protect = self.saturation_protect if np.isscalar(self.saturation_protect) else self.saturation_protect[0]
 
-    lam = np.float32(self.lam)
-    dthresh = np.float32(self.dthresh)
-    sr = np.int64(self.searchradius)
-    diff_offset = np.float32(self.diff_offset)
+    if automask is not None:
+      self.automask = automask
+    automask = self.automask if np.isscalar(self.automask) else self.automask[0]
 
-    if type(diff_offset) is np.ndarray:
-      diff_offset = np.float32(diff_offset[0])
+    if stem_scale is not None:
+      self.stem_scale = stem_scale
+    stem_scale = self.stem_scale if np.isscalar(self.stem_scale) else self.stem_scale[0]
 
     if filename is not None:
       self.setfile(filepath=filename)
@@ -361,7 +359,7 @@ class NLPAR:
     mxchunk = np.int64(chunksize.max())
 
     if (automask is True) and (self.mask is None):
-      self.mask = (self.automask(pheight,pwidth))
+      self.mask = (self.makeautomask(pheight,pwidth))
     if self.mask is None:
       self.mask = np.ones((pheight,pwidth), dtype=np.uint8)
 
@@ -586,94 +584,138 @@ class NLPAR:
     numba.set_num_threads(nthreadpos)
     return str(patternfileout.filepath)
 
-  def calcsigma_cpu(self,chunksize=0,nn=1,saturation_protect=True,automask=True, stem_scale=False,  verbose = 2, **kwargs):
+  def setfile(self,filepath=None):
+    self.filepath = None
+    self.hdfdatapath = None
+    pathtemp = np.atleast_1d(filepath)
+    fpath = pathtemp[0]
+    hdf5path = None
+    if pathtemp.size > 1:
+      hdf5path = pathtemp[1]
+    if fpath is not None:
+      self.filepath = Path(fpath)
+      self.hdfdatapath = hdf5path
 
-    self.sigmann = nn
-    patternfile = self.getinfileobj()
+  def setoutfile(self, patternfile, filepath=None):
+    """Set the output file.
 
+    Parameters
+    ----------
+    patternfile
+      Input pattern file object from ebsd_pattern.
+    filepath
+      String.
 
-    nrows = np.int64(self.nrows)#np.uint64(patternfile.nRows)
-    ncols = np.int64(self.ncols)#np.uint64(patternfile.nCols)
+    Notes
+    -----
+    In the future I want to be able to specify the HDF5 data path to
+    store the output data, but that is proving to be a bit of a mess.
+    For now, a copy of the original HDF5 is made, and the NLPAR patterns
+    will be overwritten on top of the originals.
+    """
+    self.filepathout = None
+    self.hdfdatapathout = None
+    pathtemp = np.atleast_1d(filepath)
+    fpath = pathtemp[0]
+    hdf5path = None
+    #if pathtemp.size > 1:
+    #  hdf5path = pathtemp[1]
+    #print(fpath, hdf5path)
+    if fpath is not None: # the user has set an output file path.
+      self.filepathout = Path(fpath).expanduser().resolve()
+      self.hdfdatapathout =  hdf5path
+      if patternfile.filetype != 'HDF5': #check that the input and output are not the same.
+        pathok = self.filepathout.exists()
+        if pathok:
+          pathok = not self.filepathout.samefile(patternfile.filepath)
+          if not pathok:
+            raise ValueError('Error: File input and output are exactly the same.')
+            return
 
-    pwidth = np.uint64(patternfile.patternW)
-    pheight = np.uint64(patternfile.patternH)
-    phw = pheight*pwidth
+        patternfile.copy_file([self.filepathout,self.hdfdatapathout], empty_data=True)
+        return  # fpath and (maybe) hdf5 path were set manually.
+      else: # this is a hdf5 file
+        if self.hdfdatapathout is None:
+          patternfile.copy_file(self.filepathout, empty_data=True)
+          self.hdfdatapathout = patternfile.h5patdatpth
+          return
+        else:
+          patternfile.copy_file([self.filepathout, self.hdfdatapathout], empty_data=True)
+          return
 
-    nn = np.uint64(nn)
-    nnn = np.uint64((2*nn+1)**2)
-    if chunksize <= 0:
-        sysram = (psutil.virtual_memory()).total
-        chunksize = np.minimum(32e9, sysram // 4)
-    chunksize = np.int64(chunksize)
-    chunks = self._calcchunks([pwidth, pheight], ncols, nrows, target_bytes=chunksize,
-                              col_overlap=nn, row_overlap=nn)
+    if patternfile is not None: # the user has set no path.
+      hdf5path = None
+      
+      if patternfile.filetype in ['UP', 'EBSP', 'TFPAT']:
+        p = Path(patternfile.filepath)
+        appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
+        newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
+        emptydata = True
+        if patternfile.filetype in ['EBSP']:
+          if patternfile.version > 5:
+            emptydata = False
+        #print(emptydata)
+        patternfile.copy_file(newfilepath,empty_data=emptydata)
 
+      if patternfile.filetype == 'HDF5':
+        hdf5path_tmp = str(patternfile.h5patdatpth).split('/')
+        if hdf5path_tmp[0] == '':
+          hdf5path_org =  hdf5path_tmp[1]
+        else:
+          hdf5path_org = hdf5path_tmp[0]
+        p = Path(patternfile.filepath)
+        appnd = "_NLPAR_l{:1.2f}".format(self.lam) + "sr{:d}".format(self.searchradius)
+        hdf5path = hdf5path_org+appnd
+        newfilepath = str(p.parent / Path(p.stem + appnd + p.suffix))
+        #patternfile.copy_file([newfilepath, hdf5path_org], newh5path=hdf5path)
+        patternfile.copy_file([newfilepath], empty_data=True)
+        hdf5path = patternfile.h5patdatpth
 
+      self.filepathout = newfilepath
+      self.hdfdatapathout = hdf5path
+      return
 
-    if (automask is True) and (self.mask is None):
-      self.mask = (self.automask(pheight,pwidth))
-    if self.mask is None:
-      self.mask = np.ones((pheight,pwidth), dtype=np.uint8)
+  def getinfileobj(self):
+    if self.filepath is not None:
+      fID = ebsd_pattern.get_pattern_file_obj([self.filepath, self.hdfdatapath])
+      if (fID.nRows is not None):
+        if (self.nrows is None):
+          self.nrows = fID.nRows
+        else:
+          fID.nRows = self.nrows
 
-    indices = np.asarray( (self.mask.flatten().nonzero())[0], np.uint64)
+      if (fID.nCols is not None):
+        if (self.ncols is None):
+          self.ncols = fID.nCols
+        else:
+          fID.nCols = self.ncols
 
-    sigma = np.zeros((nrows, ncols), dtype=np.float32)+1e18
+      return fID
 
-    n2 = np.zeros((nrows, ncols, nnn), dtype=np.float32)
-    d2 = np.zeros((nrows, ncols, nnn), dtype=np.float32)
-
-    ndone = 0
-    nchunks = int(chunks[1] * chunks[0])
-
-    for rowchunk in range(chunks[1]):
-        rstart = chunks[3][rowchunk, 0]
-        rend = chunks[3][rowchunk, 1]
-        nrowchunk = rend - rstart
-
-        for colchunk in range(chunks[0]):
-            cstart = chunks[2][colchunk, 0]
-            cend = chunks[2][colchunk, 1]
-            ncolchunk = cend - cstart
-            data, xyloc = patternfile.read_data(patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
-                                                convertToFloat=True, returnArrayOnly=True)
-
-            if stem_scale is True:
-                #data = data - data.min() + 1
-                #data = np.log(data)
-                data = data - data.min()
-                data = np.sqrt(data)
-            shp = data.shape
-            data = data.reshape(data.shape[0], phw)
-
-
-
-            sigchunk, d2chunk, n2chunk = self.sigma_numba(data,nn, nrowchunk,ncolchunk,
-                                                       np.array([0,nrowchunk ], dtype=np.uint64),
-                                                                    np.array([0,ncolchunk],dtype=np.uint64),
-                                                                    indices,saturation_protect)
-
-            sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigchunk)
-            # temp = (d2 > thresh).choose(dthresh, d2)
-            n2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  0], [n2chunk], default=n2[rstart:rend, cstart:cend,:])
-            d2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  0], [d2chunk], default=d2[rstart:rend, cstart:cend,:])
-            #dij[rstart:rend, cstart:cend, :] = dijchunk
-            ndone += 1
-            if verbose >= 2:
-                print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
-
-    return sigma, d2, n2
-
-  def auto_nlpar(self, filename = None, fileout=None, searchradius=None, lindex = 1, **kwargs):
-    if filename is not None:
-      self.setfile(filename)
-    lam = self.opt_lambda( automask = True, autoupdate=True, backsub = False, **kwargs)
-    if 'lam' in kwargs:
-      pass
     else:
-      kwargs['lam'] = lam[int(lindex)]
-    nlparfile = self.calcnlpar(searchradius = searchradius, saturation_protect=True, automask=True,
-                                fileout=fileout, backsub=False, **kwargs)
-    return nlparfile
+      return None
+
+  def getoutfileobj(self):
+    if self.filepathout is not None:
+      fID = ebsd_pattern.get_pattern_file_obj([self.filepathout, self.hdfdatapathout])
+      if self.nrows is not None:
+        fID.nRows = self.nrows
+      else:
+        self.nrows = fID.nRows
+
+      if self.ncols is not None:
+        fID.nCols = self.ncols
+      else:
+        self.ncols = fID.nCols
+      return fID
+    else:
+      return None
+
+
+
+
+
+
   def backsub(self, data):
     # This function will fit a 2D gaussian on top of a plane to the averaged set of patterns (data) that is provided.
     # It will automatically use whatever mask is defined for valid data.
@@ -732,7 +774,7 @@ class NLPAR:
     return data
 
   @staticmethod
-  def automask( h,w ):
+  def makeautomask(h, w):
     r = (min(h,w)*0.98*0.5)
     x = np.arange(w, dtype=np.float32)
     x = np.minimum(x , (w-x))

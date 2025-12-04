@@ -43,8 +43,9 @@ class NLPAR(nlpar_cpu.NLPAR):
     self.useCPU = False
 
 
-  def opt_lambda(self, target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True,
-                 saturation_protect=True, automask=True, stem_scale = False, backsub=False, **kwargs):
+  def opt_lambda(self, target_weights=[0.5, 0.34, 0.25], dthresh=None, autoupdate=True,
+                 # see __init__ nlpar_cpu for default dthresh value
+                  **kwargs):
     return self.opt_lambda_cl(**kwargs)
 
   def calcnlpar(self, **kwargs):
@@ -80,12 +81,18 @@ class NLPAR(nlpar_cpu.NLPAR):
     return nlpar_cpu.NLPAR.calcsigma_cpu(self, nn=nn,
                                      saturation_protect=saturation_protect, automask=automask, **kwargs)
 
-  def opt_lambda_cl(self, saturation_protect=True, automask=True, backsub=False,
-                 target_weights=[0.5, 0.34, 0.25], dthresh=0.0, autoupdate=True,
-                 stem_scale = False,
+  def opt_lambda_cl(self, target_weights=[0.5, 0.34, 0.25], dthresh=None,
+                 autoupdate=True,
+                 # accepts all keywords that calcsigma accepts.
                  **kwargs):
 
     target_weights = np.asarray(target_weights)
+
+    if dthresh is not None:
+      self.dthresh = dthresh
+    dthresh = self.dthresh if np.isscalar(self.dthresh) else self.dthresh[0]
+    dthresh = np.float64(dthresh)
+
 
     def loptfunc(lam, d2, tw, dthresh):
       temp = np.maximum(d2, dthresh)#(d2 > dthresh).choose(dthresh, d2)
@@ -107,9 +114,7 @@ class NLPAR(nlpar_cpu.NLPAR):
     dthresh = np.float32(dthresh)
     lamopt_values = []
 
-    sigma, d2, n2 = self.calcsigma(nn=1, saturation_protect=saturation_protect, automask=automask,
-                                   stem_scale=stem_scale, normalize_d=True,
-                                   return_nndist=True, **kwargs)
+    sigma, d2, n2 = self.calcsigma(nn=1, normalize_d=True, return_nndist=True, **kwargs)
 
     #sigmapad = np.pad(sigma, 1, mode='reflect')
     #d2normcl(d2, n2, sigmapad)
@@ -134,8 +139,9 @@ class NLPAR(nlpar_cpu.NLPAR):
     return lamopt_values.flatten()
 
 
-  def calcsigma_cl(self,nn=1,saturation_protect=True,automask=True,
-                   stem_scale = False,
+  def calcsigma_cl(self,nn=1,
+                   saturation_protect=None,automask=None, stem_scale = None,
+                   # for defaults see __init__ in nlpar_cpu
                    normalize_d=True, gpu_id = None, verbose = 2, **kwargs):
     self.sigmann = nn
     if self.sigmann > 7:
@@ -143,6 +149,19 @@ class NLPAR(nlpar_cpu.NLPAR):
       print("The search radius has been clipped to 7")
       nn = 7
       self.sigmann = nn
+
+    if saturation_protect is not None:
+      self.saturation_protect = saturation_protect
+    saturation_protect = self.saturation_protect if np.isscalar(self.saturation_protect) else self.saturation_protect[0]
+
+    if automask is not None:
+      self.automask = automask
+    automask = self.automask if np.isscalar(self.automask) else self.automask[0]
+
+    if stem_scale is not None:
+      self.stem_scale = stem_scale
+    stem_scale = self.stem_scale if np.isscalar(self.stem_scale) else self.stem_scale[0]
+
 
     if gpu_id is None:
       clparams = openclparam.OpenClParam()
@@ -187,7 +206,7 @@ class NLPAR(nlpar_cpu.NLPAR):
                               col_overlap=1, row_overlap=1)
 
     if (automask is True) and (self.mask is None):
-      self.mask = (self.automask(pheight, pwidth))
+      self.mask = (self.makeautomask(pheight, pwidth))
     if self.mask is None:
       self.mask = np.ones((pheight, pwidth), dtype=np.uint8)
 
@@ -241,8 +260,11 @@ class NLPAR(nlpar_cpu.NLPAR):
         data, xyloc = patternfile.read_data(patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
                                           convertToFloat=False, returnArrayOnly=True)
         if stem_scale is True:
-          data = data - data.min() + 1
-          data = np.log(data)
+          #data = data - data.min() + 1
+          #data = np.log(data)
+          dmin = data.min()
+          data = data - dmin
+          data = np.sqrt(data).astype(np.float32)
 
 
         mxval = data.max()
@@ -258,7 +280,7 @@ class NLPAR(nlpar_cpu.NLPAR):
         tic = timer()
         #datapad = np.zeros((npad), dtype=np.float32) + np.float32(mxval + 10)
         #datapad[0:szdata] = data.reshape(-1)
-        data_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.COPY_HOST_PTR,hostbuf=data)
+        data_gpu = cl.Buffer(ctx,mf.READ_ONLY | mf.USE_HOST_PTR, hostbuf=data)
 
         if data.dtype.type is np.float32:
           clkern['nlloadpat32flt'](queue, (np.uint64(data.size),), None, data_gpu, datapad_gpu, wait_for=[evnt])
@@ -320,8 +342,8 @@ class NLPAR(nlpar_cpu.NLPAR):
 
 
 
-  def calcnlpar_cl(self, searchradius=None, lam = None, dthresh = None, saturation_protect=True, automask=True,
-                   filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,diff_offset= None,
+  def calcnlpar_cl(self, searchradius=None, lam = None, dthresh = None, saturation_protect=None, automask=None,
+                   filename=None, fileout=None, reset_sigma=False, stem_scale=None, rescale = False,diff_offset= None,
                    gpu_id = None, verbose=2,   **kwargs):
 
     class OpenCLClalcError(Exception):
@@ -329,15 +351,21 @@ class NLPAR(nlpar_cpu.NLPAR):
 
     if lam is not None:
       self.lam = lam
+    lam = self.lam if np.isscalar(self.lam) else self.lam[0]
+    lam = np.float32(lam)
 
     if dthresh is not None:
       self.dthresh = dthresh
 
     if self.dthresh is None:
       self.dthresh = 0.0
+    dthresh = self.dthresh if np.isscalar(self.dthresh) else self.dthresh[0]
+    dthresh = np.float32(dthresh)
 
     if diff_offset is not None:
       self.diff_offset = diff_offset
+    diff_offset = self.diff_offset if np.isscalar(self.diff_offset) else self.diff_offset[0]
+    diff_offset = np.float32(diff_offset)
 
     if searchradius is not None:
       self.searchradius = searchradius
@@ -347,11 +375,20 @@ class NLPAR(nlpar_cpu.NLPAR):
       print("The search radius has been clipped to 10")
       searchradius = 10
       self.searchradius = searchradius
+    sr = self.searchradius if np.isscalar(self.searchradius) else self.searchradius[0]
+    sr = np.int64(sr)
 
-    lam = np.float32(self.lam)
-    dthresh = np.float32(self.dthresh)
-    sr = np.int64(self.searchradius)
-    diff_offset = np.float32(self.diff_offset)
+    if saturation_protect is not None:
+      self.saturation_protect = saturation_protect
+    saturation_protect = self.saturation_protect if np.isscalar(self.saturation_protect) else self.saturation_protect[0]
+
+    if automask is not None:
+      self.automask = automask
+    automask = self.automask if np.isscalar(self.automask) else self.automask[0]
+
+    if stem_scale is not None:
+      self.stem_scale = stem_scale
+    stem_scale = self.stem_scale if np.isscalar(self.stem_scale) else self.stem_scale[0]
 
     if filename is not None:
       self.setfile(filepath=filename)
@@ -381,14 +418,15 @@ class NLPAR(nlpar_cpu.NLPAR):
         self.sigma = None
 
     if self.sigma is None:
-      self.sigma = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect, automask=automask, gpu_id=gpu_id)[0]
+      self.sigma = self.calcsigma_cl(nn=1, saturation_protect=saturation_protect,
+                                     automask=automask, stem_scale=stem_scale, gpu_id=gpu_id)[0]
 
     sigma = np.asarray(self.sigma).astype(np.float32)
 
 
 
     if (automask is True) and (self.mask is None):
-      self.mask = (self.automask(pheight, pwidth))
+      self.mask = (self.makeautomask(pheight, pwidth))
     if self.mask is None:
       self.mask = np.ones((pheight, pwidth), dtype=np.uint8)
 
@@ -537,7 +575,9 @@ class NLPAR(nlpar_cpu.NLPAR):
         if mnval0 < 0:
           data -= mnval0
           mxval = mxval - mnval0
-       
+
+        if stem_scale is True:
+          data = np.sqrt(data).astype(np.float32)
 
         if saturation_protect == False:
           mxval += 1.0
@@ -594,6 +634,9 @@ class NLPAR(nlpar_cpu.NLPAR):
           cl.enqueue_copy(queue, data, datapadout_gpu,  is_blocking=True)
           #print(envt.command_execution_status)
           queue.finish()
+
+
+
           data = data[rstartcalc: rstartcalc + nrowcalc,
                  cstartcalc:cstartcalc + ncolcalc, :, :]
           mxout = data.max(axis=(-1,-2))
@@ -603,6 +646,9 @@ class NLPAR(nlpar_cpu.NLPAR):
           # nothing.  It will attempt to reprocess the data 3 times before just writing out
           # whatever it has.
           if (mxval0 < np.float32(1.e-8)) or ( mxtest < 0.5 ) or (j["nattempts"] >= 3):
+            if stem_scale is True:
+              data = data ** 2
+
             if mnval0 < 0:
               data += mnval0
 
