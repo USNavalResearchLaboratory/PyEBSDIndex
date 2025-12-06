@@ -1621,17 +1621,6 @@ class BandIndexer():
               fit += np.float32(fitb[whGood[q]])
             fit /= np.float32(nGood)
 
-          if nGood >= (n_band_early):  # we matched A LOT of bands.  Assume we can exit.
-            fitout_p = np.float32(fit)
-            fitbout_p[...] = fitb
-            nMatch_p = np.int64(nGood)
-            whGood_out_p[0:nGood] = whGood[:]
-            polematch_out_p[...] = polematch[:]
-            polevalid_out_p[...] = polevalid[:]
-            Rout_p[:, :] = R[0, :, :]
-            ij_p[:] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
-            break
-          else:
             if nMatch_p < nGood:
               fitout_p = np.float32(fit)
               fitbout_p[...] = fitb
@@ -1654,6 +1643,8 @@ class BandIndexer():
                 Rout_p[:, :] = R[0, :, :]
                 ij_p[:] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
 
+          if nMatch_p >= (n_band_early):
+            break
         if nMatch_p >= (n_band_early):
           break
       fitout[p] = fitout_p
