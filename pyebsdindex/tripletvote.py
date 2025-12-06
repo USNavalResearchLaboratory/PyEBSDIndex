@@ -554,7 +554,7 @@ class BandIndexer():
 
     # this will check the vote, and return the exact band matching to specific poles of the best fitting solution.
     fit, polematch, polevalid, nMatch, whGood, ij, R, fitb = \
-      self._assign_bands_nb(libPolesCart, libAngTable, libFamIndx, nFam, angTol, n_band_early, bandnorms, bandRank_arg, bandFam)
+      self._assign_bands_nb2(libPolesCart, libAngTable, libFamIndx, nFam, angTol, n_band_early, bandnorms, bandRank_arg, bandFam)
 
     # check how often the indexed band matched the top voting band family.
     acc_correct =  np.sum(np.array((polevalid > 0) & #take valid poles
@@ -1243,7 +1243,7 @@ class BandIndexer():
     return accumulatorW, bandFam, bandRank, band_cm, accumulator
 
   @staticmethod
-  @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
+  @numba.jit(nopython=True, cache=True, fastmath=True,parallel=True)
   def _assign_bands_nb(libPolesCart, libAngTable, libFamIndx, nFam, angTol, n_band_early, bandnorms, bandRank_arg, bandFam ):
 
     eps = np.float32(1.0e-12)
@@ -1264,26 +1264,46 @@ class BandIndexer():
     nMatch = np.zeros(npats, dtype=np.int64) #np.int64(0)
     ij = np.full((npats, 4), -1, np.int64)
 
-    for p in range(npats):
+    for p in numba.prange(npats):
+      bandnorms_p = bandnorms[p,...]
       bndnorm = np.transpose(np.asarray(bandnorms[p,...], dtype=np.float32))
-      R = np.zeros((1, 3, 3), dtype=np.float32)
-      fit = np.float32(360.0)
+
+      bandRank_arg_p = bandRank_arg[p,...]
+      bandFam_p = bandFam[p,...]
+
+      fitout_p = np.float32(360.0)
+      fitbout_p = np.full((nBnds), 360.0, dtype=np.float32)
+      nMatch_p = np.int64(0)  # np.int64(0)
+      whGood_out_p = np.zeros((nBnds), dtype=np.int64)-1
+      polematch_out_p = np.full((nBnds),-1000, dtype=np.int64)
+      polevalid_out_p = np.full((nBnds),0, dtype=np.uint8)
+      Rout_p = np.zeros((3, 3), dtype=np.float32)
+      ij_p = np.full((4), -1, np.int64)
+
+      pflt = np.asarray(libPolesCart, dtype=np.float32)
+      nFam_p = nFam
+
+      libAngTable_p = libAngTable.copy()
+      libFamIndx_p = libFamIndx.copy()
+
       #fit = np.float32(360.0)
       #whGood = np.zeros(nBnds, dtype=np.int64) - 1
 
       for ii in range(nBnds-1):
         for jj in range(ii+1,nBnds):
+          R = np.zeros((1, 3, 3), dtype=np.float32)
+          fit = np.float32(360.0)
           #print(ii,jj)
           polematch = np.full((nBnds),-1, dtype=np.int64)
           polevalid = np.zeros((nBnds), dtype=np.uint8)
 
-          bnd1 = bandRank_arg[p, -1 - ii]
-          bnd2 = bandRank_arg[p, -1 - jj]
+          bnd1 = bandRank_arg_p[ -1 - ii]
+          bnd2 = bandRank_arg_p[ -1 - jj]
 
-          v1 = bandnorms[p, bnd1,:]
-          f1 = bandFam[p, bnd1]
-          v2 = bandnorms[p, bnd2,:]
-          f2 = bandFam[p, bnd2]
+          v1 = bandnorms_p[bnd1,:]
+          f1 = bandFam_p[ bnd1]
+          v2 = bandnorms_p[ bnd2,:]
+          f2 = bandFam_p[bnd2]
           ang01 = (np.dot(v1,v2))
           #if ang01 < 0:
           #  v2 *= -1
@@ -1299,14 +1319,14 @@ class BandIndexer():
           if paralleltest < angTol:  # the two poles are parallel, send in another two poles if available.
             continue
           ang01 = np.arccos(ang01) * RADEG
-          wh12 = np.nonzero(np.abs(libAngTable[libFamIndx[f1],libFamIndx[f2]:np.int64(libFamIndx[f2] + nFam[f2])] - ang01) < angTol)[0]
+          wh12 = np.nonzero(np.abs(libAngTable_p[libFamIndx_p[f1],libFamIndx_p[f2]:np.int64(libFamIndx_p[f2] + nFam_p[f2])] - ang01) < angTol)[0]
 
           n12 = wh12.size
           if n12 == 0:
             continue
 
-          wh12 += libFamIndx[f2]
-          p1 = pflt[libFamIndx[f1], :]
+          wh12 += libFamIndx_p[f2]
+          p1 = pflt[libFamIndx_p[f1], :]
 
           n12 = wh12.size
           v1v2c = np.cross(v1,v2)
@@ -1371,72 +1391,285 @@ class BandIndexer():
           whGood = (np.nonzero(angFit < angTol)[0]).astype(np.int64)
           nGood = max(np.int64(whGood.size), np.int64(0))
 
-          if nGood < 3:
+          if nGood < 3: # less than three poles matched the library.  Move on.
             continue
-            #return 360.0,-1,-1,-1
-            #whGood = -1*np.ones((1), dtype=np.int64)
-            #fit = np.float32(360.0)
-            #polematch[:] = -1
-            #nGood = np.int64(-1)
-          else:
+          else: # calculate the matching metrics.
             fitb = angFit
             #fit = np.mean(fitb[whGood])
             fit = np.float32(0.0)
-            for q in range(nGood):
+            for q in range(nGood): # numba did not like the np.mean function here.
               fit += np.float32(fitb[whGood[q]])
             fit /= np.float32(nGood)
 
-
-          if nGood >= (n_band_early):
-            testout = testp
-            fitout[p] = np.float32(fit)
-            fitbout[p,...] = fitb
-            nMatch[p] = nGood
-            whGood_out[p,0:nGood] = whGood[:]
-            polematch_out[p,...] = polematch[:]
-            polevalid_out[p, ...] = polevalid[:]
-            Rout[p,:,:] = R[0,:,:]
-            ij[p,:]  = np.asarray((ii,jj,bnd1,bnd2), dtype=np.int64)
+          if nGood >= (n_band_early): # we matched A LOT of bands.  Assume we can exit.
+            fitout_p = np.float32(fit)
+            fitbout_p[...] = fitb
+            nMatch_p = np.int64(nGood)
+            whGood_out_p[0:nGood] = whGood[:]
+            polematch_out_p[...] = polematch[:]
+            polevalid_out_p[ ...] = polevalid[:]
+            Rout_p[:,:] = R[0,:,:]
+            ij_p[:]  = np.asarray((ii,jj,bnd1,bnd2), dtype=np.int64)
             break
           else:
-            if nMatch[p] < nGood:
-            #print((nMatch*(3.0-fitout)) , (nGood*(3.0-fit)))
-            #if (nMatch*(2.0-fitout)) < (nGood*(2.0-fit)):
-              testout = testp
-              fitout[p] = np.float32(fit)
-              fitbout[p, ...] = fitb
-              nMatch[p] = nGood
-              whGood_out[p, 0:nGood] = whGood[:]
-              polematch_out[p, ...] = polematch[:]
-              polevalid_out[p, ...] = polevalid[:]
-              Rout[p, :, :] = R[0, :, :]
-              ij[p, :] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
+            if nMatch_p < nGood:
+              fitout_p = np.float32(fit)
+              fitbout_p[...] = fitb
+              nMatch_p = np.int64(nGood)
+              whGood_out_p[0:nGood] = whGood[:]
+              polematch_out_p[...] = polematch[:]
+              polevalid_out_p[...] = polevalid[:]
+              Rout_p[:, :] = R[0, :, :]
+              ij_p[ :] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
 
-            elif nMatch[p] == nGood:
-            #elif (nMatch*(2.0-fitout)) == (nGood*(2.0-fit)):
-              if fitout[p] > fit:
-                testout = testp
-                fitout[p] = np.float32(fit)
-                fitbout[p, ...] = fitb
-                nMatch[p] = nGood
-                whGood_out[p, 0:nGood] = whGood[:]
-                polematch_out[p, ...] = polematch[:]
-                polevalid_out[p, ...] = polevalid[:]
-                Rout[p, :, :] = R[0, :, :]
-                ij[p, :] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
+            elif nMatch_p == nGood:
+              if fitout_p > fit:
+                #testout = testp
+                fitout_p = np.float32(fit)
+                fitbout_p[...] = fitb
+                nMatch_p = np.int64(nGood)
+                whGood_out_p[0:nGood] = whGood[:]
+                polematch_out_p[...] = polematch[:]
+                polevalid_out_p[...] = polevalid[:]
+                Rout_p[:, :] = R[0, :, :]
+                ij_p[:] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
 
-        #print('----')
-        #print(ij)
-
-        #print(testout.T)
-        #print(pflt[polematch_out, :])
-        if nMatch[p] >= (n_band_early):
+        if nMatch_p >= (n_band_early):
           break
+      fitout[p] = fitout_p
+      fitbout[p,...] = fitbout_p
+      nMatch[p] = nMatch_p
+      whGood_out[p,...] = whGood_out_p
+      polematch_out[p,...] = polematch_out_p
+      polevalid_out[p, ...]  = polevalid_out_p
+      Rout[p, ...]  = Rout_p
+      ij[p,...] = ij_p
 
-    #print(testout.T)
-    #print(pflt[polematch_out,:])
-    #print(dave)
+
     return fitout, polematch_out,polevalid_out, nMatch, whGood_out, ij, Rout, fitbout
+
+
+
+
+  @staticmethod
+  @numba.jit(nopython=True, cache=True, fastmath=True, parallel=True)
+  def _assign_bands_nb2(libPolesCart, libAngTable, libFamIndx, nFam, angTol, n_band_early, bandnorms, bandRank_arg,
+                        bandFam):
+
+
+    def __assign_triadfit(ii, jj, nBnds, bandnorms_p, bandRank_arg_p, bandFam_p,
+                          pflt, libAngTable_p, libFamIndx_p, nFam_p, angTol, bndnorm):
+
+      eps = np.float32(1.0e-12)
+
+      R = np.zeros((1, 3, 3), dtype=np.float32)
+      fit = np.float32(360.0)
+      angFit = np.zeros(nBnds, dtype=np.float32)
+      whGood = np.zeros(nBnds, dtype=np.int64)
+      nGood = np.int64(0)
+      # print(ii,jj)
+      polematch = np.full(nBnds, -1, dtype=np.int64)
+      polevalid = np.zeros(nBnds, dtype=np.uint8)
+
+      bnd1 = bandRank_arg_p[-1 - ii]
+      bnd2 = bandRank_arg_p[-1 - jj]
+
+      v1 = bandnorms_p[bnd1, :]
+      f1 = bandFam_p[bnd1]
+      v2 = bandnorms_p[bnd2, :]
+      f2 = bandFam_p[bnd2]
+      ang01 = (np.dot(v1, v2))
+      # if ang01 < 0:
+      #  v2 *= -1
+      #  ang01 *= -1
+
+      if ang01 > np.float32(1.0):
+        ang01 = np.float32(1.0 - eps)
+      if ang01 < np.float32(-1.0):
+        ang01 = np.float32(-1.0 + eps)
+
+      paralleltest = np.arccos(np.fabs(ang01)) * RADEG
+
+      if paralleltest > angTol:  # if not the two poles are parallel, send in another two poles if available.
+        ang01 = np.arccos(ang01) * RADEG
+        wh12 = np.nonzero(np.abs(
+          libAngTable_p[libFamIndx_p[f1], libFamIndx_p[f2]:np.int64(libFamIndx_p[f2] + nFam_p[f2])] - ang01) < angTol)[0]
+
+        n12 = wh12.size
+        if n12 > 0:
+          wh12 += libFamIndx_p[f2]
+          p1 = pflt[libFamIndx_p[f1], :]
+
+          n12 = wh12.size
+          v1v2c = np.cross(v1, v2)
+          v1v2c /= np.linalg.norm(v1v2c)
+          # attempt to see which solution gives the best match to all the poles
+          # best is measured as the number of poles that are within tolerance,
+          # divided by the angular deviation.
+          # Use the TRIAD method for finding the rotation matrix
+
+          Rtry = np.zeros((n12, 3, 3), dtype=np.float32)
+
+          # score = np.zeros((n01), dtype = np.float32)
+          A = np.zeros((3, 3), dtype=np.float32)
+          B = np.zeros((3, 3), dtype=np.float32)
+          # AB = np.zeros((3,3),dtype=np.float32)
+          b2 = np.cross(v1, v1v2c)
+          B[0, :] = v1
+          B[1, :] = v1v2c
+          B[2, :] = b2
+          A[:, 0] = p1
+          score = -1.0
+
+          for i in range(n12):
+            p2 = pflt[wh12[i], :]
+            ntemp = np.linalg.norm(p2) + 1.0e-35
+            p2 = p2 / ntemp
+            p1p2c = np.cross(p1, p2)
+            ntemp = np.linalg.norm(p1p2c) + 1.0e-35
+            p1p2c = p1p2c / ntemp
+            A[:, 1] = p1p2c
+            A[:, 2] = np.cross(p1, p1p2c)
+            AB = (A.dot(B))
+            Rtry[i, :, :] = AB
+
+            testp = (AB.dot(bndnorm))
+            test = (pflt.dot(testp))
+            # print(test.shape)
+            angfitTry = np.zeros((nBnds), dtype=np.float32)
+            # angfitTry = np.max(test,axis=0)
+            # print(test.shape)
+            for j in range(nBnds):
+              angfitTry[j] = np.max(test[:, j])
+              angfitTry[j] = -1.0 if angfitTry[j] < -1.0 else angfitTry[j]
+              angfitTry[j] = 1.0 if angfitTry[j] > 1.0 else angfitTry[j]
+
+            # angfitTry = np.clip(np.amax(test,axis=0),-1.0,1.0)
+
+            angfitTry = np.arccos(angfitTry) * RADEG
+            whMatch = np.nonzero(angfitTry < angTol)[0]
+            nmatch = whMatch.size
+            # scoreTry = np.float32(nmatch) * np.mean(np.abs(angTol - angfitTry[whMatch]))
+            scoreTry = np.float32(nmatch) / (np.mean(angfitTry[whMatch]) + 1e-6)
+            if scoreTry > score:
+              score = scoreTry
+              angFit[:] = angfitTry
+              for j in range(nBnds):
+                polematch[j] = np.argmax(test[:, j])
+                polevalid[j] = np.uint8(angfitTry[j] < angTol)
+              R[0, :, :] = Rtry[i, :, :]
+
+          whGood = (np.nonzero(angFit < angTol)[0]).astype(np.int64)
+          nGood = max(np.int64(whGood.size), np.int64(0))
+
+      return whGood, nGood, angFit, polematch, polevalid, R, bnd1, bnd2
+
+    eps = np.float32(1.0e-12)
+    pflt = np.asarray(libPolesCart, dtype=np.float32)
+
+    npats = bandnorms.shape[0]
+    nBnds = bandnorms.shape[1]
+
+    whGood_out = np.zeros((npats, nBnds), dtype=np.int64) - 1
+    Rout = np.zeros((npats, 3, 3), dtype=np.float32)
+    Rout[:, 0, 0] = 1.0;
+    Rout[:, 1, 1] = 1.0;
+    Rout[:, 2, 2] = 1.0;
+    polematch_out = np.full((npats, nBnds), -1000, dtype=np.int64)
+    polevalid_out = np.full((npats, nBnds), 0, dtype=np.uint8)
+
+    fitout = np.full(npats, 360.0, dtype=np.float32)
+    fitbout = np.full((npats, nBnds), 360.0, dtype=np.float32)
+    nMatch = np.zeros(npats, dtype=np.int64)  # np.int64(0)
+    ij = np.full((npats, 4), -1, np.int64)
+
+    for p in numba.prange(npats):
+      bandnorms_p = bandnorms[p, ...]
+      bndnorm = np.transpose(np.asarray(bandnorms[p, ...], dtype=np.float32))
+
+      bandRank_arg_p = bandRank_arg[p, ...]
+      bandFam_p = bandFam[p, ...]
+
+      fitout_p = np.float32(360.0)
+      fitbout_p = np.full((nBnds), 360.0, dtype=np.float32)
+      nMatch_p = np.int64(0)  # np.int64(0)
+      whGood_out_p = np.zeros((nBnds), dtype=np.int64) - 1
+      polematch_out_p = np.full((nBnds), -1000, dtype=np.int64)
+      polevalid_out_p = np.full((nBnds), 0, dtype=np.uint8)
+      Rout_p = np.zeros((3, 3), dtype=np.float32)
+      ij_p = np.full((4), -1, np.int64)
+
+      pflt = np.asarray(libPolesCart, dtype=np.float32)
+      nFam_p = nFam
+
+      libAngTable_p = libAngTable.copy()
+      libFamIndx_p = libFamIndx.copy()
+
+      # fit = np.float32(360.0)
+      # whGood = np.zeros(nBnds, dtype=np.int64) - 1
+
+      for ii in range(nBnds - 1):
+        for jj in range(ii + 1, nBnds):
+          whGood, nGood, angFit, polematch, polevalid, R, bnd1, bnd2 = __assign_triadfit(ii, jj, nBnds,
+                                                                      bandnorms_p, bandRank_arg_p, bandFam_p,
+                                                                      pflt, libAngTable_p, libFamIndx_p, nFam_p, angTol, bndnorm)
+
+          if nGood < 3:  # less than three poles matched the library.  Move on.
+            continue
+          else:  # calculate the matching metrics.
+            fitb = angFit
+            # fit = np.mean(fitb[whGood])
+            fit = np.float32(0.0)
+            for q in range(nGood):  # numba did not like the np.mean function here.
+              fit += np.float32(fitb[whGood[q]])
+            fit /= np.float32(nGood)
+
+          if nGood >= (n_band_early):  # we matched A LOT of bands.  Assume we can exit.
+            fitout_p = np.float32(fit)
+            fitbout_p[...] = fitb
+            nMatch_p = np.int64(nGood)
+            whGood_out_p[0:nGood] = whGood[:]
+            polematch_out_p[...] = polematch[:]
+            polevalid_out_p[...] = polevalid[:]
+            Rout_p[:, :] = R[0, :, :]
+            ij_p[:] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
+            break
+          else:
+            if nMatch_p < nGood:
+              fitout_p = np.float32(fit)
+              fitbout_p[...] = fitb
+              nMatch_p = np.int64(nGood)
+              whGood_out_p[0:nGood] = whGood[:]
+              polematch_out_p[...] = polematch[:]
+              polevalid_out_p[...] = polevalid[:]
+              Rout_p[:, :] = R[0, :, :]
+              ij_p[:] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
+
+            elif nMatch_p == nGood:
+              if fitout_p > fit:
+                # testout = testp
+                fitout_p = np.float32(fit)
+                fitbout_p[...] = fitb
+                nMatch_p = np.int64(nGood)
+                whGood_out_p[0:nGood] = whGood[:]
+                polematch_out_p[...] = polematch[:]
+                polevalid_out_p[...] = polevalid[:]
+                Rout_p[:, :] = R[0, :, :]
+                ij_p[:] = np.asarray((ii, jj, bnd1, bnd2), dtype=np.int64)
+
+        if nMatch_p >= (n_band_early):
+          break
+      fitout[p] = fitout_p
+      fitbout[p, ...] = fitbout_p
+      nMatch[p] = nMatch_p
+      whGood_out[p, ...] = whGood_out_p
+      polematch_out[p, ...] = polematch_out_p
+      polevalid_out[p, ...] = polevalid_out_p
+      Rout[p, ...] = Rout_p
+      ij[p, ...] = ij_p
+
+    return fitout, polematch_out, polevalid_out, nMatch, whGood_out, ij, Rout, fitbout
+
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True,parallel=False)
