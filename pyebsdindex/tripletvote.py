@@ -1583,6 +1583,12 @@ class BandIndexer():
     nMatch = np.zeros(npats, dtype=np.int64)  # np.int64(0)
     ij = np.full((npats, 4), -1, np.int64)
 
+    pflt = np.asarray(libPolesCart, dtype=np.float32)
+    nFam_p = nFam
+
+    libAngTable_p = libAngTable.copy()
+    libFamIndx_p = libFamIndx.copy()
+
     for p in numba.prange(npats):
       bandnorms_p = bandnorms[p, ...]
       bndnorm = np.transpose(np.asarray(bandnorms[p, ...], dtype=np.float32))
@@ -1598,15 +1604,6 @@ class BandIndexer():
       polevalid_out_p = np.full((nBnds), 0, dtype=np.uint8)
       Rout_p = np.zeros((3, 3), dtype=np.float32)
       ij_p = np.full((4), -1, np.int64)
-
-      pflt = np.asarray(libPolesCart, dtype=np.float32)
-      nFam_p = nFam
-
-      libAngTable_p = libAngTable.copy()
-      libFamIndx_p = libFamIndx.copy()
-
-      # fit = np.float32(360.0)
-      # whGood = np.zeros(nBnds, dtype=np.int64) - 1
 
       for ii in range(nBnds - 1):
         for jj in range(ii + 1, nBnds):
