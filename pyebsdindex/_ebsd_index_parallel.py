@@ -820,7 +820,7 @@ def __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam):
 
     # finally - I am unsure how to check for integrated graphics that report system memory, so I am going
     # throw an arbitrary cap on this:
-    chunk = min(2032, chunk)
+    chunk = min(2032*2, chunk)
 
     return chunk
 
