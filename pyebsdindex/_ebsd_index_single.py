@@ -349,15 +349,16 @@ class EBSDIndexer:
             else:
                 self.fID = None
 
-        self.phaselist = phaselist
-        self.phaseLib = []
-        for ph in self.phaselist:
-            if ph is None:
-                self.phaseLib.append(None)
-            if isinstance(ph, str):
-                self.phaseLib.append(bandindexer.addphase(libtype=ph))
-            if isinstance(ph, BandIndexer):
-                self.phaseLib.append(ph)
+        self.addphaselist(phaselist)
+        # self.phaselist = phaselist
+        # self.phaseLib = []
+        # for ph in self.phaselist:
+        #     if ph is None:
+        #         self.phaseLib.append(None)
+        #     if isinstance(ph, str):
+        #         self.phaseLib.append(bandindexer.addphase(libtype=ph))
+        #     if isinstance(ph, BandIndexer):
+        #         self.phaseLib.append(ph)
 
         self.vendor = "EDAX"
         if vendor is None:
@@ -561,6 +562,18 @@ class EBSDIndexer:
             print("Band Vote Time: ", timer() - tic)
 
         return indxData, banddata, patstart, npats
+
+    def addphaselist(self, phaselist=[None]):
+
+        self.phaselist = phaselist
+        self.phaseLib = []
+        for ph in self.phaselist:
+            if ph is None:
+                self.phaseLib.append(None)
+            if isinstance(ph, str):
+                self.phaseLib.append(bandindexer.addphase(libtype=ph))
+            if isinstance(ph, BandIndexer):
+                self.phaseLib.append(ph)
 
     def getmatchedpole(self, ebsddata, banddata, phasenumber = -1, float_out=False):
         """Return the pole from the library that was matched to the

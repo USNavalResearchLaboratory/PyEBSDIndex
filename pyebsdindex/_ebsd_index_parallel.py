@@ -313,7 +313,8 @@ def index_pats_distributed(
         ngpu = 0
 
     if ncpu == 0:
-        ncpu = max(1,os.cpu_count()//2)
+        ncpu = 1
+        #ncpu = max(1,os.cpu_count()//2)
     if ncpu <= 0:
         if ngpu > 0:
             ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*16)))
@@ -330,13 +331,12 @@ def index_pats_distributed(
         if (platform.machine(), platform.system()) == ('x86_64', 'Darwin'):
             gpuratio = (6, ngpu*6)
         ngpupro = min(max(gpuratio), 12)  # number of processes that will serve data to the gpu
-        #ngpupro = 8
-        if n_cpu_nodes < 8:
-            ngpupro = min(ngpupro, n_cpu_nodes)
-        if n_cpu_nodes < 2:
-            ngpupro = 2
-        #if OSPLATFORM == 'Linux':
-        #    ngpupro = 2
+
+        # if n_cpu_nodes < 8:
+        #     ngpupro = min(ngpupro, n_cpu_nodes)
+        # if n_cpu_nodes < 2:
+        #     ngpupro = 2
+
 
         n_cpu_per_gpu = max(min(1.0, n_cpu_nodes-ngpu), 0.5/ngpu)
 
@@ -374,7 +374,8 @@ def index_pats_distributed(
     os.environ["CUDA_VISIBLE_DEVICES"] = cudagpuvis
     
     rayclust = ray.init(
-        num_cpus=int(np.round(n_cpu_nodes)),
+        #num_cpus=int(np.round(n_cpu_nodes)),
+        num_cpus=int(np.round(os.cpu_count())),
         num_gpus=ngpu,
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars":
