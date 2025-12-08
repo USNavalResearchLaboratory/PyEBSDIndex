@@ -313,11 +313,12 @@ def index_pats_distributed(
         ngpu = 0
 
     if ncpu == 0:
-        ncpu = 1
+        ncpu = 2
         #ncpu = max(1,os.cpu_count()//2)
     if ncpu <= 0:
         if ngpu > 0:
-            ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*16)))
+            ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*2)))
+            #ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*16)))
             # this is a heuristic, and may be highly dependent on hardware
         else:
             ncpu = max(1,os.cpu_count()//4)
@@ -372,6 +373,7 @@ def index_pats_distributed(
     # workers do not know where to find the PyEBSDIndex module.
     cudagpuvis0 = os.getenv("CUDA_VISIBLE_DEVICES")
     os.environ["CUDA_VISIBLE_DEVICES"] = cudagpuvis
+    os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] ='0'
     
     rayclust = ray.init(
         #num_cpus=int(np.round(n_cpu_nodes)),
@@ -381,6 +383,7 @@ def index_pats_distributed(
         runtime_env={"env_vars":
                       {"PYTHONPATH": os.path.dirname(os.path.dirname(__file__)),
                        "CUDA_VISIBLE_DEVICES": cudagpuvis,
+                       "RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO":'0'
                       }},
         logging_level=logging.WARNING, log_to_driver=False,
     )  # Supress INFO messages from ray.
