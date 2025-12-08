@@ -1000,39 +1000,10 @@ class BandIndexer():
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=True)
   def _tripvote_numba(bandnorms, band_intensity, LUT, angTol, tripAngles, tripID, nfam):
-    timing1 = 0.0
-    timing2 = 0.0
-    npats = bandnorms.shape[0]
-    n_bands = bandnorms.shape[1]
-    LUTTemp = np.asarray(LUT).copy()
 
-    tshape = np.shape(tripAngles)
-    ntrip = int(tshape[0])
-
-    accumulator = np.zeros((npats, nfam, n_bands), dtype=np.float32)
-    accumulatorW = np.zeros((npats, nfam, n_bands), dtype=np.float32)
-
-    band_cm = np.zeros((npats, n_bands), dtype=np.float32)
-    bandRank = np.zeros((npats, n_bands), dtype=np.float32)
-    bandFam = np.zeros((npats, n_bands), dtype=np.int32)
-
-    for p in numba.prange(npats):
+    def __trivoteloops(bandangs, LUTTemp, tripAngles, ntrip, n_bands, nfam):
       accumulator_p = np.zeros((nfam, n_bands), dtype=np.float32)
       accumulatorW_p = np.zeros((nfam, n_bands), dtype=np.float32)
-
-      mxvote = np.zeros((n_bands), dtype=np.int32)
-      tvotes = np.zeros((n_bands), dtype=np.int32)
-      bandFam_p = np.zeros((n_bands), dtype=np.int32)
-      band_cm_p = np.zeros((n_bands), dtype=np.float32)
-
-      bandangs = np.abs(bandnorms[p, ...].dot(bandnorms[p, ...].T))
-      bandangs = np.clip(bandangs, -1.0, 1.0)
-      bandangs = np.arccos(bandangs) * RADEG
-      for q in range(n_bands):
-        if band_intensity[p, q] < 1e-6:  # invalid band
-          bandangs[q, :] = 10000.0
-          bandangs[:, q] = 10000.0
-
       angTest0 = np.zeros((3), dtype=np.float32)
       for i in range(n_bands):
         for j in range(i + 1, n_bands):
@@ -1142,6 +1113,14 @@ class BandIndexer():
                 accumulator_p[f[1], k] += 1
                 accumulator_p[f[2], i] += 1
 
+      return accumulator_p, accumulatorW_p
+
+    def __trivotemetriccalc(accumulator_p, accumulatorW_p, n_bands):
+      mxvote = np.zeros((n_bands), dtype=np.int32)
+      tvotes = np.zeros((n_bands), dtype=np.int32)
+      bandFam_p = np.zeros((n_bands), dtype=np.int32)
+      band_cm_p = np.zeros((n_bands), dtype=np.float32)
+
       for qqq in range(n_bands):
         accumW_col = accumulatorW_p[:, qqq].flatten()
         # numba does not like max function here when in parallel=True.  No idea why
@@ -1170,6 +1149,172 @@ class BandIndexer():
             mxval = accumW_col[qq]
             bandFam_p[qqq] = qq
 
+      return mxvote,tvotes, band_cm_p, bandFam_p
+    
+    npats = bandnorms.shape[0]
+    n_bands = bandnorms.shape[1]
+
+
+    tshape = np.shape(tripAngles)
+    ntrip = int(tshape[0])
+
+    accumulator = np.zeros((npats, nfam, n_bands), dtype=np.float32)
+    accumulatorW = np.zeros((npats, nfam, n_bands), dtype=np.float32)
+
+    band_cm = np.zeros((npats, n_bands), dtype=np.float32)
+    bandRank = np.zeros((npats, n_bands), dtype=np.float32)
+    bandFam = np.zeros((npats, n_bands), dtype=np.int32)
+
+    for p in numba.prange(npats):
+      LUTTemp = np.asarray(LUT).copy()
+      tripAnglestemp = tripAngles.copy()
+
+      bandangs = np.abs(bandnorms[p, ...].dot(bandnorms[p, ...].T))
+      bandangs = np.clip(bandangs, -1.0, 1.0)
+      bandangs = np.arccos(bandangs) * RADEG
+      for q in range(n_bands):
+        if band_intensity[p, q] < 1e-6:  # invalid band
+          bandangs[q, :] = 10000.0
+          bandangs[:, q] = 10000.0
+      accumulator_p, accumulatorW_p = __trivoteloops(bandangs,LUTTemp, tripAnglestemp, ntrip, n_bands, nfam)
+      # angTest0 = np.zeros((3), dtype=np.float32)
+      # for i in range(n_bands):
+      #   for j in range(i + 1, n_bands):
+      #     for k in range(j + 1, n_bands):
+      #       # tic = ntime()
+      #       angtri = np.array([bandangs[i, j], bandangs[i, k], bandangs[j, k]], dtype=np.float32)
+      #       # srt = np.array(np.argsort(angtri), dtype=numba.int64)
+      #       # I am doing the above, but is MUCH faster for just the three numbers to hard code
+      #       srt = np.array([0, 1, 2], dtype=np.uint64)
+      #       if angtri[srt[0]] > angtri[srt[2]]:
+      #         srt[2], srt[0] = srt[0], srt[2]
+      #       if angtri[srt[0]] > angtri[srt[1]]:
+      #         srt[1], srt[0] = srt[0], srt[1]
+      #       if angtri[srt[1]] > angtri[srt[2]]:
+      #         srt[2], srt[1] = srt[1], srt[2]
+      #       ##### end hard code argsrt ######
+      #
+      #       srt2 = np.asarray(LUTTemp[:, srt[0], srt[1], srt[2]], dtype=np.int64).copy()
+      #       # unsrtFID = np.argsort(srt2,kind='quicksort').astype(np.int64)
+      #       # again, hard coding in the above for speed.
+      #       unsrtFID = np.array([0, 1, 2], dtype=np.uint64)
+      #       if srt2[unsrtFID[0]] > srt2[unsrtFID[2]]:
+      #         unsrtFID[2], unsrtFID[0] = unsrtFID[0], unsrtFID[2]
+      #       if srt2[unsrtFID[0]] > srt2[unsrtFID[1]]:
+      #         unsrtFID[1], unsrtFID[0] = unsrtFID[0], unsrtFID[1]
+      #       if srt2[unsrtFID[1]] > srt2[unsrtFID[2]]:
+      #         unsrtFID[2], unsrtFID[1] = unsrtFID[1], unsrtFID[2]
+      #       ##### end hard code argsrt ######
+      #       angtriSRT = np.asarray(angtri[srt], dtype=np.float32)
+      #
+      #       for qq in range(ntrip):
+      #         # print('____')
+      #         # print(tripAngles[q,:], angtriSRT)
+      #
+      #         test1 = np.abs(tripAngles[qq, 0] - angtriSRT[0])
+      #         if test1 > angTol:
+      #           continue
+      #         else:
+      #           angTest0[0] = test1
+      #
+      #         test2 = np.abs(tripAngles[qq, 1] - angtriSRT[1])
+      #         if test2 > angTol:
+      #           continue
+      #         else:
+      #           angTest0[1] = test2
+      #
+      #         test3 = np.abs(tripAngles[qq, 2] - angtriSRT[2])
+      #         if test3 > angTol:
+      #           continue
+      #         else:
+      #           angTest0[2] = test3
+      #
+      #         f = tripID[qq, :]
+      #         f = f[unsrtFID]
+      #
+      #         w1 = (angTol - 0.5 * (angTest0[0] + angTest0[1]))
+      #         w2 = (angTol - 0.5 * (angTest0[0] + angTest0[2]))
+      #         w3 = (angTol - 0.5 * (angTest0[1] + angTest0[2]))
+      #
+      #         accumulatorW_p[f[0], i] += w1
+      #         accumulatorW_p[f[1], j] += w2
+      #         accumulatorW_p[f[2], k] += w3
+      #         accumulator_p[f[0], i] += 1
+      #         accumulator_p[f[1], j] += 1
+      #         accumulator_p[f[2], k] += 1
+      #         t1 = False
+      #         t2 = False
+      #         t3 = False
+      #         if np.abs(angtriSRT[0] - angtriSRT[1]) < angTol:
+      #           accumulatorW_p[f[0], j] += w1
+      #           accumulatorW_p[f[1], i] += w2
+      #           accumulatorW_p[f[2], k] += w3
+      #           accumulator_p[f[0], j] += 1
+      #           accumulator_p[f[1], i] += 1
+      #           accumulator_p[f[2], k] += 1
+      #           t1 = True
+      #         if np.abs(angtriSRT[1] - angtriSRT[2]) < angTol:
+      #           accumulatorW_p[f[0], i] += w1
+      #           accumulatorW_p[f[1], k] += w2
+      #           accumulatorW_p[f[2], j] += w3
+      #           accumulator_p[f[0], i] += 1
+      #           accumulator_p[f[1], k] += 1
+      #           accumulator_p[f[2], j] += 1
+      #           t2 = True
+      #         if np.abs(angtriSRT[2] - angtriSRT[0]) < angTol:
+      #           accumulatorW_p[f[0], k] += w1
+      #           accumulatorW_p[f[1], j] += w2
+      #           accumulatorW_p[f[2], i] += w3
+      #           accumulator_p[f[0], k] += 1
+      #           accumulator_p[f[1], j] += 1
+      #           accumulator_p[f[2], i] += 1
+      #           t3 = True
+      #         if (t1 and t2 and t3):
+      #           accumulatorW_p[f[0], k] += w1
+      #           accumulatorW_p[f[1], i] += w2
+      #           accumulatorW_p[f[2], j] += w3
+      #
+      #           accumulatorW_p[f[0], j] += w1
+      #           accumulatorW_p[f[1], k] += w2
+      #           accumulatorW_p[f[2], i] += w3
+      #
+      #           accumulator_p[f[0], k] += 1
+      #           accumulator_p[f[1], i] += 1
+      #           accumulator_p[f[2], j] += 1
+      #
+      #           accumulator_p[f[0], j] += 1
+      #           accumulator_p[f[1], k] += 1
+      #           accumulator_p[f[2], i] += 1
+
+      # for qqq in range(n_bands):
+      #   accumW_col = accumulatorW_p[:, qqq].flatten()
+      #   # numba does not like max function here when in parallel=True.  No idea why
+      #   # mxvote[qqq] = np.max(accumW_col)#accumulatorW_p[:,qqq].max()
+      #   # tvotes[qqq] = np.sum(accumW_col)
+      #   mxval = np.float32(-1.0e12)
+      #   sumval = np.float32(0.0)
+      #   for qq in accumW_col:
+      #     sumval += qq
+      #     if qq > mxval:
+      #       mxval = qq
+      #   mxvote[qqq] = mxval
+      #   tvotes[qqq] = sumval
+      #
+      #   if tvotes[qqq] < 1:
+      #     band_cm_p[qqq] = 0.0
+      #   else:
+      #     srt = np.argsort(accumW_col)
+      #     band_cm_p[qqq] = (accumW_col[srt[-1]] - accumW_col[srt[-2]]) / (tvotes[qqq])
+      #
+      #   # And same strange numba error with argmax
+      #   # bandFam_p[qqq] = np.argmax(accumulatorW_p[:,qqq])
+      #   mxval = np.float32(-1.0e12)
+      #   for qq in range(accumW_col.size):
+      #     if accumW_col[qq] > mxval:
+      #       mxval = accumW_col[qq]
+      #       bandFam_p[qqq] = qq
+
+      mxvote,tvotes, band_cm_p, bandFam_p = __trivotemetriccalc(accumulator_p, accumulatorW_p, n_bands)
       bandRank[p, :] = (n_bands - np.arange(n_bands)) / n_bands * band_cm_p * mxvote
       bandFam[p, :] = bandFam_p
       band_cm[p, :] = band_cm_p
