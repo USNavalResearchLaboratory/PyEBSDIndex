@@ -339,15 +339,15 @@ def index_pats_distributed(
         #     ngpupro = 2
 
 
-        n_cpu_per_gpu = max(min(1.0, n_cpu_nodes-ngpu), 0.5/ngpu)
+        n_cpu_per_gpu = (0.5/ngpu) #max(min(1.0, n_cpu_nodes-ngpu), 0.5/ngpu)
 
         ngpuwrker = ngpupro
 
-        ngpu_per_wrker =  ngpu/ngpuwrker - 1.0e-6 # fraction of a GPU to give to each worker (band finding worker)
-        ncpugpu_per_wrker = n_cpu_per_gpu/ngpuwrker - 1.0e-6 # fraction of a cpu to allocate to each gpu worker
+        ngpu_per_wrker =  ngpu/ngpuwrker - 1.0e-3 # fraction of a GPU to give to each worker (band finding worker)
+        ncpugpu_per_wrker = n_cpu_per_gpu/ngpuwrker - 1.0e-3 # fraction of a cpu to allocate to each gpu worker
 
         # amount of cpu to allocate to each cpu worker (indexing worker)
-        ncpucpu_per_worker = (n_cpu_nodes - ncpugpu_per_wrker * ngpuwrker)/n_cpu_nodes
+        ncpucpu_per_worker = (n_cpu_nodes - ncpugpu_per_wrker * ngpuwrker)/n_cpu_nodes - 1.0e-3
 
 
         if chunksize <= 0:
@@ -357,8 +357,8 @@ def index_pats_distributed(
         usegpu = False
         ngpu_per_wrker = 0
         ngpuwrker = n_cpu_nodes
-        ncpucpu_per_worker = 0.5 - 1.0e-6
-        ncpugpu_per_wrker = 0.5 - 1.0e-6
+        ncpucpu_per_worker = 0.5 - 1.0e-3
+        ncpugpu_per_wrker = 0.5 - 1.0e-3
         if chunksize <= 0:
             chunksize = 1000
     ncpuwrker = n_cpu_nodes
@@ -377,7 +377,7 @@ def index_pats_distributed(
     
     rayclust = ray.init(
         #num_cpus=int(np.round(n_cpu_nodes)),
-        num_cpus=int(np.round(os.cpu_count())),
+        num_cpus=min(int(np.round(os.cpu_count())), int(ncpuwrker+ngpuwrker) ),
         num_gpus=ngpu,
         _node_ip_address=RAYIPADDRESS, #"0.0.0.0",
         runtime_env={"env_vars":
@@ -495,7 +495,7 @@ def index_pats_distributed(
 
         #gpu_launched += 1
 
-    gpuwrker_cycles = -500
+    gpuwrker_cycles = -1000
     cpuwrker_cycles = 0
     ngpu_retry = 0
     ncpu_retry = 0
@@ -583,7 +583,7 @@ def index_pats_distributed(
                 except Exception as e:
                     print(e)
                     gjob = gtaskindex[jid]
-                    print('A GPU death has occured', gjob.pstart, gjob.pend)
+                    print('A GPU Process death has occurred', gjob.pstart, gjob.pend)
                     if ngpu_retry < 5:
                         ngpu_retry +=1
                         del gpuworkers[jid]
@@ -626,7 +626,7 @@ def index_pats_distributed(
                 gpuwrker_cycles = 0
                 jid = gputask.index(wrker)
                 gjob = gtaskindex[jid]
-                print('A GPU death has occured. Attempting to restart.', gjob.pstart, gjob.pend)
+                print('A GPU Process death has occurred. Attempting to restart.', gjob.pstart, gjob.pend)
                 ray.kill(gpuworkers[jid])
                 del gpuworkers[jid]
                 del gputask[jid]
@@ -731,7 +731,7 @@ def index_pats_distributed(
                 except Exception as e:
                     print(e)
                     cjob = ctaskindex[jid]
-                    print('A CPU death has occured')
+                    print('A Indexing Process death has occurred')
                     if ncpu_retry < 5:
                         ncpu_retry += 1
                         ray.kill(cpuworkers[jid])
@@ -818,9 +818,9 @@ def __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam):
         if OSPLATFORM == 'Darwin': # I don't know why, but AMD/Intel macOS does not like powers of two.
             chunk = max(48, chunk-16)
 
-    # finally - I am unsure how to check for integrated graphics that report system memory, so I am going
-    # throw an arbitrary cap on this:
-    chunk = min(2032*2, chunk)
+    if clparam.gpusharedmem == True: # The GPU is an integrated GPU, so memory reporting might be strange.
+        # Put a hard cap on number of patterns to process.
+        chunk = min(2032*2, chunk)
 
     return chunk
 

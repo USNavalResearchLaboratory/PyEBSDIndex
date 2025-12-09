@@ -39,6 +39,7 @@ class OpenClParam():
     self.gpu = None
     self.ngpu = 0
     self.gpu_id = gpu_id
+    self.gpusharedmem = None
     self.ctx = None
     self.prg = None
     self.kernels = None
@@ -79,12 +80,14 @@ class OpenClParam():
         pgpudiscrete[i] = -1
     gpu = []
     if pgpudiscrete.max() > 0:  # discrete graphics found
+      self.gpusharedmem = False
       self.platform = [self.platform[pgpudiscrete.argmax()]]
       g = self.platform[0].get_devices(device_type=cl.device_type.GPU)
       for g1 in g:
         if g1.host_unified_memory == False:
           gpu.append(g1)
     elif pgpudiscrete.max() == 0:  # only integrated graphics available
+      self.gpusharedmem = True
       self.platform = [self.platform[pgpudiscrete.argmax()]]
       gpu.extend(self.platform[0].get_devices(device_type=cl.device_type.GPU))
     else:
