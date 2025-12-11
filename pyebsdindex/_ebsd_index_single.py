@@ -32,7 +32,8 @@ single thread.
 """
 
 from timeit import default_timer as timer
-
+from pathlib import Path
+import pickle, gzip
 import numpy as np
 import h5py
 
@@ -853,3 +854,53 @@ class EBSDIndexer:
 #        #  Need to correct band_detect.radon2pole to accept a PC for
 #        #  each point.
 #        pass
+
+
+    def saveindexer(self, filename='indexer.pyindx'):
+        fpath = Path(filename).expanduser()
+        #with gzip.open(fpath, 'wb') as file:
+        #    pickle.dump(self, file)
+
+
+        excludedpaths = ["fID",
+                         "bandDetectPlan",
+                         "phaseLib", "phaselist",
+                         'PCcorrectMethod', 'PCcorrectParam']
+
+        savedict = {}
+        for item in vars(self).keys():
+            if item not in excludedpaths:
+                savedict[item] = getattr(self, item)
+
+        savedict['bandDetectPlan'] = {}
+        excludedpaths = ['radonPlan']
+        for item in vars(self.bandDetectPlan).keys():
+            if item not in excludedpaths:
+                savedict['bandDetectPlan'][item] = getattr(self.bandDetectPlan, item)
+
+        savedict['bandDetectPlan']['radonPlan'] = {}
+        excludedpaths = ['indexPlan']
+
+        for item in vars(self.bandDetectPlan.radonPlan).keys():
+            if item not in excludedpaths:
+                savedict['bandDetectPlan']['radonPlan'][item] = getattr(self.bandDetectPlan.radonPlan, item)
+
+
+        includpaths = ['phasename', 'spacegroup', 'latticeparameter',
+                       'polefamilies', 'lauecode', 'pointgroup', 'pointgroupid',
+                       'angTol', 'nband_earlyexit']
+
+        savedict['phaseLib'] = []
+        savedict['phaselist'] = []
+        for phase in range(len(self.phaseLib)):
+            savedict['phaseLib'][phase] = {}
+            savedict['phaselist'][phase] = self.phaseLib[phase].phasename
+            for item in vars(self.phaseLib[phase]).keys():
+                if item in includpaths:
+                    savedict['phaseLib'][phase][item] = getattr(self.phaseLib[phase], item)
+
+
+
+
+
+
