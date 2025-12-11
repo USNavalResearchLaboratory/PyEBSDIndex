@@ -317,7 +317,7 @@ def index_pats_distributed(
         #ncpu = max(1,os.cpu_count()//2)
     if ncpu <= 0:
         if ngpu > 0:
-            ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*2)))
+            ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*3)))
             #ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*16)))
             # this is a heuristic, and may be highly dependent on hardware
         else:
@@ -329,9 +329,10 @@ def index_pats_distributed(
     if ngpu > 0:
         gpuratio = (12, ngpu*4)
         gpucycletimeout = 100
-        if (platform.machine(), platform.system()) == ('x86_64', 'Darwin'):
-            gpuratio = (6, ngpu*6)
-        ngpupro = min(max(gpuratio), 12)  # number of processes that will serve data to the gpu
+        if (platform.system()) == ('Darwin'):
+            gpuratio = (12, ngpu*6)
+        #ngpupro = min(max(gpuratio), 12)  # number of processes that will serve data to the gpu
+        ngpupro = min(max(gpuratio), 12)
 
         # if n_cpu_nodes < 8:
         #     ngpupro = min(ngpupro, n_cpu_nodes)
@@ -815,12 +816,12 @@ def __optimizegpuchunk__(indexer, ngpupro, gpu_id, clparam):
     twocheck = np.log2(float(chunk))
     if np.abs((twocheck) - np.round(twocheck)) < 0.2:
         chunk = int(2**int(np.round(twocheck)))
-        if OSPLATFORM == 'Darwin': # I don't know why, but AMD/Intel macOS does not like powers of two.
-            chunk = max(48, chunk-16)
+        #if OSPLATFORM == 'Darwin': # I don't know why, but AMD/Intel macOS does not like powers of two.
+        #    chunk = max(48, chunk-16)
 
     if clparam.gpusharedmem == True: # The GPU is an integrated GPU, so memory reporting might be strange.
         # Put a hard cap on number of patterns to process.
-        chunk = min(2032*2, chunk)
+        chunk = min(2048*2, chunk)
 
     return chunk
 

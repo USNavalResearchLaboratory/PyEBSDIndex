@@ -79,6 +79,7 @@ def index_pats(
     verbose=0,
     chunksize=528,
     gpu_id=None,
+    **kwargs,
 ):
     """Index EBSD patterns on a single thread.
 
