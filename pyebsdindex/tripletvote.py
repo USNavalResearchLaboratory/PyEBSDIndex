@@ -102,7 +102,7 @@ def addphase(libtype=None, phasename=None,
     #set up generic FCC
     if str(libtype).upper() == 'FCC':
       nband_earlyexit=8
-      if phasename is None:
+      if (phasename is None) or (phasename ==''):
         phasename = 'FCC'
       if spacegroup is None:
         spacegroup = 225
@@ -165,7 +165,7 @@ def addphase(libtype=None, phasename=None,
   return triplib
 
 class BandIndexer():
-  #def __init__(self, libType='FCC', phaseName=None, laticeParameter = None):
+  #def __init__(self, libType='FCC', phasename=None, laticeParameter = None):
   def __init__(self,
                phasename=None,
                spacegroup = None,
@@ -173,7 +173,7 @@ class BandIndexer():
                polefamilies = None,
                angTol=2.0,
                nband_earlyexit = 8):
-    self.phaseName = None  # User provided name of the phase.
+    self.phasename = None  # User provided name of the phase.
     self.spacegroup = None  # space group id 1-230
     self.latticeparameter = None  # 6 element array for the lattice parameter.
     self.polefamilies = None  # array of integer pole normals that should have reflections
@@ -206,7 +206,7 @@ class BandIndexer():
     self.lut = np.asarray(lut).copy()
 
     if phasename is None:
-      self.phasename = ' '
+      self.phasename = ''
     else:
       self.phasename = str(phasename)
 
@@ -222,7 +222,7 @@ class BandIndexer():
 
   def setlatticeparameter(self, latticeparameter):
     self.latticeparameter = np.array(latticeparameter)
-    self.crystalmats = crystallometry.Crystal(self.phaseName,
+    self.crystalmats = crystallometry.Crystal(self.phasename,
                                               self.latticeparameter[0],
                                               self.latticeparameter[1],
                                               self.latticeparameter[2],
@@ -259,8 +259,8 @@ class BandIndexer():
     self.polefamilies = np.rint(poles * (1.+ 1e-6)).astype(int)
 
   # def build_fcc(self):
-  #   if self.phaseName is None:
-  #     self.phaseName = 'FCC'
+  #   if self.phasename is None:
+  #     self.phasename = 'FCC'
   #   self.pointgroup = "Cubic m3m"
   #   self.pointgroupid = 131
   #   self.spacegroup = 225
@@ -270,8 +270,8 @@ class BandIndexer():
   #   self.build_trip_lib(poles)
   #
   # def build_dc(self):
-  #   if self.phaseName is None:
-  #     self.phaseName = 'Diamond Cubic'
+  #   if self.phasename is None:
+  #     self.phasename = 'Diamond Cubic'
   #   self.pointgroup = "Cubic m3m"
   #   self.pointgroupid = 131
   #   self.spacegroup = 227
@@ -281,8 +281,8 @@ class BandIndexer():
   #   self.build_trip_lib(poles)
   #
   # def build_bcc(self):
-  #   if self.phaseName is None:
-  #     self.phaseName = 'BCC'
+  #   if self.phasename is None:
+  #     self.phasename = 'BCC'
   #   self.pointgroup = "Cubic m3m"
   #   self.pointgroupid = 131
   #   self.spacegroup = 229
@@ -294,8 +294,8 @@ class BandIndexer():
 
 
   # def build_hcp(self):
-  #   if self.phaseName is None:
-  #     self.phaseName = 'HCP'
+  #   if self.phasename is None:
+  #     self.phasename = 'HCP'
   #   self.pointgroup = "Hexagonal 6/mmm"
   #   self.spacegroup = 194
   #   self.lauecode = crystal_sym.spacegroup2lauenumber(self.spacegroup)
