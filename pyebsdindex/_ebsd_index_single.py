@@ -43,6 +43,7 @@ from pyebsdindex import (
     ebsd_pattern,
     rotlib,
     _pyopencl_installed,
+    __version__,
 )
 
 if _pyopencl_installed:
@@ -857,9 +858,7 @@ class EBSDIndexer:
 
 
     def saveindexer(self, filename='indexer.pyindx'):
-        fpath = Path(filename).expanduser()
-        #with gzip.open(fpath, 'wb') as file:
-        #    pickle.dump(self, file)
+
 
 
         excludedpaths = ["fID",
@@ -868,12 +867,14 @@ class EBSDIndexer:
                          'PCcorrectMethod', 'PCcorrectParam']
 
         savedict = {}
+        savedict['version'] = __version__
+
         for item in vars(self).keys():
             if item not in excludedpaths:
                 savedict[item] = getattr(self, item)
 
         savedict['bandDetectPlan'] = {}
-        excludedpaths = ['radonPlan']
+        excludedpaths = ['radonPlan', 'rdnNorm']
         for item in vars(self.bandDetectPlan).keys():
             if item not in excludedpaths:
                 savedict['bandDetectPlan'][item] = getattr(self.bandDetectPlan, item)
@@ -893,14 +894,65 @@ class EBSDIndexer:
         savedict['phaseLib'] = []
         savedict['phaselist'] = []
         for phase in range(len(self.phaseLib)):
-            savedict['phaseLib'][phase] = {}
-            savedict['phaselist'][phase] = self.phaseLib[phase].phasename
+            savedict['phaseLib'].append({})
+            savedict['phaselist'].append(self.phaseLib[phase].phasename)
             for item in vars(self.phaseLib[phase]).keys():
                 if item in includpaths:
                     savedict['phaseLib'][phase][item] = getattr(self.phaseLib[phase], item)
 
+        fpath = Path(filename).expanduser()
+        with gzip.open(fpath, 'wb') as file:
+            pickle.dump(savedict, file)
+
+    def restoreindexer(self, filename='indexer.pyindx'):
+
+        fpath = Path(filename).expanduser()
+        with gzip.open(fpath, 'rb') as file:
+            savedict = pickle.load(file)
+
+
+        ver = savedict['version']
+        if ver >= "0.3.8":
+            # Reconstruct the indexer object.
+            cam_elev = savedict['camElev']
+            sampleTilt = savedict['sampleTilt']
+            PC = savedict['PC']
+            vendor = savedict['vendor']
+            patDim = savedict['bandDetectPlan']['patDim']
+            ntheta = savedict['bandDetectPlan']['nTheta']
+            nrho = savedict['bandDetectPlan']['nRho']
+            tSigma = savedict['bandDetectPlan']['tSigma']
+            rSigma = savedict['bandDetectPlan']['rSigma']
+            kernel = savedict['bandDetectPlan']['kernel']
+            rhoMaskFrac = savedict['bandDetectPlan']['rhoMaskFrac']
+            nBands = savedict['bandDetectPlan']['nBands']
+            patternmask = savedict['bandDetectPlan']['patternmask']
+            rdnmask = savedict['bandDetectPlan']['rdnmask']
+            backgroundsub = savedict['bandDetectPlan']['backgroundsub']
+            useCPU = savedict['bandDetectPlan']['useCPU']
+
+            phaselist = []
+
+            for phase in savedict['phaseLib']:
+                phasename = phase['phasename']
+                spacegroup = phase['spacegroup']
+                latticeparameter = phase['latticeparameter']
+                pointgroup = phase['pointgroup']
+                pointgroupid = phase['pointgroupid']
+                angTol = phase['angTol']
+                nband_earlyexit = phase['nband_earlyexit']
+                polefamilies = phase['polefamilies']
+                newphase = bandindexer.addphase(phasename=phasename,
+                                                spacegroup=spacegroup,
+                                                latticeparameter=latticeparameter,
+                                                polefamilies=polefamilies,
+                                                pointgroup=pointgroup,
+                                                pointgroupid=pointgroupid,
+                                                nband_earlyexit=nband_earlyexit
+                                                )
+                newphase.angTol = angTol
+                phaselist.append(newphase)
 
 
 
-
-
+                #newindexer

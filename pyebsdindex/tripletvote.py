@@ -70,7 +70,10 @@ os.environ["NUMBA_CACHE_DIR"] = str(tempdir)+str(os.sep)
 def addphase(libtype=None, phasename=None,
              spacegroup=None,
              latticeparameter=None,
-             polefamilies=None, nband_earlyexit = 10):
+             polefamilies=None,
+             nband_earlyexit = 10,
+             pointgroup = None,
+             pointgroupid = None):
   """Return a band indexer for a phase.
 
   Parameters
@@ -159,7 +162,9 @@ def addphase(libtype=None, phasename=None,
                         spacegroup=spacegroup,
                         latticeparameter=latticeparameter,
                         polefamilies=np.atleast_2d(polefamilies),
-                        nband_earlyexit=nband_earlyexit)
+                        nband_earlyexit=nband_earlyexit,
+                        pointgroup = pointgroup,
+                        pointgroupid = pointgroupid)
 
   triplib.build_trip_lib()
   return triplib
@@ -172,7 +177,9 @@ class BandIndexer():
                latticeparameter=None,
                polefamilies = None,
                angTol=2.0,
-               nband_earlyexit = 8):
+               nband_earlyexit = 8,
+               pointgroup = ' ',
+               pointgroupid = None):
     self.phasename = None  # User provided name of the phase.
     self.spacegroup = None  # space group id 1-230
     self.latticeparameter = None  # 6 element array for the lattice parameter.
@@ -183,8 +190,8 @@ class BandIndexer():
     self.lauecode = None  # Laue code for the space group (following DREAM.3D notation.
     self.qsymops = None  # array of quaternions that represent proper symmetry operations for the laue group
 
-    self.pointgroup = ' '  # point group nomenclature
-    self.pointgroupid = None
+    self.pointgroup = pointgroup  # point group nomenclature
+    self.pointgroupid = pointgroupid
 
     self.angTol = angTol
     self.nband_earlyexit = nband_earlyexit
