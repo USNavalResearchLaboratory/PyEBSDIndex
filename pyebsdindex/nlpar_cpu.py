@@ -690,6 +690,11 @@ class NLPAR:
         else:
           fID.nCols = self.ncols
 
+      if self.ncols == 1:
+        print('The number of scan columns is set to one, which is unusual, and may indicate that')
+        print('the number of columns is not saved as metadata in the pattern file. Consider manually')
+        print('entering the number of columns/rows with ``nlobj.ncols={number of your scan columns}`` and ')
+        print('``nlobj.nrows={number of your scan rows}``.')
       return fID
 
     else:

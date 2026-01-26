@@ -32,15 +32,24 @@ from pyebsdindex.EBSDImage import micronbar
 
 def scalarimage(ebsddata, indexer,
                 datafield='pq',
-                xsize = None,
-                ysize = None,
+                ncols = None,
+                nrows = None,
                 addmicronbar=False,
                 cmap='viridis',
                 norescalegray=False,
                 rescalenice = False,
                 datafieldindex=0,
                 gamma=1.0,
+                xsize=None,  # these are kept for backwards compatibility.
+                ysize=None,
                 **kwargs):
+
+  # kept around for backwards compatability.
+  if xsize is not None:
+    ncols=xsize
+  if ysize is not None:
+    nrows = ysize
+
   npoints = ebsddata.shape[-1]
   if datafield != 'fitinv':
     imagedata = ebsddata[-1][datafield]
@@ -52,18 +61,16 @@ def scalarimage(ebsddata, indexer,
 
   imagedata = imagedata.astype(np.float32)
 
-  if xsize is not None:
-    xsize = int(xsize)
-    # if ysize is None:
-    # print(ysize)
+  if ncols is not None:
+    ncols = int(ncols)
+
   else:
-    xsize = indexer.fID.nCols
-    # xsize = int(npoints)
-    # ysize = 1
-  if ysize is not None:
-    ysize = int(ysize)
+    ncols = indexer.fID.nCols
+
+  if nrows is not None:
+    nrows = int(nrows)
   else:
-    ysize = int(npoints // xsize + np.int64((npoints % xsize) > 0))
+    nrows = int(npoints // ncols + np.int64((npoints % ncols) > 0))
 
 
   if datafield == 'fit':
@@ -95,22 +102,19 @@ def scalarimage(ebsddata, indexer,
 
 
   if len(imagedata.shape) > 1:
-    image_out = np.zeros((ysize, xsize, 3), dtype=np.float32)
+    image_out = np.zeros((nrows, ncols, 3), dtype=np.float32)
     image_out = image_out.flatten()
-    npts = min(int(npoints), int(xsize * ysize))
-    # if int(xsize*ysize) < npoints:
-    #   npts = int(xsize*ysize)
+    npts = min(int(npoints), int(ncols * nrows))
+
     image_out[0:npts * 3] = imagedata[0:npts, 0:3].flatten()
-    image_out = image_out.reshape(ysize, xsize, 3)
+    image_out = image_out.reshape(nrows, ncols, 3)
     # perform desired image resize
   else:
-    image_out = np.zeros((ysize, xsize), dtype=np.float32)
+    image_out = np.zeros((nrows, ncols), dtype=np.float32)
     image_out = image_out.flatten()
-    npts = min(int(npoints), int(xsize * ysize))
-    # if int(xsize*ysize) < npoints:
-    #   npts = int(xsize*ysize)
+    npts = min(int(npoints), int(ncols * nrows))
     image_out[0:npts] = imagedata[0:npts].flatten()
-    image_out = image_out.reshape(ysize, xsize)
+    image_out = image_out.reshape(nrows, ncols)
 
   image_out = image_out**gamma
 

@@ -5,18 +5,56 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
+
+0.3.9 (2026-01-26)
+==================
+
+Added
+-----
+- Now have the ability to save an indexer object to an HDF5 file using
+  the ``ebsd_index.indexer.saveindexer(filename='indexer.pyindx')`` method.  It can similarly be
+  restored using the ``indexer_obj = ebsd_index.restoreindexer(filename='indexer.pyindx')`` function.
+  This should be considered a beta-level capability, as there might be situations that yield incompatible
+  values for HDF5 and variable that are defined as ``None``.
+
+- Some preliminary support for DM5 files for use in the NLPAR algorithm.
+
+Changed
+-------
+- The band indexing steps in the ``triplevote`` module are now mostly multi-threaded using Numba.
+  This causes a long delay on the first index process, but should be much faster overall, espeically when
+  indexing using a single process mode (non-distributed).
+
+- Rebalanced the default number of processes used when using the distributed (aka multi-process) indexing,
+  given that the band indexing is now multi-threaded.
+
+- NLPAR now always breaks a scan into blocks of patterns, rather than defaulting to always using a full
+  row of patterns.  This was always the case for the GPU version of NLPAR, but now also works for the CPU version,
+  and hopefully prevents memory issues for larger scans on machines with lower RAM totals.
+
+- the ``EBSDImage.IPFcolor`` and ``EBSDImage.scalarimage`` now use the keywords ``ncols`` and ``nrows`` to
+  keep some consistency with the rest of the package.  ``xsize`` and ``ysize`` will still be respected for backwards
+  compatibility, but at some point in the future will be depreciated.
+
+
+Fixed
+-----
+- openCL should now stop spewing warning messages about reuse of programming objects.
+
+
+
 0.3.8 (2025-04-01)
 ==================
 
 Added
 -----
 - Ability to add micron bars to IPF and scalar values maps. Use the ``addmicronbar`` keyword
-to ``makeipf`` and ``scalarimage`` functions.
+  to ``makeipf`` and ``scalarimage`` functions.
 - When using ``ebsd_index`` function, if the machine has multiple GPUs, the desired GPU
-can be chosen using the ``gpu_id`` keyword.
+  can be chosen using the ``gpu_id`` keyword.
 - When making IPF maps, a grayscale mix can be added using ``graychannel`` keyword.
 - New pattern quality parameter, ``iq`` which is the mean intensity of the convolved peaks
-divided by the mean intensity of the radon.  Typical values are 1.8--2.0
+  divided by the mean intensity of the radon.  Typical values are 1.8--2.0
 - Initial support for Thermo-Fisher ``.pat`` files.
 
 Changed
@@ -24,11 +62,11 @@ Changed
 - Minimum official support is now python 3.9
 - pyebsdinex[parallel] now uses a minimum Ray v2.9
 - oh5 files are currently written with OIM 8.6.
-OIM 9.1 oh5 files can be specified using ``version=9.1``
+  OIM 9.1 oh5 files can be specified using ``version=9.1``
 - The ``fit`` value now is the _unweighted_ mean angular deviation. Previously this was
-the weighted eigen value from the QUEST algorithm.
+  the weighted eigen value from the QUEST algorithm.
 - Automatic CPU scheduling is changed for distributed indexing, avoiding spinning up many
-processes on large workstations.
+  processes on large workstations.
 
 
 Fixed

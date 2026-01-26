@@ -37,8 +37,17 @@ from pyebsdindex import rotlib
 from pyebsdindex.EBSDImage import micronbar, scalarimage
 
 
-def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize = None,
-            addmicronbar=False, graychannel=None, gamma=1.0, **kwargs):
+def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), ncols = None, nrows = None,
+            addmicronbar=False, graychannel=None, gamma=1.0,
+            xsize = None, ysize = None,  # these are kept for backwards compatability.
+            **kwargs):
+
+  # kept around for backwards compatability.
+  if xsize is not None:
+    ncols=xsize
+  if ysize is not None:
+    nrows = ysize
+
   nphase = len(indexer.phaseLib)
 
   npoints = ebsddata.shape[-1]
@@ -57,28 +66,25 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
   ipfout[ebsddata[-1]['fit'] > 179,:] = 0
 
 
-  if xsize is not None:
-    xsize = int(xsize)
-    #if ysize is None:
-      #print(ysize)
+  if ncols is not None:
+    ncols = int(ncols)
+
   else:
-    xsize = indexer.fID.nCols
-    #xsize = int(npoints)
-    #ysize = 1
+    ncols = indexer.fID.nCols
 
-  if ysize is not None:
-    ysize = int(ysize)
+
+  if nrows is not None:
+    nrows = int(nrows)
   else:
-    ysize = int(npoints // xsize + np.int64((npoints % xsize) > 0))
+    nrows = int(npoints // ncols + np.int64((npoints % ncols) > 0))
 
 
-  ipf_out = np.zeros((ysize, xsize,3), dtype=np.float32)
+  ipf_out = np.zeros((nrows, ncols, 3), dtype=np.float32)
   ipf_out = ipf_out.flatten()
-  npts = min(int(npoints), int(xsize*ysize))
-  # if int(xsize*ysize) < npoints:
-  #   npts = int(xsize*ysize)
+  npts = min(int(npoints), int(ncols * nrows))
+
   ipf_out[0:npts*3] = ipfout[0:npts,:].flatten()
-  ipf_out = ipf_out.reshape(ysize, xsize, 3)
+  ipf_out = ipf_out.reshape(nrows, ncols, 3)
 
   if graychannel is not None:
     if graychannel == 'fit':
@@ -86,13 +92,13 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), xsize = None, ysize =
     else:
       gchan = graychannel
     gray = scalarimage.scalarimage(ebsddata, indexer,
-                       xsize=xsize,
-                       ysize=ysize,
-                       addmicronbar=False,
-                       datafield=gchan,
-                       cmap='gray',
-                       rescalenice=True, **kwargs
-                       )
+                                   ncols=ncols,
+                                   nrows=nrows,
+                                   addmicronbar=False,
+                                   datafield=gchan,
+                                   cmap='gray',
+                                   rescalenice=True, **kwargs
+                                   )
     ipf_out *= gray**gamma
 
 
