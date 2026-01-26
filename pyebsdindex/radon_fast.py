@@ -58,10 +58,10 @@ class Radon:
         self.imDim = np.asarray(image.shape[-2:])
       else:
         self.imDim = np.asarray(imageDim[-2:])
-      self.masksetup()
-      #self.radon_plan_setup(imageDim=self.imDim, nTheta=self.nTheta, nRho=self.nRho, rhoMax=self.rhoMax)
+      #self._masksetup(mask=mask, maskindex=maskindex)
+      self.radon_plan_setup()
 
-  def radon_plan_setup(self, image=None, imageDim=None, nTheta=None, nRho=None, rhoMax=None):
+  def radon_plan_setup(self, image=None, imageDim=None, nTheta=None, nRho=None, rhoMax=None, mask=None, maskindex=None):
     if (image is None) and (imageDim is not None):
       self.imDim = np.asarray(imageDim, dtype=np.int64)
     elif (image is not None):
@@ -71,7 +71,12 @@ class Radon:
       return -1
     imDim = self.imDim
 
+    if mask is not None:
+      self.mask = mask
+    if maskindex is not None:
+      self.maskindex = maskindex
 
+    self._masksetup()
 
     if (nTheta is not None) : self.nTheta = nTheta
     if (nRho is not None): self.nRho = nRho
@@ -160,31 +165,32 @@ class Radon:
     self.indexPlan.sort(axis = -1)
 
 
-  def masksetup(self,mask=None, maskindex=None):
+  def _masksetup(self, mask=None, maskindex=None):
     if mask is not None:
       self.mask = np.array(mask).astype(int)
     if maskindex is not None:
       self.maskindex = np.array(maskindex).astype(np.int64)
 
-    nPx = int(self.imDim[0]) * int(self.imDim[1])
+    if self.imDim is not None:
+      nPx = int(self.imDim[0]) * int(self.imDim[1])
 
-    if self.mask is None:
-      self.mask = np.ones(self.imDim)
-    if self.maskindex is None:
-      self.maskindex = np.arange(nPx, dtype = np.int64)
-      self.maskindex = self.maskindex.reshape(self.imDim)
+      if self.mask is None:
+        self.mask = np.ones(self.imDim)
+      if self.maskindex is None:
+        self.maskindex = np.arange(nPx, dtype = np.int64)
+        self.maskindex = self.maskindex.reshape(self.imDim)
 
-    #if (self.mask.shape != self.imDim).all():
-    #  raise Exception("mask and image must have same size")
-    #  #return -1
-    #if (self.maskindex.shape != self.imDim).all():
-    #  raise Exception("mask index array and image must have same size")
-    #  #return -2
-    if self.maskindex.max() >= nPx:
-      raise Exception("max of index array must be less than the total number of pixel in the array")
-      #return -3
+      #if (self.mask.shape != self.imDim).all():
+      #  raise Exception("mask and image must have same size")
+      #  #return -1
+      #if (self.maskindex.shape != self.imDim).all():
+      #  raise Exception("mask index array and image must have same size")
+      #  #return -2
+      if self.maskindex.max() >= nPx:
+        raise Exception("max of index array must be less than the total number of pixel in the array")
+        #return -3
 
-    self.radon_plan_setup()
+      #self.radon_plan_setup()
 
   def radon_fast(self, imageIn, padding = np.array([0,0]), fixArtifacts = False,
                  background = None, background_method = 'SUBTRACT'):

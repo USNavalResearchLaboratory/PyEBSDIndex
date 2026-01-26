@@ -770,7 +770,7 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       aveval[z*lnmax + i] = (avetempweight/9.0);
       // band width metric
       width[z*lnmax + i] = 1.0 / (w - 0.5 * (imValyp1 + imValym1) + 1e-12) ;
-
+      //FWHM = 2 * sqrt(ln(2)) / sqrt(2*ln(y_peak) - ln(y_minus) - ln(y_plus))
     }
     else{
       break; // no more detected peaks

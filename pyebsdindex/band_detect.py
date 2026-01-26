@@ -81,7 +81,7 @@ class BandDetect():
     self.dTheta = None
     self.dRho = None
     self.rhoMax = None
-    self.radonPlan = None
+    self.radonPlan = radon_fast.Radon()
     self.rdnNorm = None
     self.tSigma = tSigma
     self.rSigma = rSigma
@@ -100,7 +100,6 @@ class BandDetect():
 
     self.EDAXIQ = False
     self.backgroundsub = None
-    self.patternmask = None
     self.useCPU = True
 
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), ('normmax', np.float32),
@@ -118,15 +117,15 @@ class BandDetect():
         self.patDim = np.asarray(patDim)
       patternmask = None
       if 'patternmask' in kwargs :
-        self.patternmask = kwargs.get('patternmask')
+        self.radonPlan.mask = kwargs.get('patternmask')
 
       patternmaskindex = None
       if 'patternmaskindex' in kwargs:
-        patternmaskindex = kwargs.get('patternmaskindex')
+        self.radonPlan.maskindex = kwargs.get('patternmaskindex')
       #print(patternmask)
       self.band_detect_setup(patterns, self.patDim,self.nTheta,self.nRho,\
                              self.tSigma, self.rSigma,self.rhoMaskFrac,self.nBands,
-                             patternmask = self.patternmask,patternmaskindex = patternmaskindex,
+                             patternmask = self.radonPlan.mask,patternmaskindex = self.radonPlan.maskindex,
                              **kwargs)
 
   def band_detect_setup(self, patterns=None,patDim=None,nTheta=None,nRho=None,\
@@ -166,7 +165,13 @@ class BandDetect():
       recalc_radon = True
 
     if patternmask is not None:
-      self.patternmask = patternmask
+      self.radonPlan.mask = patternmask
+      recalc_radon = True
+
+
+    if patternmaskindex is not None:
+      self.radonPlan.maskindex = patternmaskindex
+      recalc_radon = True
 
 
     #recalc_radon = True
@@ -179,13 +184,17 @@ class BandDetect():
       self.rhomask1thresh = np.float32(self.patDim.min())*0.1
 
       self.dRho = self.rhoMax/np.float32(self.nRho)
-      self.radonPlan = radon_fast.Radon(imageDim=self.patDim,
+      #self.radonPlan = radon_fast.Radon(imageDim=self.patDim,
+      #                                  nTheta=self.nTheta, nRho=self.nRho,
+      #                                  rhoMax=self.rhoMax,
+      #                                  mask=self.patternmask, maskindex=self.patternmaskindex)
+      self.radonPlan.radon_plan_setup(imageDim=self.patDim,
                                         nTheta=self.nTheta, nRho=self.nRho,
                                         rhoMax=self.rhoMax,
-                                        mask=self.patternmask, maskindex=patternmaskindex)
+                                        mask=patternmask, maskindex=patternmaskindex)
 
-      if self.patternmask is not None:
-        back = np.array(self.patternmask > 0).astype(np.float32)
+      if self.radonPlan.mask is not None:
+        back = np.array(self.radonPlan.mask > 0).astype(np.float32)
       else:
         back = np.ones(self.patDim[-2:], dtype=np.float32)
 
@@ -198,10 +207,10 @@ class BandDetect():
       rdnmask = rdnmask > 0
       rdnmask = rdnmask.squeeze()
 
-      if self.rhoMaskFrac >= 1:
+      if self.rhoMaskFrac >= (1- 1.0e-12): # apply a erosion mask to the full radon space of size rhoMaskFrac
         s = np.ones(( 3, 1))
         rdnmask = scipyndim.binary_erosion(rdnmask, structure=s, iterations = int(self.rhoMaskFrac) )
-      else:
+      else: # normal rho mask that will sum over the whole image, but ignore peaks outside the rhomask.
         cmask = self._circmask(back)
         rdncmask = rdnmask.copy()
         if self.rhoMaskFrac > 0:
@@ -213,7 +222,7 @@ class BandDetect():
 
           #thresh = 0.5 * (np.min(back.shape[-2:]) * (1.0 - self.rhoMaskFrac))
           #cmask = (cmask < thresh).astype(np.float32)
-        elif self.rhoMaskFrac < 0:
+        elif self.rhoMaskFrac < 0: # set the radon to operate on the max rho possible, and errode by a fractional amount.
           mskinx = int(-1*self.nRho * self.rhoMaskFrac)
           #rdncmask[0:mskinx, :] = 0
           #rdncmask[-mskinx:, :] = 0
@@ -650,6 +659,7 @@ class BandDetect():
         bandData_maxloc[q,i,:] = np.array([r,c])
         bandData_max[q,i] = rdnPad[r,c,q] / averdnpat
         bandData_width[q, i] = 1.0 / (bandData_max[q,i] - 0.5* (rdnPad[r+1, c, q] + rdnPad[r-1, c, q]) + 1.0e-12)
+        #FWHM = 2 * sqrt(ln(2)) / sqrt(2*ln(y_peak) - ln(y_minus) - ln(y_plus))
 
         #center of mass peak localization
         #nn = rdnConv[r - 1:r + 2,c - 2:c + 3,q].ravel()

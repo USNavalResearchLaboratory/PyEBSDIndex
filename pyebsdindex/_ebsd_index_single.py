@@ -33,7 +33,6 @@ single thread.
 
 from timeit import default_timer as timer
 from pathlib import Path
-import pickle, gzip
 import numpy as np
 import h5py
 
@@ -711,7 +710,7 @@ class EBSDIndexer:
     def _indexbandsphase(self, banddata, bandnorm, verbose=0):
 
 #
-        rhomax = self.bandDetectPlan.rhoMax * (1-self.bandDetectPlan.rhoMaskFrac)
+        rhomax = self.bandDetectPlan.rhoMax #* (1-self.bandDetectPlan.rhoMaskFrac)
         shpBandDat = banddata.shape
         npoints = int(banddata.size/(shpBandDat[-1])+0.1)
         nPhases = len(self.phaseLib)
@@ -743,6 +742,7 @@ class EBSDIndexer:
 
         # the adj_intensity is used to weight the peaks in the quest fit.
         #adj_intensity =  banddata["max"].copy()
+       
         adj_intensity = (-1 * np.abs(banddata["rho"]) * 0.5 / rhomax + 1) * banddata["max"]
         adj_intensity *= ((banddata["theta"] > (2 * np.pi / 180)).astype(np.float32) + 0.5) / 2
         adj_intensity *= ((banddata["theta"] < (178.0 * np.pi / 180)).astype(np.float32) + 0.5) / 2
@@ -857,91 +857,127 @@ class EBSDIndexer:
 #        pass
 
 
-    def saveindexer(self, filename='indexer.pyindx'):
+    def saveindexer(self, filename='myindexer.pyindx'):
 
+        def h5getatrib(h5grp, obj, item):
+            thisitem = getattr(obj, item)
+            if thisitem is not None:
+                if type(thisitem) is str:
+                    h5grp[item] = str(thisitem).encode('utf-8')
+                else:
+                    h5grp[item] = thisitem
 
-
-        excludedpaths = ["fID",
-                         "bandDetectPlan",
-                         "phaseLib", "phaselist",
-                         'PCcorrectMethod', 'PCcorrectParam']
-
-        savedict = {}
-        savedict['version'] = __version__
-
-        for item in vars(self).keys():
-            if item not in excludedpaths:
-                savedict[item] = getattr(self, item)
-
-        savedict['bandDetectPlan'] = {}
-        excludedpaths = ['radonPlan', 'rdnNorm']
-        for item in vars(self.bandDetectPlan).keys():
-            if item not in excludedpaths:
-                savedict['bandDetectPlan'][item] = getattr(self.bandDetectPlan, item)
-
-        savedict['bandDetectPlan']['radonPlan'] = {}
-        excludedpaths = ['indexPlan']
-
-        for item in vars(self.bandDetectPlan.radonPlan).keys():
-            if item not in excludedpaths:
-                savedict['bandDetectPlan']['radonPlan'][item] = getattr(self.bandDetectPlan.radonPlan, item)
-
-
-        includpaths = ['phasename', 'spacegroup', 'latticeparameter',
-                       'polefamilies', 'lauecode', 'pointgroup', 'pointgroupid',
-                       'angTol', 'nband_earlyexit']
-
-        savedict['phaseLib'] = []
-        savedict['phaselist'] = []
-        for phase in range(len(self.phaseLib)):
-            savedict['phaseLib'].append({})
-            savedict['phaselist'].append(self.phaseLib[phase].phasename)
-            for item in vars(self.phaseLib[phase]).keys():
-                if item in includpaths:
-                    savedict['phaseLib'][phase][item] = getattr(self.phaseLib[phase], item)
 
         fpath = Path(filename).expanduser()
-        with gzip.open(fpath, 'wb') as file:
-            pickle.dump(savedict, file)
+        with h5py.File(fpath, 'w') as hfile:
+            excludedpaths = ["fID",
+                             "bandDetectPlan",
+                             "phaseLib", "phaselist",
+                             'PCcorrectMethod', 'PCcorrectParam', 'dataTemplate']
 
-    def restoreindexer(self, filename='indexer.pyindx'):
+            savedict = {}
+            hfile['version'] = str(__version__).encode('ascii')
+            for item in vars(self).keys():
+                if item not in excludedpaths:
+                    # hfile[item] = getattr(self, item)
+                    h5getatrib(hfile, self, item)
 
-        fpath = Path(filename).expanduser()
-        with gzip.open(fpath, 'rb') as file:
-            savedict = pickle.load(file)
+
+            bdp = hfile.create_group('bandDetectPlan')
+            excludedpaths = ['radonPlan', 'rdnNorm', 'dataType', 'useCPU']
+            for item in vars(self.bandDetectPlan).keys():
+                if item not in excludedpaths:
+                    #bdp[item] = getattr(self.bandDetectPlan, item)
+                    h5getatrib(bdp, self.bandDetectPlan, item)
+
+            rdnp = bdp.create_group('radonPlan')
+            excludedpaths = ['indexPlan']
+            for item in vars(self.bandDetectPlan.radonPlan).keys():
+                if item not in excludedpaths:
+                    #rdnp[item] = getattr(self.bandDetectPlan.radonPlan, item)
+                    h5getatrib(rdnp, self.bandDetectPlan.radonPlan, item)
+
+            includpaths = ['phasename', 'spacegroup', 'latticeparameter',
+                           'polefamilies', 'lauecode', 'pointgroup', 'pointgroupid',
+                           'angTol', 'nband_earlyexit']
+
+            #savedict['phaseLib'] = []
+            #savedict['phaselist'] = []
+            phasesgroup = hfile.create_group('phases')
+
+            for phase in range(len(self.phaseLib)):
+                thisphasegroup = phasesgroup.create_group(str(phase).encode('utf-8'))
+                for item in vars(self.phaseLib[phase]).keys():
+                    if item in includpaths:
+                        #thisphasegroup[item] = getattr(self.phaseLib[phase], item)
+                        h5getatrib(thisphasegroup, self.phaseLib[phase], item)
 
 
-        ver = savedict['version']
+def restoreindexer(filename='indexer.pyindx'):
+
+    # fpath = Path(filename).expanduser()
+    # with gzip.open(fpath, 'rb') as file:
+    #     savedict = pickle.load(file)
+    def get_subgroups(parent_group):
+        subgroups = []
+        for name, item in parent_group.items():
+            if isinstance(item, h5py.Group):
+                subgroups.append(item)
+        return subgroups
+
+
+
+    fpath = Path(filename).expanduser().resolve()
+
+    with h5py.File(fpath, 'r') as hfile:
+        ver = str(hfile['version'][()])
         if ver >= "0.3.8":
             # Reconstruct the indexer object.
-            cam_elev = savedict['camElev']
-            sampleTilt = savedict['sampleTilt']
-            PC = savedict['PC']
-            vendor = savedict['vendor']
-            patDim = savedict['bandDetectPlan']['patDim']
-            ntheta = savedict['bandDetectPlan']['nTheta']
-            nrho = savedict['bandDetectPlan']['nRho']
-            tSigma = savedict['bandDetectPlan']['tSigma']
-            rSigma = savedict['bandDetectPlan']['rSigma']
-            kernel = savedict['bandDetectPlan']['kernel']
-            rhoMaskFrac = savedict['bandDetectPlan']['rhoMaskFrac']
-            nBands = savedict['bandDetectPlan']['nBands']
-            patternmask = savedict['bandDetectPlan']['patternmask']
-            rdnmask = savedict['bandDetectPlan']['rdnmask']
-            backgroundsub = savedict['bandDetectPlan']['backgroundsub']
-            useCPU = savedict['bandDetectPlan']['useCPU']
+            cam_elev = hfile['camElev'][()]
+            sampleTilt = hfile['sampleTilt'][()]
+            PC = hfile['PC'][()]
+            vendor = (hfile['vendor'][()]).decode('utf-8')
+            patDim = hfile['bandDetectPlan/patDim'][:]
+            ntheta = hfile['bandDetectPlan/nTheta'][()]
+            nrho = hfile['bandDetectPlan/nRho'][()]
+            tSigma = hfile['bandDetectPlan/tSigma'][()]
+            rSigma = hfile['bandDetectPlan/rSigma'][()]
+            kernel = hfile['bandDetectPlan/kernel'][:]
+            rhoMaskFrac = hfile['bandDetectPlan/rhoMaskFrac'][()]
+            nBands = hfile['bandDetectPlan/nBands'][()]
+
+            patternmask = hfile['bandDetectPlan/radonPlan/mask'][...]
+            patternmaskindex = hfile['bandDetectPlan/radonPlan/maskindex'][...]
+
+
+            if 'rdnmask' in hfile['bandDetectPlan']:
+                rdnmask = hfile['bandDetectPlan/rdnmask'][...]
+            else:
+                rdnmask = None
+            if 'backgroundsub' in hfile['bandDetectPlan']:
+                backgroundsub = hfile['bandDetectPlan/backgroundsub'][...]
+            else:
+                backgroundsub = None
+
+
+            phasegroup = get_subgroups(hfile['phases'])
 
             phaselist = []
-
-            for phase in savedict['phaseLib']:
-                phasename = phase['phasename']
-                spacegroup = phase['spacegroup']
-                latticeparameter = phase['latticeparameter']
-                pointgroup = phase['pointgroup']
-                pointgroupid = phase['pointgroupid']
-                angTol = phase['angTol']
-                nband_earlyexit = phase['nband_earlyexit']
-                polefamilies = phase['polefamilies']
+            for phase in phasegroup:
+                phasename = (phase['phasename'][()]).decode('utf-8')
+                spacegroup = phase['spacegroup'][()]
+                latticeparameter = phase['latticeparameter'][:]
+                if 'pointgroup' in phase:
+                    pointgroup = str(phase['pointgroup'][()])
+                else:
+                    pointgroup = None
+                if 'pointgroupid' in phase:
+                    pointgroupid = phase['pointgroupid'][()]
+                else:
+                    pointgroupid = None
+                angTol = phase['angTol'][()]
+                nband_earlyexit = phase['nband_earlyexit'][()]
+                polefamilies = phase['polefamilies'][...]
                 newphase = bandindexer.addphase(phasename=phasename,
                                                 spacegroup=spacegroup,
                                                 latticeparameter=latticeparameter,
@@ -955,4 +991,30 @@ class EBSDIndexer:
 
 
 
-                #newindexer
+            newindexer = EBSDIndexer(
+                filename=None,
+                phaselist=phaselist,
+                vendor=vendor,
+                PC=PC,
+                sampleTilt=sampleTilt,
+                camElev=cam_elev,
+                nRho=nrho,
+                nTheta=ntheta,
+                tSigma=tSigma,
+                rSigma=rSigma,
+                rhoMaskFrac=rhoMaskFrac,
+                nBands=nBands,
+                patDim=patDim,
+                nband_earlyexit=nband_earlyexit,
+                patternmask = patternmask,
+                patternmaskindex = patternmaskindex,
+
+            )
+            newindexer.bandDetectPlan.kernel = kernel
+            newindexer.bandDetectPlan.backgroundsub = backgroundsub
+            newindexer.bandDetectPlan.rdnmask = rdnmask
+
+            return newindexer
+
+
+
