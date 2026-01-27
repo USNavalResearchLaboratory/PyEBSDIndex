@@ -96,6 +96,7 @@ setup(
         "numpy",
         "numba>=0.55.1",
         "scipy",
+        "psutil"
     ],
     # Files to include when distributing package (see also MANIFEST.in)
     packages=find_packages(),
