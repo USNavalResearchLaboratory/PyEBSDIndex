@@ -55,30 +55,35 @@ os.environ["NUMBA_CACHE_DIR"] = str(tempdir)+str(os.sep)
 
 RADEG = 180.0/np.pi
 
-class gnomoic_correction():
+class GnomoicCorrection():
   def __init__(
     self,
     radonPlan=None,
     PC = np.array([0.5, 0.5, 0.5]),
+    vendor='EDAX',
     **kwargs
     ):
     self.PC = PC
+    self.vendor = vendor
     self.setradonPlan(radonPlan)
+
+
 
   def setradonPlan(
     self,
     radonPlan=None
     ):
+
     if radonPlan is not None:
-      if radonPlan is not isinstance(radonPlan, radon_fast.Radon):
+      if not isinstance(radonPlan, radon_fast.Radon):
         print('Set to radonplan object')
         return
     else:
       return
 
     self.radonPlan = radonPlan
-    self.dx2rnd = np.zeros([self.radonPlan.nRho, self.radonPlan.nTheta], dtype=np.float32)
-    self.dy2rnd = np.zeros([self.radonPlan.nRho, self.radonPlan.nTheta], dtype=np.float32)
+    #self.dx2rnd = np.zeros([self.radonPlan.nRho, self.radonPlan.nTheta], dtype=np.float32)
+    #self.dy2rnd = np.zeros([self.radonPlan.nRho, self.radonPlan.nTheta], dtype=np.float32)
     self.patdim = self.radonPlan.imDim
 
   def calccorrection(
@@ -89,11 +94,70 @@ class gnomoic_correction():
     if PC is not None:
       self.PC = PC
 
+    pctemp = np.asarray(self.PC, dtype=np.float32).copy()
+    shapet = pctemp.shape
+    ven = self.vendor
+    if ven != 'EMSOFT':
+      t = pctemp
+    else:  # EMSOFT pc to ebsdindex needs four numbers for PC
+      t = pctemp[0:3]
+      t[2] /= pctemp[3]  # normalize by pixel size
 
-    nx = self.imDim[1]
-    ny = self.imDim[0]
-    x = np.arange(nx, dtype=float)
-    x = (np.broadcast_to(x.reshape(1, nx), (ny, nx))).ravel()
-    y = np.arange(ny, dtype=float)
-    y = (np.broadcast_to(y, (nx, ny)).T).ravel()
+    dimf = np.array(self.patdim, dtype=np.float32)
+    if ven in ['EDAX']:
+      t *= np.array([dimf[1], dimf[0], np.min(dimf[0:2])])
+      t[ 1] = dimf[0] - t[1]
+    if ven in ['OXFORD']:
+      t *= np.array([dimf[1], dimf[1], dimf[1]])
+      t[ 1] = dimf[0] - t[1]
+    if ven == 'EMSOFT':
+      t[0] *= -1.0
+      t += np.array([dimf[1] / 2.0, dimf[0] / 2.0, 0.0])
+      t[1] = dimf[0] - t[1]
+    if ven in ['KIKUCHIPY', 'BRUKER']:
+      t *= np.array([dimf[1], dimf[0], dimf[0]])
 
+
+    print(t)
+    nx = self.patdim[1]
+    ny = self.patdim[0]
+    x = np.arange(nx, dtype=float) - t[0]
+    x = (np.broadcast_to(x.reshape(1, nx), (ny, nx)))
+    y = np.arange(ny, dtype=float) - t[1]
+    y = (np.broadcast_to(y, (nx, ny)).T)
+
+    x2 = x*x
+    y2 = y*y
+
+
+
+    rdnx2 = np.squeeze(self.radonPlan.radon_faster(x2, fixArtifacts = True))
+
+    rdncos = np.broadcast_to(
+       np.abs(np.cos(self.radonPlan.theta*np.pi/180.)),
+     (self.radonPlan.nRho, self.radonPlan.nTheta))
+    rdnx2 *= rdncos
+
+    rdny2 = np.squeeze(self.radonPlan.radon_faster(y2, fixArtifacts = True))
+    rdnsin = np.broadcast_to(
+      (np.sin(self.radonPlan.theta * np.pi / 180.)),
+      (self.radonPlan.nRho, self.radonPlan.nTheta))
+    rdny2 *= rdnsin
+
+    rdncorrect = np.sqrt(rdnx2 + rdny2)
+    self.rdncorrect = rdncorrect
+
+    #return rdncorrect, rdnx2, rdny2, rdncos, rdnsin
+
+  def applycorrection(
+          self,
+          bnddata,
+          rsigma,
+          **kwargs
+    ):
+
+    for bnd in bnddata:
+      fwhm = bnd['width']
+      #sigma12 = sqrt(sigma1^2 + sigma2^2)
+      # FWHM = 2 * sqrt(2*ln(2)) * sigma
+      pass
