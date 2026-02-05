@@ -109,18 +109,9 @@ class BandDetect(band_detect.BandDetect):
                                                                        fixArtifacts=False, background=self.backgroundsub,
                                                                        returnBuff=True, clparams=clparams)
 
-        #rdnNorm, clparams = self.rdn_mask(rdnNorm, clparams=clparams, returnBuff=False)
-
-        #if (self.EDAXIQ == True): # I think EDAX actually uses the convolved radon for IQ
-          #nTp = self.nTheta + 2 * self.padding[1]
-          #nRp = self.nRho + 2 * self.padding[0]
-          #nImCL = int(rdnNorm_gpu.size/(nTp*nRp*4))
-          #rdnNorm_nocov = np.zeros((nRp,nTp,nImCL),dtype=np.float32)
-          #cl.enqueue_copy(clparams.queue,rdnNorm_nocov,rdnNorm,is_blocking=True)
-
         rdntime += timer() - tic1
         tic1 = timer()
-        rdnConv, imageave, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True, separableKernel=True)
+        rdnConv, imageminavemax, clparams = self.rdn_convCL2(rdnNorm, clparams=clparams, returnBuff=True, separableKernel=True)
         rdnNorm.release()
 
         convtime += timer()-tic1
@@ -131,9 +122,16 @@ class BandDetect(band_detect.BandDetect):
 
         bandDataChunk = self.band_labelCL(rdnConv, lMaxRdn, clparams=clparams)
         lMaxRdn.release()
+
+
         bandData['max'][chnk[0]:chnk[1]] = bandDataChunk[0][0:nPatsChunk, :]
-        bandData['normmax'][chnk[0]:chnk[1]] = (bandDataChunk[0][0:nPatsChunk, :] /
-                                                  imageave[0:nPatsChunk].reshape(nPatsChunk, 1).clip(1e-7))
+        #bandData['normmax'][chnk[0]:chnk[1]] = (bandDataChunk[0][0:nPatsChunk, :] /
+        #                                          imageave[0:nPatsChunk].reshape(nPatsChunk, 1).clip(1e-7))
+        bndmx = bandDataChunk[0][0:nPatsChunk, :]
+        bndmx -= imageminavemax[0][0:nPatsChunk].reshape(nPatsChunk, 1)
+        bndmx /= (imageminavemax[1][0:nPatsChunk] - imageminavemax[0][0:nPatsChunk]).reshape(nPatsChunk, 1).clip(1e-7)
+        bandData['normmax'][chnk[0]:chnk[1]] = bndmx
+
         bandData['avemax'][chnk[0]:chnk[1]] = bandDataChunk[1][0:nPatsChunk, :]
         bandData['maxloc'][chnk[0]:chnk[1]] = bandDataChunk[2][0:nPatsChunk, :, :]
         bandData['aveloc'][chnk[0]:chnk[1]] = bandDataChunk[3][0:nPatsChunk, :, :]
@@ -398,23 +396,6 @@ class BandDetect(band_detect.BandDetect):
 
     rdnConv_gpu = cl.Buffer(ctx,mf.WRITE_ONLY ,size=resultConv.nbytes)
 
-    # maskrnd = np.zeros((self.nRho + 2 * self.padding[0], self.nTheta + 2 * self.padding[1]), dtype=np.ubyte)
-    # maskrnd[self.padding[0]:-self.padding[0], self.padding[1]:-self.padding[1]] = self.rhomask1
-    #
-    # maskrnd = maskrnd.astype(np.ubyte)
-    # maskrnd_gpu = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=maskrnd)
-    #
-    # prg.maskrdn(queue, (np.uint32(nT), np.uint32(nR)), None, rdn_gpu, maskrnd_gpu,
-    #             np.uint64(shp[1]), np.uint64(nImChunk),
-    #             np.uint64(self.padding[1]), np.uint64(self.padding[0]))
-
-    # # pad out the radon buffers
-    # prg.radonPadTheta(queue,(shp[2],shp[0],1),None,rdn_gpu,
-    #                 np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[1]))
-
-    #prg.radonPadRho2(queue,(shp[2],shp[1],1),None,rdn_gpu,
-    #                  np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(self.padding[0]+1))
-
     clkern['radonPadRho2'](queue, (shp[2], shp[1], 1), None, rdn_gpu,
                  np.uint64(shp[0]),np.uint64(shp[1]),np.uint64(shp[0]//2-1))
 
@@ -439,8 +420,8 @@ class BandDetect(band_detect.BandDetect):
 
       kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
       pad = kshp
-      k0x = np.require(self.kernel[0, np.int64(kshp[0] / 2), :], requirements=['C', 'A', 'W', 'O'], dtype=np.float32)
-      k0x *= 1.0 / k0x.sum()
+      k0x = np.require(self.kernel[0, np.int64(kshp[0] // 2), :], requirements=['C', 'A', 'W', 'O'], dtype=np.float32)
+      #k0x *= 1.0 / k0x.sum()
       k0x = (k0x[...,:]).reshape(1,kshp[1])
 
 
@@ -453,8 +434,8 @@ class BandDetect(band_detect.BandDetect):
                           np.int32(kshp[1]),np.int32(kshp[0]),np.int32(pad[1]),np.int32(pad[0]),tempConvbuff)
 
       kshp = np.asarray(self.kernel[0,:,:].shape,dtype=np.int32)
-      k0y = np.require(self.kernel[0, :, np.int32(kshp[1] / 2)], requirements=['C', 'A', 'W', 'O'], dtype=np.float32)
-      k0y *= 1.0 / k0y.sum()
+      k0y = np.require(self.kernel[0, :, np.int32(kshp[1] // 2)], requirements=['C', 'A', 'W', 'O'], dtype=np.float32)
+      #k0y *= 1.0 / k0y.sum()
       k0y = (k0y[...,:]).reshape(kshp[0],1)
       kshp = np.asarray(k0y.shape,dtype=np.int32)
 
@@ -465,23 +446,31 @@ class BandDetect(band_detect.BandDetect):
 
     # for each radon, get the min value
     mns = cl.Buffer(ctx,mf.READ_WRITE,size=nImCL * 4)
+    mxs = cl.Buffer(ctx,mf.READ_WRITE,size=nImCL * 4)
     ave = cl.Buffer(ctx, mf.READ_WRITE, size=nImCL * 4)
 
-    clkern['imageMinAve'](queue,(nImChunk,1,1),None,
-                 rdnConv_gpu, mns, ave, np.uint32(shp[1]),np.uint32(shp[0]),
+    clkern['imageMinAveMax'](queue,(nImChunk,1,1),None,
+                 rdnConv_gpu, mns, mxs, ave, np.uint32(shp[1]),np.uint32(shp[0]),
                  np.uint32(self.padding[1]),np.uint32(self.padding[0]))
     # subtract the min value, clipping to 0.
-    clkern['imageSubMinNormWClip'](queue,(np.int32(shp[1]), np.int32(shp[0]),nImChunk),None,
-                     rdnConv_gpu,mns, ave, np.uint32(shp[1]),np.uint32(shp[0]),
-                     np.uint32(0),np.uint32(0))
+    #clkern['imageSubMinNormWClip'](queue,(np.int32(shp[1]), np.int32(shp[0]),nImChunk),None,
+    #                 rdnConv_gpu,mns, ave, np.uint32(shp[1]),np.uint32(shp[0]),
+    #                 np.uint32(0),np.uint32(0))
 
 
 
     #rdn_gpu.release()
-    mns.release()
+    #mns.release()
 
-    imageave = np.ones((nImCL), dtype=np.float32)
+    imageave = np.zeros((nImCL), dtype=np.float32)
+    imagemin = np.zeros((nImCL), dtype=np.float32)
+    imagemax = np.zeros((nImCL), dtype=np.float32)
     cl.enqueue_copy(queue, imageave, ave, is_blocking=True)
+    cl.enqueue_copy(queue, imagemin, mns, is_blocking=True)
+    cl.enqueue_copy(queue, imagemax, mxs, is_blocking=True)
+    ave.release()
+    mns.release()
+    mxs.release()
 
     if kern_gpu is None:
       kern_gpu_y.release()
@@ -496,9 +485,9 @@ class BandDetect(band_detect.BandDetect):
       cl.enqueue_copy(queue, resultConv, rdnConv_gpu, is_blocking=True)
       rdnConv_gpu.release()
       rdnConv_gpu = None
-      return resultConv, imageave, clparams
+      return resultConv, [imagemin, imageave, imagemax], clparams
     else:
-      return rdnConv_gpu, imageave, clparams
+      return rdnConv_gpu, [imagemin, imageave, imagemax], clparams
 
 
 
