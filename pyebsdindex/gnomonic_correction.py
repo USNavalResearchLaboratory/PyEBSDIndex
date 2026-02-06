@@ -117,8 +117,8 @@ class GnomoicCorrection():
     if ven in ['KIKUCHIPY', 'BRUKER']:
       t *= np.array([dimf[1], dimf[0], dimf[0]])
 
+    self.PCpx = t
 
-    print(t)
     nx = self.patdim[1]
     ny = self.patdim[0]
     x = np.arange(nx, dtype=float) - t[0]
@@ -153,11 +153,33 @@ class GnomoicCorrection():
           self,
           bnddata,
           rsigma,
+          convolfactor = 1.0537092,
           **kwargs
     ):
 
-    for bnd in bnddata:
-      fwhm = bnd['width']
-      #sigma12 = sqrt(sigma1^2 + sigma2^2)
-      # FWHM = 2 * sqrt(2*ln(2)) * sigma
-      pass
+    for indx in range(bnddata.shape[1]):
+      bnd = bnddata[0,indx]
+      if bnd['valid'] > 0:
+        fwhm = bnd['width']
+        # FWHM_measured = sqrt((c*rsigma)^2 + (c*bndsigma)^2) ; c = 1.0537
+        # FWHM_measured = sqrt((c*rsigma)^2 + (FWHM_band)^2)
+        bdnwith_2 = np.sqrt(fwhm**2 - (convolfactor * rsigma)**2)
+
+        theta = bnd['maxloc'].astype(int)[1]
+        rho = bnd['maxloc'].astype(int)[0]
+
+        d = self.rdncorrect[rho,theta]
+
+        phi1 = np.arctan((d+bdnwith_2) / self.PCpx[2])
+        phi2 = np.arctan((d-bdnwith_2)/ self.PCpx[2])
+        phi = (phi1 + phi2)*0.5
+        shft = self.PCpx[2] * np.tan(phi) - d
+        #print(bdnwith_2, d, phi1, phi2, phi, shft)
+        rho_0 =  bnd['rho']
+
+        sign = 1.0 if rho_0 >= 0 else -1.0
+        rho_1 = rho_0 + sign*shft
+        #print(rho_1)
+        bnd['rho'] = rho_1
+        bnddata[0, indx] = bnd
+    return bnddata

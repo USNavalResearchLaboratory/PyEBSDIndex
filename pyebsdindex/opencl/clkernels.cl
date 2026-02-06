@@ -777,7 +777,7 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
 
       // this will assume a gaussian peak and provide FWHM
       a = (log(imValyp1) + log(imValym1)) * 0.5 - log(w);
-      if (a > 1.e-8){
+      if (a < -1.e-8){
           width[z*lnmax + i] = 2.0 * sqrt(log(2.0) / (-1.0*a));
       } else{
         width[z*lnmax + i] = 0.0;
