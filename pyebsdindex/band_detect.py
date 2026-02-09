@@ -687,7 +687,8 @@ class BandDetect():
 
           # taylor expansion quadratic
           nn = rdnConv[r - 1:r + 2,c - 1:c + 2,q].copy()
-          sumnn = np.clip(np.sum(nn), 1.e-12)
+          sumnn = np.sum(nn)
+          sumnn = sumnn if  sumnn > 1e-12 else 1e-12
           nn /= sumnn
           bandData_avemax[q,i] = (sumnn / nnN) #/ averdnpat
           # rnn = np.sum(nn * (np.float32(r) + nnr))
