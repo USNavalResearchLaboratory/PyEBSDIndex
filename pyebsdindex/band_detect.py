@@ -625,7 +625,7 @@ class BandDetect():
     return bandData
 
   @staticmethod
-  #@numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
+  @numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
   def band_label_numba(nBands,nPats,nRho,nTheta,rdnConv,rdnPad,lMaxRdn):
     nB = np.int64(nBands)
     nP = np.int64(nPats)
@@ -687,7 +687,7 @@ class BandDetect():
 
           # taylor expansion quadratic
           nn = rdnConv[r - 1:r + 2,c - 1:c + 2,q].copy()
-          sumnn = (np.sum(nn) + 1.e-12)
+          sumnn = np.clip(np.sum(nn), 1.e-12)
           nn /= sumnn
           bandData_avemax[q,i] = (sumnn / nnN) #/ averdnpat
           # rnn = np.sum(nn * (np.float32(r) + nnr))
