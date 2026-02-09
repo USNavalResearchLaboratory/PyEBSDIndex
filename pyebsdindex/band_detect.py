@@ -625,7 +625,7 @@ class BandDetect():
     return bandData
 
   @staticmethod
-  @numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
+  #@numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
   def band_label_numba(nBands,nPats,nRho,nTheta,rdnConv,rdnPad,lMaxRdn):
     nB = np.int64(nBands)
     nP = np.int64(nPats)
