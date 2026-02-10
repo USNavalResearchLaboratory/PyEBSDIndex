@@ -157,6 +157,9 @@ class GnomoicCorrection():
           **kwargs
     ):
 
+    PCpx = self.PCpx
+    print('PCpx: ', PCpx)
+    bnddata = bnddata.copy()
     for indx in range(bnddata.shape[1]):
       bnd = bnddata[0,indx]
       if bnd['valid'] > 0:
@@ -170,14 +173,18 @@ class GnomoicCorrection():
 
         d = self.rdncorrect[rho,theta]
 
-        phi1 = np.arctan((d+bdnwith_2) / self.PCpx[2])
-        phi2 = np.arctan((d-bdnwith_2)/ self.PCpx[2])
+        phi1 = np.arctan((d+bdnwith_2) / PCpx[2])
+        phi2 = np.arctan((d-bdnwith_2)/ PCpx[2])
         phi = (phi1 + phi2)*0.5
         shft = self.PCpx[2] * np.tan(phi) - d
         #print(bdnwith_2, d, phi1, phi2, phi, shft)
         rho_0 =  bnd['rho']
-
-        sign = 1.0 if rho_0 >= 0 else -1.0
+        theta = bnd['theta']
+        # this is the adjusted rho that is centered on the pattern center, not the detector center.
+        dx = PCpx[0] - self.patdim[1] * 0.5
+        dy = PCpx[1] - self.patdim[0] * 0.5
+        rho_prime = rho_0 - (dx * np.cos(theta) + dy * np.sin(theta))
+        sign = 1.0 if rho_prime >= 0 else -1.0 # this then gives the correct direction.
         rho_1 = rho_0 + sign*shft
         #print(rho_1)
         bnd['rho'] = rho_1
