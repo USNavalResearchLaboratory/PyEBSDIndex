@@ -77,9 +77,11 @@ class BandDetect(band_detect.BandDetect):
       if patterns.dtype.kind =='f':
         mxp = patterns.max()
         mnp = patterns.min()
+        scale = (mxp - mnp) 
+        scale = scale if scale > 1e-12 else 1.0
         patterns -= mnp
-        patterns *= (2**16-2.0)/(mxp - mnp)
-        pscale[:] = np.array([mnp,(mxp - mnp) ])
+        patterns *= (2**16-2.0)/(scale)
+        pscale[:] = np.array([mnp, scale ])
         patterns = patterns.astype(np.uint16)
 
 
@@ -178,47 +180,13 @@ class BandDetect(band_detect.BandDetect):
         print('Total Band Find Time:',tottime)
       if verbose > 1:
         self._display_radon_pattern(rdnConvarray, bandData, patterns)
-        # if len(rdnConvarray.shape) == 3:
-        #   im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1], -1]
-        # else:
-        #   im2show = rdnConvarray[self.padding[0]:-self.padding[0],self.padding[1]:-self.padding[1]]
-        #
-        # rhoMaskTrim = np.int32(im2show.shape[0] * self.rhoMaskFrac)
-        # mean = np.mean(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
-        # stdv = np.std(im2show[rhoMaskTrim:-rhoMaskTrim, 1:-2])
-        # im2show -= mean
-        # im2show /= stdv
-        # im2show = im2show.clip(-4, None)
-        # im2show += 6
-        # im2show[0:rhoMaskTrim,:] = 0
-        # im2show[-rhoMaskTrim:,:] = 0
-        #
-        # im2show = np.fliplr(im2show)
-        # fig = plt.figure(figsize=(12, 4))
-        # subrdn = fig.add_subplot(121, xlim=(0, 180), ylim=(-self.rhoMax, self.rhoMax))
-        # subrdn.imshow(
-        #     im2show,
-        #     cmap='gray',
-        #     extent=[0, 180, -self.rhoMax, self.rhoMax],
-        #     interpolation='none',
-        #     zorder=1,
-        #     aspect='auto'
-        # )
-        # width = bandData['width'][-1, :]
-        # width /= width.min()
-        # width *= 2.0
-        # xplt = np.squeeze(180.0 - np.interp(bandData['aveloc'][-1,:,1]+0.5, np.arange(self.radonPlan.nTheta), self.radonPlan.theta))
-        # yplt = np.squeeze( -1.0 * np.interp(bandData['aveloc'][-1,:,0]-0.5, np.arange(self.radonPlan.nRho), self.radonPlan.rho))
-        #
-        # subrdn.scatter(y=yplt, x=xplt, c='r', s=width, zorder=2)
-        #
-        # for pt in range(self.nBands):
-        #   subrdn.annotate(str(pt + 1), np.squeeze([xplt[pt] + 4, yplt[pt]]), color='yellow')
-        # #subrdn.xlim(0,180)
-        # #subrdn.ylim(-self.rhoMax, self.rhoMax)
-        # subpat = fig.add_subplot(122)
-        # subpat.imshow(patterns[-1, :, :], cmap='gray')
 
+
+      theta = np.pi - np.interp(bandData['aveloc'][:, :, 1], np.arange(self.radonPlan.nTheta),
+                                self.radonPlan.theta) / RADEG
+      rho = -1.0 * np.interp(bandData['aveloc'][:, :, 0], np.arange(self.radonPlan.nRho), self.radonPlan.rho)
+      bandData['theta'][:] = theta
+      bandData['rho'][:] = rho
     except Exception as e: # something went wrong - try the CPU
       print(e)
       bandData = band_detect.BandDetect.find_bands(self, patternsIn, verbose=verbose, chunksize=-1, **kwargs)

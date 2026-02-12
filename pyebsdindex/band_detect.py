@@ -49,6 +49,7 @@ import scipy.optimize as scipyopt
 
 from pyebsdindex import radon_fast
 
+
 tempdir = PurePath(Path.home())
 #tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
 #tempdir = tempdir.joinpath('numbacache')
@@ -105,7 +106,9 @@ class BandDetect():
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), ('normmax', np.float32),
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),
                     ('pqmax', np.float32), ('width', np.float32), ('theta', np.float32), ('rho', np.float32),
-                    ('valid', np.int8),('band_match_index', np.int64, (self.nPhases, ))])
+                    ('valid', np.int8),
+                    ('band_match_index', np.int64, (self.nPhases, )),
+                    ('bandfit', np.float64,(self.nPhases,))])
 
 
     if (patterns is None) and (patDim is None):
@@ -285,6 +288,8 @@ class BandDetect():
     if nBands is not None:
       self.nBands = nBands
 
+
+
   def collect_background(self, fileobj = None, patsIn = None, nsample = None, method = 'randomStride', sigma=None):
 
     back = None # default value
@@ -446,6 +451,9 @@ class BandDetect():
       bandDataChunk['normmax'] = bndnorm
       #bandDataChunk['normmax'] /= imageave.clip(1e-7).reshape(chnk[1]-chnk[0], 1)
 
+
+
+
       bandData[chnk[0]:chnk[1]] = bandDataChunk
 
       if (verbose > 1) and (chnk[1] == nPats): # need to pull the radonconv off the gpu
@@ -499,6 +507,10 @@ class BandDetect():
       # plt.xlim(0,180)
       # plt.ylim(-self.rhoMax, self.rhoMax)
 
+    theta = np.pi - np.interp(bandData['aveloc'][:, :, 1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta) / RADEG
+    rho = -1.0 * np.interp(bandData['aveloc'][:, :, 0], np.arange(self.radonPlan.nRho), self.radonPlan.rho)
+    bandData['theta'][:] = theta
+    bandData['rho'][:] = rho
 
     return bandData
 
@@ -756,7 +768,7 @@ class BandDetect():
       zorder=1,
       aspect='auto'
     )
-    width = (bandData['width'][-1, :]).clip(1e-4)
+    width = (bandData['width'][-1, :]).clip(1)
     width /= (width.min())
     
     width *= 2.0
