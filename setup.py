@@ -29,7 +29,7 @@ extra_feature_requirements = {
         "pyopencl",
     ],
     "parallel": [
-        "ray[default]                   <= 2.54",
+        "ray[default]                   < 2.53",
     #    "pydantic                       < 2",
     ]
 }
