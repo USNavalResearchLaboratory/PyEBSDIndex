@@ -181,6 +181,8 @@ class BandDetect(band_detect.BandDetect):
       if verbose > 1:
         self._display_radon_pattern(rdnConvarray, bandData, patterns)
 
+      # This translation from the Radon to theta and rho assumes that the first pixel read
+      # in off the detector is in the top left corner.
 
       theta = np.pi - np.interp(bandData['aveloc'][:, :, 1], np.arange(self.radonPlan.nTheta),
                                 self.radonPlan.theta) / RADEG

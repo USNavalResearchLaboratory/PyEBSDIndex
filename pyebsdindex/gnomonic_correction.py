@@ -167,42 +167,108 @@ class GnomoicCorrection():
     ):
 
     PCpx = self.PCpx
+    valid = bnddata['valid']
+    npat = bnddata.shape[0]
+    nband = bnddata.shape[1]
+    width = bnddata['width']
+    maxloc = bnddata['maxloc']
+    theta = bnddata['theta']
+    rho = bnddata['rho']
+    patdim = self.patdim
+    rdncorrect = self.rdncorrect
+    #print(PCpx)
+    bdndata_out = bnddata.copy()
+    rho_new = self.__correction_loops_nb(rdncorrect, npat, nband,
+                            valid, width, maxloc, theta, rho, PCpx, patdim,
+                            convolfactor, rsigma)
+
+    bdndata_out['rho'] = rho_new
+
     #print('PCpx: ', PCpx)
-    for j in range(bnddata.shape[0]):
-      bnddataj = bnddata[j].copy()
-      for indx in range(bnddata.shape[1]):
-        bnd = bnddataj[indx]
-        if bnd['valid'] > 0:
-          fwhm = bnd['width']
-          # FWHM_measured = sqrt((c*rsigma)^2 + (c*bndsigma)^2) ; c = 1.0537
-          # FWHM_measured = sqrt((c*rsigma)^2 + (FWHM_band)^2)
-          bdnwith_2 = np.sqrt( np.clip(fwhm**2 - (convolfactor * rsigma)**2,0, None) )
-          #print(bdnwith_2)
+    # for j in range(bnddata.shape[0]):
+    #   bnddataj = bnddata[j].copy()
+    #   for indx in range(bnddata.shape[1]):
+    #     bnd = bnddataj[indx]
+    #     if bnd['valid'] > 0:
+    #       fwhm = bnd['width']
+    #       # FWHM_measured = sqrt((c*rsigma)^2 + (c*bndsigma)^2) ; c = 1.0537
+    #       # FWHM_measured = sqrt((c*rsigma)^2 + (FWHM_band)^2)
+    #       bdnwith_2 = np.sqrt( np.clip(fwhm**2 - (convolfactor * rsigma)**2,0, None) )
+    #       #print(bdnwith_2)
+    #
+    #
+    #       theta = bnd['maxloc'].astype(int)[1]
+    #       rho = bnd['maxloc'].astype(int)[0]
+    #
+    #       d = self.rdncorrect[rho,theta]
+    #
+    #       phi1 = np.arctan((d+bdnwith_2) / PCpx[2])
+    #       phi2 = np.arctan((d-bdnwith_2)/ PCpx[2])
+    #       phi = (phi1 + phi2)*0.5
+    #       shft = np.abs(self.PCpx[2] * np.tan(phi) - d)
+    #       #print(shft)
+    #       #print(bdnwith_2, d, phi1, phi2, phi, shft)
+    #       rho_0 =  bnd['rho']
+    #       theta = bnd['theta']
+    #       # this is the adjusted rho that is centered on the pattern center, not the detector center.
+    #       dx = PCpx[0] - self.patdim[1] * 0.5
+    #       dy = PCpx[1] - self.patdim[0] * 0.5
+    #       rho_prime = rho_0 - (dx * np.cos(theta) + dy * np.sin(theta))
+    #
+    #       sign = 1.0 if rho_prime >= 0 else -1.0 # this then gives the correct direction.
+    #       rho_1 = rho_0 + sign*shft
+    #
+    #       bnd['rho'] = rho_1
+    #       bnddataj[indx] = bnd
+    #       #print('______')
+    #     bnddata[j] = bnddataj
+    return bdndata_out
+
+  @staticmethod
+  @numba.jit(nopython=True, cache=True, fastmath=True, parallel=True)
+  def __correction_loops_nb(rdncorrect, npat, nband,
+                            valid, width, maxloc, theta, rho, PCpx, patdim,
+                            convolfactor, rsigma):
+
+      for j in numba.prange(npat):
+        #bnddataj = bnddata[j].copy()
+        for i in range(nband):
+          if valid[j,i] > 0:
+            fwhm = width[j,i]
+            # FWHM_measured = sqrt((c*rsigma)^2 + (c*bndsigma)^2) ; c = 1.0537
+            # FWHM_measured = sqrt((c*rsigma)^2 + (FWHM_band)^2)
+            a = fwhm ** 2 - (convolfactor * rsigma) ** 2
+            bdnwith_2 = np.sqrt(a) if a > 0 else 0.0
+
+            rho_indx = int(maxloc[j,i,0])
+            theta_indx = int(maxloc[j, i,1])
+
+            rho_ji = rho[j, i]
 
 
-          theta = bnd['maxloc'].astype(int)[1]
-          rho = bnd['maxloc'].astype(int)[0]
+            theta_ji = theta[j, i]
+            # this is the adjusted rho that is centered on the pattern center, not the detector center.
+            dx =  (PCpx[0] - patdim[1] * 0.5)
+            dy =  (PCpx[1] - patdim[0] * 0.5)
+            rho_prime = rho_ji - (dx * np.cos(theta_ji) + dy * np.sin(theta_ji))
 
-          d = self.rdncorrect[rho,theta]
 
-          phi1 = np.arctan((d+bdnwith_2) / PCpx[2])
-          phi2 = np.arctan((d-bdnwith_2)/ PCpx[2])
-          phi = (phi1 + phi2)*0.5
-          shft = np.abs(self.PCpx[2] * np.tan(phi) - d)
-          #print(shft)
-          #print(bdnwith_2, d, phi1, phi2, phi, shft)
-          rho_0 =  bnd['rho']
-          theta = bnd['theta']
-          # this is the adjusted rho that is centered on the pattern center, not the detector center.
-          dx = PCpx[0] - self.patdim[1] * 0.5
-          dy = PCpx[1] - self.patdim[0] * 0.5
-          rho_prime = rho_0 - (dx * np.cos(theta) + dy * np.sin(theta))
 
-          sign = 1.0 if rho_prime >= 0 else -1.0 # this then gives the correct direction.
-          rho_1 = rho_0 - sign*shft
+            d = np.abs(rho_prime) #rdncorrect[rho_indx, theta_indx]
 
-          bnd['rho'] = rho_1
-          bnddataj[indx] = bnd
-          #print('______')
-        bnddata[j] = bnddataj
-    return bnddata
+            phi1 = np.arctan((d + bdnwith_2) / PCpx[2])
+            phi2 = np.arctan((d - bdnwith_2) / PCpx[2])
+            phi = (phi1 + phi2) * 0.5
+            shft = np.abs(PCpx[2] * np.tan(phi) - d)
+
+            # print(shft)
+            # print(bdnwith_2, d, phi1, phi2, phi, shft)
+            if shft < 1.0:
+              sign = 1.0 if rho_prime >= 0 else -1.0  # this then gives the correct direction.
+              rho_1 = rho_ji - sign * shft
+            else:
+              rho_1 = rho_ji
+            rho[j,i] = rho_1
+            
+
+      return rho

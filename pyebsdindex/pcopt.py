@@ -42,7 +42,46 @@ __all__ = [
 RADEG = 180.0 / np.pi
 
 
-#def _optfunction(PC_i, indexer, banddat):
+def __optmetric(banddat, indexdata):
+    npoints = banddat.shape[0]
+    nbands = banddat.shape[1]
+    fit = indexdata[-1]['fit']
+    iq = np.array(indexdata[-1]['iq'])
+    # if iq.max() > 1.5:
+    #    iq = np.clip(iq - 1.5, 0.0, None)
+
+    # print(iq)
+    nmatch = indexdata[-1]['nmatch']
+    average_fit = fit + 1.0 * (nbands - nmatch)
+    # average_fit = -1.0*(3.0-fit)*nmatch
+    whgood = np.nonzero(fit < 90.0)
+    # average_fit *= iq
+    n_averages = len(whgood[0])
+
+    if n_averages < 0.9:
+        average_fit = 1000
+    else:
+        iq = iq[whgood[0]]  # weight averages by the iq value
+        if iq.max() > 1.5:
+            iq -= 1.0
+            iq = np.clip(iq, 0.0001, None)
+        iq /= iq.max()
+        average_fit = np.sum(average_fit[whgood[0]] * iq)
+        average_fit /= sum(iq)
+        average_fit += (4.0 * (nbands + 1) * (npoints - n_averages)) / n_averages
+    return average_fit
+
+def _optfunction_planar(PC_i, indexer=None, banddat=None, xylocation=None):
+    PC = np.atleast_2d(PC_i)
+    result = np.zeros(PC.shape[0])
+    for q in range(PC.shape[0]):
+        PC_in = np.zeros(3)
+        PC_in[0] = PC[q,0] + PC[q,3]*xylocation[q, 0] + PC[q,4]*xylocation[q, 1]
+        PC_in[1] = PC[q, 1] + PC[q, 5] * xylocation[q, 0] + PC[q, 6] * xylocation[q, 1]
+        PC_in[2] = PC[q,2]+ PC[q, 7] * xylocation[q, 0] + PC[q, 8] * xylocation[q, 1]
+        result[q] = _optfunction(PC_in, indexer=indexer, banddat=banddat[q].reshape(1,-1))
+
+
 def _optfunction(PC_i, indexer=None, banddat=None):
     tic = timer()
     PC = np.atleast_2d(PC_i)
@@ -54,44 +93,42 @@ def _optfunction(PC_i, indexer=None, banddat=None):
         bandnorm = indexer.bandDetectPlan.radonPlan.radon2pole(
             banddat, PC=PC[q,:], vendor=indexer.vendor
         )
+        indexdata, banddat = indexer._indexbandsphase(banddat, bandnorm)
         #print(timer() - tic)
-        npoints = banddat.shape[0]
-        #n_averages = 0
-        #average_fit = 0
-        #nbands_fit = 0
-        #phase = indexer.phaseLib[0]
-        nbands = indexer.bandDetectPlan.nBands
-        indexdata, banddat = indexer._indexbandsphase( banddat, bandnorm)
+        #npoints = banddat.shape[0]
 
-
-
-        fit = indexdata[-1]['fit']
-        iq = np.array(indexdata[-1]['iq'])
-        #if iq.max() > 1.5:
-        #    iq = np.clip(iq - 1.5, 0.0, None)
-
-        #print(iq)
-        nmatch = indexdata[-1]['nmatch']
-        average_fit = fit + 1.0*(nbands - nmatch)
-        #average_fit = -1.0*(3.0-fit)*nmatch
-        whgood = np.nonzero(fit < 90.0)
-        #average_fit *= iq
-        n_averages = len(whgood[0])
-
-
-        if n_averages < 0.9:
-            average_fit = 1000
-        else:
-            iq = iq[whgood[0]] # weight averages by the iq value
-            if iq.max() > 1.5:
-                iq -= 1.0
-                iq = np.clip(iq, 0.0001, None)
-            iq /= iq.max()
-            average_fit = np.sum(average_fit[whgood[0]]*iq)
-            average_fit /= sum(iq)
-            average_fit += (4.0*(nbands+1)*(npoints - n_averages))/n_averages
-            #average_fit /=  npoints
-
+        #nbands = indexer.bandDetectPlan.nBands
+        #
+        #
+        #
+        #
+        # fit = indexdata[-1]['fit']
+        # iq = np.array(indexdata[-1]['iq'])
+        # #if iq.max() > 1.5:
+        # #    iq = np.clip(iq - 1.5, 0.0, None)
+        #
+        # #print(iq)
+        # nmatch = indexdata[-1]['nmatch']
+        # average_fit = fit + 1.0*(nbands - nmatch)
+        # #average_fit = -1.0*(3.0-fit)*nmatch
+        # whgood = np.nonzero(fit < 90.0)
+        # #average_fit *= iq
+        # n_averages = len(whgood[0])
+        #
+        #
+        # if n_averages < 0.9:
+        #     average_fit = 1000
+        # else:
+        #     iq = iq[whgood[0]] # weight averages by the iq value
+        #     if iq.max() > 1.5:
+        #         iq -= 1.0
+        #         iq = np.clip(iq, 0.0001, None)
+        #     iq /= iq.max()
+        #     average_fit = np.sum(average_fit[whgood[0]]*iq)
+        #     average_fit /= sum(iq)
+        #     average_fit += (4.0*(nbands+1)*(npoints - n_averages))/n_averages
+        #     #average_fit /=  npoints
+        average_fit =  __optmetric(banddat, indexdata)
         result[q] = average_fit
     #print(timer()-tic)
     return result
@@ -265,7 +302,9 @@ def optimize_pso(
     numpy.ndarray
         Optimized PC.
     """
-    banddat = indexer.bandDetectPlan.find_bands(pats)
+    #banddat = indexer.bandDetectPlan.find_bands(pats)
+    banddat, bandnorm = indexer._detectbands(pats, indexer.PC)
+    #print(bandnorm.shape)
     npoints, nbands = banddat.shape[:2]
     if pswarmpar is None:
         #pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}
@@ -374,6 +413,140 @@ def optimize_pso(
         return PCoutRet
     else:
         return PCoutRet, costout
+
+def optimize_planar_pso(
+    pats,
+    xylocations,
+    indexer =None,
+    PC0=None,
+    search_limit=0.2,
+    early_exit = 0.0001,
+    nswarmparticles=30,
+    pswarmpar=None,
+    niter=50,
+    return_cost=False,
+    verbose=1
+):
+    """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
+    of the :attr:`indexer.vendor` with particle swarms.
+
+    Parameters
+    ----------
+    pats : numpy.ndarray
+        EBSD pattern(s), of shape
+        ``(n detector rows, n detector columns)``,
+        or ``(n patterns, n detector rows, n detector columns)``.
+    indexer : pyebsdindex.ebsd_index.EBSDIndexer
+        EBSD indexer instance storing all relevant parameters for band
+        detection.
+    PC0 : list, optional
+        Initial guess of PC. If not given, :attr:`indexer.PC` is used.
+        If :attr:`indexer.vendor` is ``"EMSOFT"``, the PC must be four
+        numbers, the final number being the pixel size.
+    search_limit : float, optional
+        Default is 0.2 for all PC values, and sets the +/- limit for the
+        optimization search.
+    early_exit: float, optional
+        Default is 0.0001 for all PC values, and sets a value for which
+        the optimum is considered converged before the number of iterations
+        is reached.  The optimiztion will exit early if the velocity and distance
+        of all the swarm particles is less than the early_exit value.
+    nswarmparticles : int, optional
+        Number of particles in a swarm. Default is 30.
+    pswarmpar : dict, optional
+        Particle swarm parameters "c1", "c2", and "w" with defaults 3.5,
+        3.5, and 0.8, respectively.
+    niter : int, optional
+        Number of iterations. Default is 50.
+    return_costs: bool, optional
+        Set to True to return the cost value as well as the optimum fit PC.
+    verbose : int, optional
+        Whether to print the parameters and progress of the
+        optimization (>= 1) or not (< 1). Default is to print.
+
+    Returns
+    -------
+    numpy.ndarray
+        Optimized PC.
+    """
+    #banddat = indexer.bandDetectPlan.find_bands(pats)
+    banddat, bandnorm = indexer._detectbands(pats, indexer.PC)
+    print(bandnorm.shape)
+    npoints, nbands = banddat.shape[:2]
+    if pswarmpar is None:
+        #pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}
+        pswarmpar = {"c1": 3.5, "c2": 3.5, "w": 0.8}
+    if nswarmparticles is None:
+        #nswarmpoints = int(np.array(search_limit).max() * (10.0/0.2))
+        nswarmparticles = 30
+
+    nswarmparticles = max(5, nswarmparticles)
+
+    if PC0 is None:
+        PC0 = np.asarray(indexer.PC)
+    else:
+        PC0 = np.asarray(PC0)
+
+    emsoftflag = False
+    if indexer.vendor == "EMSOFT":  # Convert to EDAX for optimization
+        emsoftflag = True
+        indexer.vendor = "EDAX"
+        delta = indexer.PC
+        PCtemp = PC0[0:3]
+        PCtemp[0] *= -1.0
+        PCtemp[0] += 0.5 * indexer.bandDetectPlan.patDim[1]
+        PCtemp[1] += 0.5 * indexer.bandDetectPlan.patDim[0]
+        PCtemp /= indexer.bandDetectPlan.patDim[1]
+        PCtemp[2] /= delta[3]
+        PC0 = np.array(PCtemp)
+
+
+
+    # optimizer = pso.single.GlobalBestPSO(
+    #     n_particles=nswarmpoints,
+    #     dimensions=3,
+    #     options=pswarmpar,
+    #     bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
+    # )
+    optimizer = PSOOpt(dimensions=3, n_particles=nswarmparticles,
+                       c1=pswarmpar['c1'],
+                       c2 = pswarmpar['c2'], w = pswarmpar['w'], hyperparammethod='auto',
+                       early_exit=early_exit)
+
+
+    cost, PCoutRet = optimizer.optimize(_optfunction, indexer=indexer, banddat=banddat,
+                                        start=PC0, bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
+                                        niter=niter, verbose=verbose)
+
+
+
+    if emsoftflag:  # Return original state for indexer
+        indexer.vendor = "EMSOFT"
+        indexer.PC = delta
+        if PCoutRet.ndim == 2:
+            newout = np.zeros((npoints, 4))
+            PCoutRet[:, 0] -= 0.5
+            PCoutRet[:, :3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[:, 1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
+            PCoutRet[:, 0] *= -1.0
+            PCoutRet[:, 2] *= delta[3]
+            newout[:, :3] = PCoutRet
+            newout[:, 3] = delta[3]
+            PCoutRet = newout
+        else:
+            newout = np.zeros(4)
+            PCoutRet[0] -= 0.5
+            PCoutRet[:3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
+            PCoutRet[0] *= -1.0
+            PCoutRet[2] *= delta[3]
+            newout[:3] = PCoutRet
+            newout[3] = delta[3]
+            PCoutRet = newout
+    if return_cost is False:
+        return PCoutRet
+    else:
+        return PCoutRet, cost
 
 def _file_opt(fobj, indexer, stride=200, groupsz = 3):
     nCols = fobj.nCols

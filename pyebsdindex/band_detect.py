@@ -507,6 +507,8 @@ class BandDetect():
       # plt.xlim(0,180)
       # plt.ylim(-self.rhoMax, self.rhoMax)
 
+    # This translation from the Radon to theta and rho assumes that the first pixel read
+    # in off the detector is in the top left corner.
     theta = np.pi - np.interp(bandData['aveloc'][:, :, 1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta) / RADEG
     rho = -1.0 * np.interp(bandData['aveloc'][:, :, 0], np.arange(self.radonPlan.nRho), self.radonPlan.rho)
     bandData['theta'][:] = theta

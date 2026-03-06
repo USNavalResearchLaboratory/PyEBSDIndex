@@ -888,15 +888,14 @@ class BandIndexer():
       srt6 = srt[0:min(nfit, whGood.size)]
       #print(srt6)
       for s in srt6:
-        weights_p[ s] = band_intensity_p[s]
+        weights_p[s] = band_intensity_p[s]
 
-      #weights[p, :] *= 2.0/weights[p,:].max()
-      #weights[p, :] = 0.5*(1+np.tanh(8.0 * (weights[p, :] - 1.0)))
 
-      weights_p *= 1.0 / weights_p.max()
-      weights_p = np.exp(2 * weights_p)-1.0
+      #weights_p *= 1.0 / weights_p.max()
+      #weights_p = np.exp(2 * weights_p)-1.0
+      #weights_p /= weights_p.max()
 
-      weights_p /= weights_p.max()
+      weights_p /=np.sum(weights_p)
       weights[p, :] = weights_p
       #print(weights[p,:])
     return weights
