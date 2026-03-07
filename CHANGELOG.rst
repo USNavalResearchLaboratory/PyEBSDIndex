@@ -6,6 +6,20 @@ All notable changes to PyEBSDIndex will be documented in this file. The format i
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
 
+0.3.9.2 (2026-03-06)
+==================
+ Added
+-----
+
+Changed
+-------
+- Python 3.10 is new minimum required python version.
+
+Fixed
+-----
+- Fixed PSO optimization for numpy 2.4 error.
+
+
 0.3.9 (2026-01-26)
 ==================
 

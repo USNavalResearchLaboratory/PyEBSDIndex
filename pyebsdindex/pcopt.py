@@ -130,8 +130,7 @@ def _optfunction(PC_i, indexer=None, banddat=None):
         #     #average_fit /=  npoints
         average_fit =  __optmetric(banddat, indexdata)
         result[q] = average_fit
-    #print(timer()-tic)
-    return result
+    return result.squeeze()
 
 
 def optimize(pats, indexer, PC0=None, batch=False):
@@ -653,7 +652,7 @@ class PSOOpt():
 
         #tic = timer()
         for part_i in range(self.n_particles):
-            temp = self.pos[part_i, :]
+            temp = self.pos[part_i, :].squeeze()
             val[part_i] = fun2opt(temp, **kwargs)
         #print(timer()-tic)
 

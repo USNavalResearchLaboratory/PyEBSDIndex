@@ -29,7 +29,7 @@ extra_feature_requirements = {
         "pyopencl",
     ],
     "parallel": [
-        "ray[default]                   >= 2.9",
+        "ray[default]                   < 2.53",
     #    "pydantic                       < 2",
     ]
 }
@@ -57,7 +57,6 @@ setup(
     long_description_content_type="text/markdown",
     classifiers=[
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
