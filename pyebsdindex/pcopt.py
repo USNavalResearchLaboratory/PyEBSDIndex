@@ -41,6 +41,14 @@ __all__ = [
 
 RADEG = 180.0 / np.pi
 
+def planarPC(PCstar, xyloc):
+    xyloc2d = np.atleast_2d(xyloc)
+    npoints = xyloc2d.shape[0]
+    PCout = np.zeros((npoints, 3))
+    PCout[:,0] = PCstar[0] + PCstar[3]*xyloc2d[:, 0] + PCstar[4]*xyloc2d[:, 1]
+    PCout[:,1] = PCstar[1] + PCstar[5]*xyloc2d[:, 0] + PCstar[6]*xyloc2d[:, 1]
+    PCout[:,2] = PCstar[2] + PCstar[7]*xyloc2d[:, 0] + PCstar[8]*xyloc2d[:, 1]
+    return PCout
 
 def __optmetric(banddat, indexdata):
     npoints = banddat.shape[0]
@@ -74,12 +82,16 @@ def __optmetric(banddat, indexdata):
 def _optfunction_planar(PC_i, indexer=None, banddat=None, xylocation=None):
     PC = np.atleast_2d(PC_i)
     result = np.zeros(PC.shape[0])
+
     for q in range(PC.shape[0]):
-        PC_in = np.zeros(3)
-        PC_in[0] = PC[q,0] + PC[q,3]*xylocation[q, 0] + PC[q,4]*xylocation[q, 1]
-        PC_in[1] = PC[q, 1] + PC[q, 5] * xylocation[q, 0] + PC[q, 6] * xylocation[q, 1]
-        PC_in[2] = PC[q,2]+ PC[q, 7] * xylocation[q, 0] + PC[q, 8] * xylocation[q, 1]
-        result[q] = _optfunction(PC_in, indexer=indexer, banddat=banddat[q].reshape(1,-1))
+        PC_in = planarPC(PC[q,:], xylocation)
+        bandnorm = indexer.bandDetectPlan.radonPlan.radon2pole(
+            banddat, PC=PC_in, vendor=indexer.vendor
+        )
+        indexdata, banddat = indexer._indexbandsphase(banddat, bandnorm)
+        average_fit = __optmetric(banddat, indexdata)
+        result[q] = average_fit
+    return result.squeeze()
 
 
 def _optfunction(PC_i, indexer=None, banddat=None):
@@ -418,9 +430,9 @@ def optimize_planar_pso(
     xylocations,
     indexer =None,
     PC0=None,
-    search_limit=0.2,
+    search_limit=[0.5, 0.5, 0.5, 10.0/25000.0],
     early_exit = 0.0001,
-    nswarmparticles=30,
+    nswarmparticles=50,
     pswarmpar=None,
     niter=50,
     return_cost=False,
@@ -477,7 +489,7 @@ def optimize_planar_pso(
         pswarmpar = {"c1": 3.5, "c2": 3.5, "w": 0.8}
     if nswarmparticles is None:
         #nswarmpoints = int(np.array(search_limit).max() * (10.0/0.2))
-        nswarmparticles = 30
+        nswarmparticles = 50
 
     nswarmparticles = max(5, nswarmparticles)
 
@@ -499,22 +511,19 @@ def optimize_planar_pso(
         PCtemp[2] /= delta[3]
         PC0 = np.array(PCtemp)
 
+    PC00 = np.zeros(9)
+    PC00[0:3] = PC0
+    search_limit00 = np.zeros(9) + search_limit[3]
+    search_limit00[0:3] = search_limit[0:3]
 
-
-    # optimizer = pso.single.GlobalBestPSO(
-    #     n_particles=nswarmpoints,
-    #     dimensions=3,
-    #     options=pswarmpar,
-    #     bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
-    # )
-    optimizer = PSOOpt(dimensions=3, n_particles=nswarmparticles,
+    optimizer = PSOOpt(dimensions=9, n_particles=nswarmparticles,
                        c1=pswarmpar['c1'],
                        c2 = pswarmpar['c2'], w = pswarmpar['w'], hyperparammethod='auto',
                        early_exit=early_exit)
 
 
-    cost, PCoutRet = optimizer.optimize(_optfunction, indexer=indexer, banddat=banddat,
-                                        start=PC0, bounds=(PC0 - np.array(search_limit), PC0 + np.array(search_limit)),
+    cost, PCoutRet = optimizer.optimize(_optfunction_planar, indexer=indexer, banddat=banddat, xylocation=xylocations,
+                                        start=PC00, bounds=(PC00 - np.array(search_limit00), PC00 + np.array(search_limit00)),
                                         niter=niter, verbose=verbose)
 
 
@@ -634,9 +643,10 @@ class PSOOpt():
         self.vel = np.random.normal(size=(self.n_particles, self.dimensions), loc=0.0, scale=1.0)
         meanv = np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
         self.vel *= np.sqrt(np.sum(self.range**2))/(20. * meanv)
-        #self.vel *= np.sqrt(np.sum(self.range**2))/(100. * meanv)
-        self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
 
+                
+        self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
+        print(self.range, self.vel, self.vellimit)
 
         self.pbest = np.zeros(self.n_particles) + np.inf
         self.pbest_loc = np.copy(self.pos)
@@ -651,10 +661,13 @@ class PSOOpt():
         val = np.zeros(self.n_particles)
 
         #tic = timer()
-        for part_i in range(self.n_particles):
-            temp = self.pos[part_i, :].squeeze()
-            val[part_i] = fun2opt(temp, **kwargs)
+
+        # for part_i in range(self.n_particles):
+        #     temp = self.pos[part_i, :].squeeze()
+        #     val[part_i] = fun2opt(temp, **kwargs)
         #print(timer()-tic)
+
+        val = fun2opt(self.pos, **kwargs)
 
         # pos = list(self.pos.copy())
         #
