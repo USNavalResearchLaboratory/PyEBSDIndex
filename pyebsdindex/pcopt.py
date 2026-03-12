@@ -606,8 +606,9 @@ class PSOOpt():
         self.bounds = None # (2 , dimensions) array setting the min/max bounds of the search space.
         self.range = None # (dimensions) array that gives the size in float of each dimension bounds.
         self.niter = None # max number of interations
-        self.pos = None #(n, dimensions) array: position of the swarm
-        self.vel = None #(n, dimensions) array: velocity of the swarm
+        self.pos = None #(n, dimensions) array: position of the swarm in the optimization space
+        self.posnorm = None #(n, dimensions) array: position of the swarm in the normalized space
+        self.vel = None #(n, dimensions) array: velocity of the swarm in normalized
         self.pbest = None # array of particle personal best
         self.pbest_loc = None # array of particle personal best location
         self.gbest = None # value of swarm global best
@@ -635,23 +636,26 @@ class PSOOpt():
 
         #self.pos = np.random.uniform(low=bounds[0], high=bounds[1], size=(self.n_particles, self.dimensions))
         samppler = scipyqmc.Halton(self.dimensions)
-        self.pos = samppler.random(self.n_particles) * self.range + self.bounds[0]
+        self.posnorm = samppler.random(self.n_particles) #* self.range + self.bounds[0]
 
-        self.pos[0, :] = start
+        self.posnorm[0, :] = self._normsapcepos(pos = start).squeeze()
 
-
+        #print(self.posnorm)
+        #print('__________________')
+        self.pos = self._optsapcepos()
+        #print(self.pos)
         self.vel = np.random.normal(size=(self.n_particles, self.dimensions), loc=0.0, scale=1.0)
-        meanv = np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
-        self.vel *= np.sqrt(np.sum(self.range**2))/(20. * meanv)
+        meanv = np.mean(np.sqrt(np.sum(self.vel**2, axis=1))) # average velocity magnitude.
+        self.vel *= 1.0/(20. * meanv) # take an average of 20 iterations to cross the space.
 
                 
-        self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
-        print(self.range, self.vel, self.vellimit)
+        self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1))) # no faster than 4x the mean velocity.
+        #print(self.vellimit)
 
         self.pbest = np.zeros(self.n_particles) + np.inf
-        self.pbest_loc = np.copy(self.pos)
+        self.pbest_loc = np.copy(self.posnorm)
         self.gbest = np.inf
-        self.gbest_loc = start
+        self.gbest_loc = self.posnorm[0, :].squeeze()
 
 
 
@@ -681,7 +685,7 @@ class PSOOpt():
         wh_newpbest = np.nonzero(val < self.pbest)[0]
         if wh_newpbest.size > 0:
             self.pbest[wh_newpbest] = val[wh_newpbest]
-            self.pbest_loc[wh_newpbest, :] = self.pos[wh_newpbest, :]
+            self.pbest_loc[wh_newpbest, :] = self.posnorm[wh_newpbest, :]
 
         wh_minpbest = np.argmin(self.pbest)
         if self.pbest[wh_minpbest] < self.gbest:
@@ -698,19 +702,21 @@ class PSOOpt():
         r2 = np.random.random((self.n_particles,1))
         nvel = self.vel.copy()
         nvel = w * nvel + \
-               c1 * r1 * (self.pbest_loc - self.pos) + \
-               c2 * r2 * (self.gbest_loc - self.pos)
+               c1 * r1 * (self.pbest_loc - self.posnorm) + \
+               c2 * r2 * (self.gbest_loc - self.posnorm)
 
         mag = np.expand_dims(np.sqrt(np.sum(nvel**2, axis=1)), axis=1)
         wh_toofast = np.nonzero(mag > self.vellimit)[0]
-        #print(nvel.shape, wh_toofast.shape, mag.shape)
+        #print( wh_toofast.shape)
         if len(wh_toofast) > 0:
-            nvel[wh_toofast, :] *= self.vellimit/(2.0*mag[wh_toofast])
+            #nvel[wh_toofast, :] *= self.vellimit/(2.0*mag[wh_toofast])
+            nvel[wh_toofast, :] *= self.vellimit / (2.0 * mag[wh_toofast])
 
         self.vel = nvel
-        self.pos += nvel
-
+        self.posnorm += nvel
         self.boundarycheck()
+        self.pos = self._optsapcepos()
+
 
 
 
@@ -724,15 +730,18 @@ class PSOOpt():
 
     def boundarybounce(self):
         # implementation of the boundary bounce edge check.
-        lb,ub = self.bounds
+        #lb,ub = self.bounds
+        lb = np.zeros(self.dimensions)
+        ub = np.ones(self.dimensions)
         for d in range(self.dimensions):
-            wh_under = np.nonzero(self.pos[:,d] < lb[d])[0]
-            self.pos[wh_under,d] = lb[d]
+            wh_under = np.nonzero(self.posnorm[:,d] < lb[d])[0]
+            self.posnorm[wh_under,d] = lb[d]
             self.vel[wh_under,d] = np.abs(self.vel[wh_under,d])
 
-            wh_over = np.nonzero(self.pos[:, d] > ub[d])[0]
-            self.pos[wh_over, d] = ub[d]
+            wh_over = np.nonzero(self.posnorm[:, d] > ub[d])[0]
+            self.posnorm[wh_over, d] = ub[d]
             self.vel[wh_over, d] = -1*np.abs(self.vel[wh_over, d])
+        self.pos = self._optsapcepos()
 
     def updatehyperparam(self, iter):
         # Function that selects and implements evolution of hyperparameters.
@@ -753,13 +762,18 @@ class PSOOpt():
         pass
     def printprogress(self, iter):
         # progress printing function.
+        gbest = self.gbest_loc.copy()
+        gbest = self._optsapcepos(pos=gbest).squeeze()
         progress = int(round(10*float(iter)/self.niter))
         print('',end='\r' )
         print('Progress [',
               '*' * progress, ' '*(10-progress),'] ', iter+1 , '/', self.niter,
               '  global best:', "{0:.3g}".format(self.gbest),
-              '  best loc:', np.array_str(self.gbest_loc, precision=4, suppress_small=True),
+              '  best loc:', np.array_str(gbest, precision=4, suppress_small=True),
               sep='', end='')
+
+
+
     def optimize(self, function, start=None, bounds=None, niter=50, verbose = 1, **kwargs):
         # actual optimization method.  Will initialize the swarm.
         # strongly suggested that start and bounds are set.
@@ -795,7 +809,7 @@ class PSOOpt():
             self.updateswarmvelpos()
 
             if np.abs(self.vel).max() < early_exit:
-                d = abs(self.gbest_loc - self.pos)
+                d = abs(self.gbest_loc - self.posnorm)
                     #print(d.max())
                 if d.max() < early_exit:
                     break
@@ -806,7 +820,7 @@ class PSOOpt():
         #pool.close()
         #pool.terminate()
         final_best = self.gbest
-        final_loc = self.gbest_loc
+        final_loc = self._optsapcepos(self.gbest_loc).squeeze()
         if verbose >= 1:
             print('', end='\n')
             print("Optimization finished | best cost: {}, best pos: {}".format(
@@ -814,5 +828,28 @@ class PSOOpt():
             print(' ')
         return final_best, final_loc
 
+    def _optsapcepos(self, pos = None):
+        if pos is None:
+            npos = self.n_particles
+            posout = self.posnorm.copy()
+        else:
+            posout = np.atleast_2d(pos)
+            npos = posout.shape[0]
 
+        posout *= self.range.reshape(1, self.dimensions)
+        posout += self.bounds[0].reshape(1, self.dimensions)
 
+        return posout
+
+    def _normsapcepos(self, pos=None):
+        if pos is None:
+            npos = self.n_particles
+            posout = self.pos.copy()
+        else:
+            posout = np.atleast_2d(pos)
+            npos = posout.shape[0]
+
+        posout -= self.bounds[0].reshape(1, self.dimensions)
+        posout /= self.range.reshape(1, self.dimensions)
+
+        return posout
