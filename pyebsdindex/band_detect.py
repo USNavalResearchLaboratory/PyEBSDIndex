@@ -686,11 +686,13 @@ class BandDetect():
 
           # Here we assume that the peak width is better modeled by a gaussian, and this is a FWHM.
           #FWHM = 2 * sqrt(ln(2)) / sqrt(2*ln(y_peak) - ln(y_minus) - ln(y_plus))
-          a = (np.log(rdnPad[r + 1, c, q]) - np.log(rdnPad[r - 1, c, q])) * 0.5 - np.log(bandData_max[q, i])
-          if a < -1.e-8:
-            bandData_width[q, i] = 2.0 * np.sqrt(np.log(2.0) / (-1.0 * a))
-          else:
-            bandData_width[q, i] = 0.0
+          bandData_width[q, i] = 0.0
+          mntest = np.min(rdnPad[r-1:r + 2, c, q])
+          if mntest > 0.0:
+            a = (np.log(rdnPad[r + 1, c, q]) - np.log(rdnPad[r - 1, c, q])) * 0.5 - np.log(bandData_max[q, i])
+            if a < -1.e-8:
+              bandData_width[q, i] = 2.0 * np.sqrt(np.log(2.0) / (-1.0 * a))
+
           #center of mass peak localization
           #nn = rdnConv[r - 1:r + 2,c - 2:c + 3,q].ravel()
           #sumnn = (np.sum(nn) + 1.e-12)
