@@ -64,6 +64,7 @@ class GnomoicCorrection():
     **kwargs
     ):
     self.PC = PC
+    self.PCpx = None
     self.vendor = vendor
     self.setradonPlan(radonPlan)
 
