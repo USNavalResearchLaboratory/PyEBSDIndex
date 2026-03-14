@@ -45,9 +45,12 @@ def planarPC(PCstar, xyloc):
     xyloc2d = np.atleast_2d(xyloc)
     npoints = xyloc2d.shape[0]
     PCout = np.zeros((npoints, 3))
-    PCout[:,0] = PCstar[0] + PCstar[3]*xyloc2d[:, 0] + PCstar[4]*xyloc2d[:, 1]
-    PCout[:,1] = PCstar[1] + PCstar[5]*xyloc2d[:, 0] + PCstar[6]*xyloc2d[:, 1]
-    PCout[:,2] = PCstar[2] + PCstar[7]*xyloc2d[:, 0] + PCstar[8]*xyloc2d[:, 1]
+    #PCout[:,0] = PCstar[0] + PCstar[3]*xyloc2d[:, 0] + PCstar[4]*xyloc2d[:, 1]
+    #PCout[:,1] = PCstar[1] + PCstar[5]*xyloc2d[:, 0] + PCstar[6]*xyloc2d[:, 1]
+    #PCout[:, 2] = PCstar[2] + PCstar[7] * xyloc2d[:, 0] + PCstar[8] * xyloc2d[:, 1]
+    PCout[:, 0] = PCstar[0] + PCstar[3] * xyloc2d[:, 0]
+    PCout[:,1] = PCstar[1] + PCstar[4]*xyloc2d[:, 1]
+    PCout[:,2] = PCstar[2] + PCstar[5]*xyloc2d[:, 1]
     return PCout
 
 def __optmetric(banddat, indexdata):
@@ -430,7 +433,7 @@ def optimize_planar_pso(
     xylocations,
     indexer =None,
     PC0=None,
-    search_limit=[0.5, 0.5, 0.5, 10.0/25000.0],
+    search_limit=[0.5, 0.5, 0.5, 2.0/30000.0],
     early_exit = 0.0001,
     nswarmparticles=50,
     pswarmpar=None,
@@ -482,7 +485,7 @@ def optimize_planar_pso(
     """
     #banddat = indexer.bandDetectPlan.find_bands(pats)
     banddat, bandnorm = indexer._detectbands(pats, indexer.PC)
-    print(bandnorm.shape)
+
     npoints, nbands = banddat.shape[:2]
     if pswarmpar is None:
         #pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}
@@ -511,12 +514,15 @@ def optimize_planar_pso(
         PCtemp[2] /= delta[3]
         PC0 = np.array(PCtemp)
 
-    PC00 = np.zeros(9)
+    PC00 = np.zeros(6)
     PC00[0:3] = PC0
-    search_limit00 = np.zeros(9) + search_limit[3]
+    PC00[3] = -1./30000
+    PC00[4] = 1./30000 * 0.94
+    PC00[5] = 1./30000 * 0.34
+    search_limit00 = np.zeros(6) + search_limit[3]
     search_limit00[0:3] = search_limit[0:3]
 
-    optimizer = PSOOpt(dimensions=9, n_particles=nswarmparticles,
+    optimizer = PSOOpt(dimensions=6, n_particles=nswarmparticles,
                        c1=pswarmpar['c1'],
                        c2 = pswarmpar['c2'], w = pswarmpar['w'], hyperparammethod='auto',
                        early_exit=early_exit)
@@ -716,6 +722,7 @@ class PSOOpt():
         self.posnorm += nvel
         self.boundarycheck()
         self.pos = self._optsapcepos()
+        #print(np.min(self.pos, axis=0), np.max(self.pos, axis=0))
 
 
 
@@ -762,6 +769,7 @@ class PSOOpt():
         pass
     def printprogress(self, iter):
         # progress printing function.
+        #return
         gbest = self.gbest_loc.copy()
         gbest = self._optsapcepos(pos=gbest).squeeze()
         progress = int(round(10*float(iter)/self.niter))
