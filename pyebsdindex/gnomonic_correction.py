@@ -67,6 +67,7 @@ class GnomoicCorrection():
     self.PCpx = None
     self.vendor = vendor
     self.setradonPlan(radonPlan)
+    self.calccorrection()
 
 
 
@@ -93,7 +94,7 @@ class GnomoicCorrection():
     **kwargs
   ):
     if PC is not None:
-      self.PC = PC
+      self.PC = np.array(PC)
 
     pctemp = np.asarray(self.PC, dtype=np.float32).copy()
     shapet = pctemp.shape
@@ -169,7 +170,7 @@ class GnomoicCorrection():
     ):
 
     if PC is not None:
-      self.calccorrection(PC=PC)
+      self.calccorrection(PC=np.array(PC))
 
     PCpx = self.PCpx
     valid = bnddata['valid']
@@ -183,6 +184,7 @@ class GnomoicCorrection():
     #rdncorrect = self.rdncorrect
     #print(PCpx)
     bdndata_out = bnddata.copy()
+    
     rho_new = self.__correction_loops_nb( npat, nband,
                             valid, width, maxloc, theta, rho, PCpx, patdim,
                             convolfactor, rsigma)

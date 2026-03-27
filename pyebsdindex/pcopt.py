@@ -323,8 +323,9 @@ def optimize_pso(
         Optimized PC.
     """
     #banddat = indexer.bandDetectPlan.find_bands(pats)
+    
     banddat, bandnorm = indexer._detectbands(pats, indexer.PC)
-    #print(bandnorm.shape)
+    
     npoints, nbands = banddat.shape[:2]
     if pswarmpar is None:
         #pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}
