@@ -67,7 +67,10 @@ class GnomoicCorrection():
     self.PCpx = None
     self.vendor = vendor
     self.setradonPlan(radonPlan)
-    self.calccorrection()
+    if self.radonPlan is not None:
+      if self.radonPlan.imDim is not None:
+        self.calccorrection()
+
 
 
 
@@ -95,6 +98,7 @@ class GnomoicCorrection():
   ):
     if PC is not None:
       self.PC = np.array(PC)
+
 
     pctemp = np.asarray(self.PC, dtype=np.float32).copy()
     shapet = pctemp.shape
