@@ -703,7 +703,7 @@ class EBSDIndexer:
             pats, clparams=clparams, verbose=verbose, chunksize=chunksize, gpu_id=gpu_id,
         )
 
-        #banddata = self.gnomonic.applycorrection(banddata, self.bandDetectPlan.rSigma)
+        banddata = self.gnomonic.applycorrection(banddata, self.bandDetectPlan.rSigma)
 
         #  shpBandDat = banddata.shape
         if PC is None:

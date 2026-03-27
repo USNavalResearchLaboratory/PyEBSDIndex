@@ -124,39 +124,39 @@ class GnomoicCorrection():
     self.PCpx = t
 
 
-    nx = self.patdim[1]
-    ny = self.patdim[0]
-    x = np.arange(nx, dtype=float) - t[0]
-    x = (np.broadcast_to(x.reshape(1, nx), (ny, nx)))
-    y = np.arange(ny, dtype=float) - (self.patdim[0] - t[1])
-    y = (np.broadcast_to(y, (nx, ny)).T)
+    # nx = self.patdim[1]
+    # ny = self.patdim[0]
+    # x = np.arange(nx, dtype=float) - t[0]
+    # x = (np.broadcast_to(x.reshape(1, nx), (ny, nx)))
+    # y = np.arange(ny, dtype=float) - (self.patdim[0] - t[1])
+    # y = (np.broadcast_to(y, (nx, ny)).T)
+    #
+    # x2 = x*x
+    # y2 = y*y
+    #
+    # #x2 *= np.abs(x)/np.sqrt(x**2 + y**2).clip(1e-8)
+    # #y2 *= np.abs(y) / np.sqrt(x ** 2 + y ** 2).clip(1e-8)
+    #
+    # rdnx2 = np.squeeze(self.radonPlan.radon_faster(x2, fixArtifacts = True)).clip(0)
+    #
+    # rdncos = np.broadcast_to(
+    #    np.abs(np.cos(self.radonPlan.theta*np.pi/180.)),
+    #  (self.radonPlan.nRho, self.radonPlan.nTheta))
+    # rdnx2 *= rdncos
+    #
+    #
+    #
+    # rdny2 = np.squeeze(self.radonPlan.radon_faster(y2, fixArtifacts = True)).clip(0)
+    # rdnsin = np.broadcast_to(
+    #   np.abs(np.sin(self.radonPlan.theta * np.pi / 180.)),
+    #   (self.radonPlan.nRho, self.radonPlan.nTheta))
+    # rdny2 *= rdnsin
+    #
+    #
+    # rdncorrect = np.sqrt(rdnx2 + rdny2)
+    # self.rdncorrect = rdncorrect
 
-    x2 = x*x
-    y2 = y*y
-
-    #x2 *= np.abs(x)/np.sqrt(x**2 + y**2).clip(1e-8)
-    #y2 *= np.abs(y) / np.sqrt(x ** 2 + y ** 2).clip(1e-8)
-
-    rdnx2 = np.squeeze(self.radonPlan.radon_faster(x2, fixArtifacts = True)).clip(0)
-
-    rdncos = np.broadcast_to(
-       np.abs(np.cos(self.radonPlan.theta*np.pi/180.)),
-     (self.radonPlan.nRho, self.radonPlan.nTheta))
-    rdnx2 *= rdncos
-
-
-
-    rdny2 = np.squeeze(self.radonPlan.radon_faster(y2, fixArtifacts = True)).clip(0)
-    rdnsin = np.broadcast_to(
-      np.abs(np.sin(self.radonPlan.theta * np.pi / 180.)),
-      (self.radonPlan.nRho, self.radonPlan.nTheta))
-    rdny2 *= rdnsin
-
-
-    rdncorrect = np.sqrt(rdnx2 + rdny2)
-    self.rdncorrect = rdncorrect
-
-    return rdncorrect, x2, y2, #rdncos, rdnsin
+    #return rdncorrect, x2, y2, #rdncos, rdnsin
     #return rdncorrect,rdnx2, rdny2, rdncos, rdnsin
 
   def applycorrection(
@@ -164,8 +164,12 @@ class GnomoicCorrection():
           bnddata,
           rsigma,
           convolfactor = 1.0537092,
+          PC = None,
           **kwargs
     ):
+
+    if PC is not None:
+      self.calccorrection(PC=PC)
 
     PCpx = self.PCpx
     valid = bnddata['valid']
@@ -176,10 +180,10 @@ class GnomoicCorrection():
     theta = bnddata['theta']
     rho = bnddata['rho']
     patdim = self.patdim
-    rdncorrect = self.rdncorrect
+    #rdncorrect = self.rdncorrect
     #print(PCpx)
     bdndata_out = bnddata.copy()
-    rho_new = self.__correction_loops_nb(rdncorrect, npat, nband,
+    rho_new = self.__correction_loops_nb( npat, nband,
                             valid, width, maxloc, theta, rho, PCpx, patdim,
                             convolfactor, rsigma)
 
@@ -227,7 +231,7 @@ class GnomoicCorrection():
 
   @staticmethod
   @numba.jit(nopython=True, cache=True, fastmath=True, parallel=True)
-  def __correction_loops_nb(rdncorrect, npat, nband,
+  def __correction_loops_nb( npat, nband,
                             valid, width, maxloc, theta, rho, PCpx, patdim,
                             convolfactor, rsigma):
 
