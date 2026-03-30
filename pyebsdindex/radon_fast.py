@@ -391,7 +391,7 @@ class Radon:
     #n2 = p - t.reshape(1,1,3)
     n2 = p - t
     n = np.cross(r.reshape(nPats*nBands, 3), n2.reshape(nPats*nBands, 3) )
-    norm = np.linalg.norm(n, axis=1)
+    norm = np.linalg.norm(n, axis=1).clip(1e-12)
     n /= norm.reshape(nPats*nBands, 1)
     n = n.reshape(nPats, nBands, 3)
     return n
