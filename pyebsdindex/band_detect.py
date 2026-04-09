@@ -408,7 +408,7 @@ class BandDetect():
     return backfit
 
 
-  def find_bands(self, patternsIn, verbose=0, chunksize=-1, **kwargs):
+  def find_bands(self, patternsIn, verbose=0, chunksize=512, **kwargs):
 
     pats = patternsIn
     tic0 = timer()
@@ -583,7 +583,11 @@ class BandDetect():
 
     k = np.copy(self.kernel[0,:,:])
     k = k[:, :, np.newaxis]
-    rdnConv = scipysignal.fftconvolve(radon, k, mode='same')
+    rdnpadsph = (scipy.fft.next_fast_len(shprdn[0]),scipy.fft.next_fast_len(shprdn[1]), scipy.fft.next_fast_len(shprdn[2]) )
+    rdnpad = np.zeros(rdnpadsph)
+    rdnpad[0:shprdn[0], 0:shprdn[1], 0:shprdn[2]] = radon
+    rdnConv = scipysignal.fftconvolve(rdnpad, k, mode='same')
+    rdnConv = rdnConv[0:shprdn[0], 0:shprdn[1], 0:shprdn[2]]
 
     #print(rdnConv.min(),rdnConv.max())
     mns = (rdnConv[self.padding[0]:shprdn[1]-self.padding[0],self.padding[1]:shprdn[1]-self.padding[1],:]).min(axis=0).min(axis=0)

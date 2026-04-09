@@ -29,7 +29,7 @@ extra_feature_requirements = {
         "pyopencl",
     ],
     "parallel": [
-        "ray[default]                   != 2.53, != 2.54.0",
+        "ray[default]                   <= 2.53",
     #    "pydantic                       < 2",
     ]
 }
@@ -51,7 +51,7 @@ setup(
     name=__name__,
     version=__version__,
     license="Custom",
-    python_requires=">=3.9",
+    python_requires=">=3.10",
     description=__description__,
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
