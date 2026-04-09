@@ -279,7 +279,7 @@ class Radon:
     return radon#, counter
 
   @staticmethod
-  @jit(nopython=True, fastmath=True, cache=True, parallel=False)
+  @jit(nopython=True, fastmath=True, cache=True, parallel=True)
   def rdn_loops(images,index,nIm,nPx,indxdim,radon, padding, norm):
     nRho = indxdim[0]
     nTheta = indxdim[1]

@@ -81,6 +81,7 @@ def index_pats(
     verbose=0,
     chunksize=528,
     gpu_id=None,
+    useCPU = False,
     **kwargs,
 ):
     """Index EBSD patterns on a single thread.
@@ -230,6 +231,7 @@ def index_pats(
             nBands=nBands,
             patDim=pdim,
             gpu_id=gpu_id,
+            useCPU=useCPU,
         )
     else:
         indexer = ebsd_indexer_obj
@@ -700,10 +702,10 @@ class EBSDIndexer:
     def _detectbands(self, pats, PC, xyloc=None, clparams=None, verbose=0, chunksize=528, gpu_id=None):
 
         banddata = self.bandDetectPlan.find_bands(
-            pats, clparams=clparams, verbose=verbose, chunksize=chunksize, gpu_id=gpu_id,
+            pats, verbose=verbose, chunksize=chunksize, clparams=clparams, gpu_id=gpu_id,
         )
 
-        banddata = self.gnomonic.applycorrection(banddata, self.bandDetectPlan.rSigma)
+        #banddata = self.gnomonic.applycorrection(banddata, self.bandDetectPlan.rSigma)
 
         #  shpBandDat = banddata.shape
         if PC is None:

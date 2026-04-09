@@ -43,17 +43,20 @@ RADEG = 180.0/np.pi
 
 
 class BandDetect(band_detect.BandDetect):
-  def __init__( self, **kwargs):
+  def __init__( self, useCPU = False, **kwargs):
     band_detect.BandDetect.__init__(self, **kwargs)
-    self.useCPU = False
+    self.useCPU =useCPU
 
 
-  def find_bands(self, patternsIn, verbose=0, clparams=None, chunksize=528, useCPU=None,gpu_id = None, **kwargs):
+  def find_bands(self, patternsIn, verbose=0, clparams=None, chunksize=-2, useCPU=None,gpu_id = None, **kwargs):
     if useCPU is None:
       useCPU = self.useCPU
 
     if useCPU == True:
-      return band_detect.BandDetect.find_bands(self, patternsIn, verbose=verbose, chunksize=-1, **kwargs)
+      return band_detect.BandDetect.find_bands(self, patternsIn, verbose=verbose, chunksize=chunksize, **kwargs)
+
+    if chunksize == -2:
+      chunksize = 528
 
     if clparams is None:
       clparams = openclparam.OpenClParam()
@@ -89,7 +92,7 @@ class BandDetect(band_detect.BandDetect):
       nPats = shape[0]
 
       bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
-      if chunksize < 0:
+      if chunksize <= 0:
         nchunks = 1
         chunksize = nPats
       else:
