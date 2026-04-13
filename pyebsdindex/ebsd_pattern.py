@@ -481,9 +481,9 @@ class UPFile(EBSDPatternFile):
       if self.yStep is None:
         self.yStep = 0.0
       if self.nCols is None:
-        self.nCols = np.uint64(1)
+        self.nCols = np.uint64(self.nPatterns)
       if self.nCols == 0:
-        self.nCols = np.uint64(1)
+        self.nCols = np.uint64(self.nPatterns)
       if self.nRows is None:
         self.nRows = np.uint64(np.floor(self.nPatterns/self.nCols))
 
@@ -516,11 +516,24 @@ class UPFile(EBSDPatternFile):
     typeread = self.filedatatype
     typebyte = self.filedatatype(0).nbytes
 
+    chunksize = 1024
+    nPats = nPatToRead
+    nchunks = (np.ceil(nPats / chunksize)).astype(np.int64)
+    chunk_start_end = [[i * chunksize, (i + 1) * chunksize] for i in range(nchunks)]
+    chunk_start_end[-1][1] = nPats
 
     f.seek(np.int64(np.int64(nPerPat) * np.int64(patStart) * typebyte),1)
-    readpats = np.fromfile(f,dtype=typeread,count=np.int64(np.int64(nPatToRead) * np.int64(nPerPat)))
+    readpats = np.zeros((nPatToRead,self.patternH,self.patternW), dtype = typeread)
 
-    readpats = readpats.reshape(nPatToRead,self.patternH,self.patternW)
+    for chnk in chunk_start_end:
+      nchnk = int(chnk[1] - chnk[0])
+      readpatstemp = np.fromfile(f, dtype=typeread, count=np.int64(np.int64(nchnk) * np.int64(nPerPat)))
+      readpatstemp = readpatstemp.reshape(nchnk, self.patternH, self.patternW)
+      readpats[chnk[0]:chnk[1],:,:] = readpatstemp
+
+    #readpats = np.fromfile(f,dtype=typeread,count=np.int64(np.int64(nPatToRead) * np.int64(nPerPat)))
+
+    #readpats = readpats.reshape(nPatToRead,self.patternH,self.patternW)
     f.close()
     yx = np.unravel_index(np.arange(np.int64(patStart), np.int64(patStart+nPatToRead), dtype = np.uint64),
                           (np.int64(self.nRows), np.int64(self.nCols)))
