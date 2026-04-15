@@ -516,24 +516,24 @@ class UPFile(EBSDPatternFile):
     typeread = self.filedatatype
     typebyte = self.filedatatype(0).nbytes
 
-    chunksize = 1024
-    nPats = nPatToRead
-    nchunks = (np.ceil(nPats / chunksize)).astype(np.int64)
-    chunk_start_end = [[i * chunksize, (i + 1) * chunksize] for i in range(nchunks)]
-    chunk_start_end[-1][1] = nPats
+    f.seek(np.int64(np.int64(nPerPat) * np.int64(patStart) * typebyte), 1)
+    # chunksize = 1024
+    # nPats = nPatToRead
+    # nchunks = (np.ceil(nPats / chunksize)).astype(np.int64)
+    # chunk_start_end = [[i * chunksize, (i + 1) * chunksize] for i in range(nchunks)]
+    # chunk_start_end[-1][1] = nPats
 
-    f.seek(np.int64(np.int64(nPerPat) * np.int64(patStart) * typebyte),1)
-    readpats = np.zeros((nPatToRead,self.patternH,self.patternW), dtype = typeread)
 
-    for chnk in chunk_start_end:
-      nchnk = int(chnk[1] - chnk[0])
-      readpatstemp = np.fromfile(f, dtype=typeread, count=np.int64(np.int64(nchnk) * np.int64(nPerPat)))
-      readpatstemp = readpatstemp.reshape(nchnk, self.patternH, self.patternW)
-      readpats[chnk[0]:chnk[1],:,:] = readpatstemp
+    # readpats = np.zeros((nPatToRead,self.patternH,self.patternW), dtype = typeread)
+    #
+    # for chnk in chunk_start_end:
+    #   nchnk = int(chnk[1] - chnk[0])
+    #   readpatstemp = np.fromfile(f, dtype=typeread, count=np.int64(np.int64(nchnk) * np.int64(nPerPat)))
+    #   readpatstemp = readpatstemp.reshape(nchnk, self.patternH, self.patternW)
+    #   readpats[chnk[0]:chnk[1],:,:] = readpatstemp
 
-    #readpats = np.fromfile(f,dtype=typeread,count=np.int64(np.int64(nPatToRead) * np.int64(nPerPat)))
-
-    #readpats = readpats.reshape(nPatToRead,self.patternH,self.patternW)
+    readpats = np.fromfile(f,dtype=typeread,count=np.int64(np.int64(nPatToRead) * np.int64(nPerPat)))
+    readpats = readpats.reshape(nPatToRead,self.patternH,self.patternW)
     f.close()
     yx = np.unravel_index(np.arange(np.int64(patStart), np.int64(patStart+nPatToRead), dtype = np.uint64),
                           (np.int64(self.nRows), np.int64(self.nCols)))
