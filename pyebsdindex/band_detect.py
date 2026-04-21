@@ -581,44 +581,47 @@ class BandDetect():
 
     tic = timer()
 
-    k = np.copy(self.kernel[0,:,:])
-    k = k[:, :, np.newaxis]
-    shpk = k.shape
-    rdnpadsph = (scipy.fft.next_fast_len(shprdn[0]),scipy.fft.next_fast_len(shprdn[1]), scipy.fft.next_fast_len(shprdn[2]) )
-    rdnpad = np.zeros(rdnpadsph)
-
-    rdnpad[0:shprdn[0], 0:shprdn[1], 0:shprdn[2]] = radon
-    rdnConv = scipysignal.fftconvolve(rdnpad, k, mode='same')
-
-
-    # kpad = np.zeros(rdnpadsph)
-    # kpad[0:shpk[0], 0:shpk[1], 0:shpk[2]] = k
-    # kpad = np.roll(kpad, -shpk[0]//2, 0)
-    # kpad = np.roll(kpad, -shpk[1]//2, 1)
-    #
-    # rdnConv = (scipy.ifft(scipy.fft(rdnpad)*np.(scipy.fft(kpad)))).real
-
-    rdnConv = rdnConv[0:shprdn[0], 0:shprdn[1], 0:shprdn[2]]
-
-    # rdnpadsph = (scipy.fft.next_fast_len(shprdn[0]), scipy.fft.next_fast_len(shprdn[1]),
-    #              shprdn[2])
+    # k = np.copy(self.kernel[0,:,:])
+    # k = k[:, :, np.newaxis]
+    # shpk = k.shape
+    # rdnpadsph = (scipy.fft.next_fast_len(shprdn[0]),scipy.fft.next_fast_len(shprdn[1]), scipy.fft.next_fast_len(shprdn[2]) )
     # rdnpad = np.zeros(rdnpadsph)
     # rdnpad[0:shprdn[0], 0:shprdn[1], 0:shprdn[2]] = radon
     #
-    # k = np.copy(self.kernel[0, :, :])
-    # #k = k[:, :, np.newaxis]
-    # shpk = k.shape
-    # kpad = np.zeros(rdnpadsph[0:2])
-    # kpad[0:shpk[0], 0:shpk[1]] = k
-    # kpad = np.roll(kpad, -shpk[0] // 2, 0)
-    # kpad = np.roll(kpad, -shpk[1] // 2, 1)
-    # kpadfft = np.conjugate(scipy.fft(kpad))
-    # for i in range(shprdn[2]):
-    #   rdnConv[:,:,i] = ((scipy.ifft(scipy.fft(rdnpad[:,:,i].squeeze) * kpadfft)).real)[:,:,np.newaxis]
     #
-    # rdnConv = rdnConv[0:shprdn[0], 0:shprdn[1], 0:shprdn[2]]
+    # with scipy.fft.set_workers(os.cpu_count()):
+    #   rdnConv = scipysignal.fftconvolve(rdnpad, k, mode='same')
 
 
+    k = np.copy(self.kernel[0, :, :])
+    k = k[:, :, np.newaxis]
+    shpk = k.shape
+    # rdnpadsph = (scipy.fft.next_fast_len(shprdn[0]), scipy.fft.next_fast_len(shprdn[1]),
+    #              scipy.fft.next_fast_len(shprdn[2]))
+    # rdnpad = np.zeros(rdnpadsph)
+    # rdnpad[0:shprdn[0], 0:shprdn[1], 0:shprdn[2]] = radon
+    rdnConv = np.zeros(shprdn, dtype=np.float32)
+
+    with scipy.fft.set_workers(os.cpu_count()):
+      rdnConv = scipysignal.fftconvolve(radon, k, mode='same') # best 5s
+    # rdnConv = scipysignal.oaconvolve(radon, k, mode='same') # 2nd best 11 s
+
+    # rdnConv = scipysignal.fftconvolve(radon, k, mode='same') # 13 s
+    # rdnConv = scipysignal.oaconvolve(radon, k, mode='same')  # 27 s
+
+    # for i in range(shprdn[2]): # third best 28s
+    #      rdnConv[:,:,i] = scipysignal.fftconvolve(radon[:,:,i],k[:,:,0], mode='same')
+    #      rdnConv[:,:,i] = scipysignal.oaconvolve(rdnpad[:,:,i], k[:,:,0], mode='same')
+
+
+    # kpad = np.zeros(shprdn, dtype=np.float32)  # 17s
+    # kpad[0:shpk[0], 0:shpk[1], 0:shpk[2]] = k
+    # kpad = np.roll(kpad, [-shpk[0]//2, -shpk[1]//2], axis=[0,1])
+    # with scipy.fft.set_workers(os.cpu_count()):
+    # #   print(scipy.fft.get_workers())
+    #   rdnpadfft = scipy.fft.fftn(radon)
+    #   kpadfft = np.conjugate(scipy.fft.fftn(kpad))
+    #   rdnConv = (scipy.fft.ifftn(rdnpadfft*kpadfft)).real.astype(np.float32)
 
     #print(rdnConv.min(),rdnConv.max())
     mns = (rdnConv[self.padding[0]:shprdn[1]-self.padding[0],self.padding[1]:shprdn[1]-self.padding[1],:]).min(axis=0).min(axis=0)
