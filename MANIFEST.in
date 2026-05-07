@@ -9,8 +9,7 @@ include License
 include MANIFEST.in
 include README.md
 include RELEASE.rst
-include setup.cfg
-include setup.py
+include pyproject.toml
 include ./pyebsdindex/EBSDImage/*.ttf
 
 recursive-include pyebsdindex *.png *.cl *.py

@@ -28,11 +28,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install manifix
+          pip install check-manifest
 
       - name: Check MANIFEST.in file
         run: |
-          python setup.py manifix
+          check-manifest
 
   tests:
     name: ${{ matrix.os }}-py${{ matrix.python-version }}${{ matrix.LABEL }}
