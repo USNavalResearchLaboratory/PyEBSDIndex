@@ -1,0 +1,119 @@
+[build-system]
+requires = ["setuptools>=61.2", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyebsdindex"
+dynamic = ["version"]
+description = "Python based tool for Radon based EBSD indexing"
+readme = "README.md"
+license = {file = "License"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Dave Rowenhorst"},
+]
+maintainers = [
+    {name = "Dave Rowenhorst"},
+]
+keywords = [
+    "EBSD",
+    "electron backscatter diffraction",
+    "HI",
+    "Radon indexing",
+    "NLPAR",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: Other/Proprietary License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "h5py",
+    "matplotlib",
+    "numpy",
+    "numba>=0.55.1",
+    "scipy",
+    "psutil",
+]
+
+[project.optional-dependencies]
+doc = [
+    "nbsphinx                       >= 0.7",
+    "numpydoc",
+    "pydata-sphinx-theme",
+    "sphinx                         >= 3.0.2",
+    "sphinx-codeautolink[ipython]",
+    "sphinx-copybutton              >= 0.2.5",
+    "sphinx-design",
+    "sphinx-gallery",
+]
+tests = [
+    "coverage                       >= 5.0",
+    "pytest                         >= 5.4",
+    "pytest-cov                     >= 2.8.1",
+]
+gpu = [
+    "pyopencl",
+]
+parallel = [
+    "ray[default]                   <= 2.53",
+]
+dev = [
+    "nbsphinx                       >= 0.7",
+    "numpydoc",
+    "pydata-sphinx-theme",
+    "sphinx                         >= 3.0.2",
+    "sphinx-codeautolink[ipython]",
+    "sphinx-copybutton              >= 0.2.5",
+    "sphinx-design",
+    "sphinx-gallery",
+    "coverage                       >= 5.0",
+    "pytest                         >= 5.4",
+    "pytest-cov                     >= 2.8.1",
+    "pyopencl",
+    "ray[default]                   <= 2.53",
+]
+all = [
+    "pyopencl",
+    "ray[default]                   <= 2.53",
+]
+
+[project.urls]
+"Bug Tracker" = "https://github.com/USNavalResearchLaboratory/PyEBSDIndex/issues"
+Documentation = "https://pyebsdindex.readthedocs.io"
+"Source Code" = "https://github.com/USNavalResearchLaboratory/PyEBSDIndex"
+Homepage = "https://pyebsdindex.readthedocs.io"
+
+[tool.setuptools]
+include-package-data = true
+zip-safe = true
+
+[tool.setuptools.packages.find]
+include = ["pyebsdindex*"]
+
+[tool.setuptools.package-data]
+"pyebsdindex.EBSDImage" = ["*.ttf"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyebsdindex._version.__version__"}
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:Deprecated call to `pkg_resources:DeprecationWarning",
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["pyebsdindex"]
+relative_files = true
+
+[tool.coverage.report]
+precision = 2
