@@ -105,7 +105,6 @@ include = [
     "IPFHex.pdf",
     "IPFHex.png",
     "License",
-    "MANIFEST.in",
     "README.md",
     "RELEASE.rst",
     "pyproject.toml",
