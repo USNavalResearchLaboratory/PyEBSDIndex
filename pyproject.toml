@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.2", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "pyebsdindex"
@@ -92,18 +92,43 @@ Documentation = "https://pyebsdindex.readthedocs.io"
 "Source Code" = "https://github.com/USNavalResearchLaboratory/PyEBSDIndex"
 Homepage = "https://pyebsdindex.readthedocs.io"
 
-[tool.setuptools]
-include-package-data = true
-zip-safe = true
+[tool.hatch.version]
+path = "pyebsdindex/_version.py"
 
-[tool.setuptools.packages.find]
-include = ["pyebsdindex*"]
+[tool.hatch.build.targets.sdist]
+include = [
+    ".readthedocs.yaml",
+    "CHANGELOG.rst",
+    "CONTRIBUTING.rst",
+    "IPFCubic.pdf",
+    "IPFCubic.png",
+    "IPFHex.pdf",
+    "IPFHex.png",
+    "License",
+    "MANIFEST.in",
+    "README.md",
+    "RELEASE.rst",
+    "pyproject.toml",
+    "pyebsdindex/EBSDImage/*.ttf",
+    "pyebsdindex/**/*.png",
+    "pyebsdindex/**/*.cl",
+    "pyebsdindex/**/*.py",
+    "doc/Makefile",
+    "doc/make.bat",
+    "doc/**/*.rst",
+    "doc/**/*.py",
+    "doc/**/*.ipynb",
+    "doc/**/*.png",
+    "doc/**/*.css",
+]
 
-[tool.setuptools.package-data]
-"pyebsdindex.EBSDImage" = ["*.ttf"]
-
-[tool.setuptools.dynamic]
-version = {attr = "pyebsdindex._version.__version__"}
+[tool.hatch.build.targets.wheel]
+packages = ["pyebsdindex"]
+include = [
+    "pyebsdindex/**/*.png",
+    "pyebsdindex/**/*.cl",
+    "pyebsdindex/EBSDImage/*.ttf",
+]
 
 [tool.pytest.ini_options]
 filterwarnings = [
