@@ -50,6 +50,7 @@ if _pyopencl_installed:
 else:
     from pyebsdindex import band_detect as band_detect
 
+from pyebsdindex import gnomonic_correction
 
 RADEG = 180.0 / np.pi
 
@@ -80,6 +81,7 @@ def index_pats(
     verbose=0,
     chunksize=528,
     gpu_id=None,
+    useCPU = False,
     **kwargs,
 ):
     """Index EBSD patterns on a single thread.
@@ -229,6 +231,7 @@ def index_pats(
             nBands=nBands,
             patDim=pdim,
             gpu_id=gpu_id,
+            useCPU=useCPU,
         )
     else:
         indexer = ebsd_indexer_obj
@@ -406,6 +409,9 @@ class EBSDIndexer:
             )
 
         self.nband_earlyexit = nband_earlyexit
+
+        self.gnomonic = gnomonic_correction.GnomoicCorrection(radonPlan=self.bandDetectPlan.radonPlan, PC=self.PC)
+
         self.dataTemplate = np.dtype(
             [
                 ("quat", np.float64, 4),
@@ -554,6 +560,7 @@ class EBSDIndexer:
         except:
             pass
 
+        self.gnomonic.calccorrection(PCpat)
         banddata, bandnorm = self._detectbands(pats, PCpat, xyloc=xyloc, clparams=clparams, verbose=verbose,
                                                chunksize=chunksize, gpu_id=gpuid)
         tic = timer()
@@ -695,8 +702,11 @@ class EBSDIndexer:
     def _detectbands(self, pats, PC, xyloc=None, clparams=None, verbose=0, chunksize=528, gpu_id=None):
 
         banddata = self.bandDetectPlan.find_bands(
-            pats, clparams=clparams, verbose=verbose, chunksize=chunksize, gpu_id=gpu_id,
+            pats, verbose=verbose, chunksize=chunksize, clparams=clparams, gpu_id=gpu_id,
         )
+
+        #banddata = self.gnomonic.applycorrection(banddata, self.bandDetectPlan.rSigma)
+
         #  shpBandDat = banddata.shape
         if PC is None:
             PC_0 = self.PC
@@ -719,6 +729,7 @@ class EBSDIndexer:
         indxData = np.zeros((nPhases + 1, npoints), dtype=self.dataTemplate)
         #bandmatchindex = np.zeros((nPhases, npoints,shpBandDat[-1],2), dtype=np.int32)-100
         bandmatchindex = np.zeros((npoints,nBands, nPhases), dtype=np.int32)-100
+        bandfit_out = np.zeros((npoints,nBands, nPhases), dtype=np.float64)+180
         banddataout = banddata.copy()
 
         indxData["phase"] = -1
@@ -775,6 +786,7 @@ class EBSDIndexer:
                 nMatch,
                 matchAttempts,
                 totvotes,
+                bandfit,
             ) = self.phaseLib[j].bandindex(
                         bandnorm[p2do, ...],
                         band_intensity=adj_intensity[p2do, ...],
@@ -792,6 +804,7 @@ class EBSDIndexer:
                 indxData["matchattempts"][j, whgood2] = matchAttempts[whgood, ...]
                 indxData["totvotes"][j, whgood2] = totvotes[whgood]
                 bandmatchindex[whgood2, ..., j] = bandmatch[whgood, ...].reshape(whgood.size,nBands )
+                bandfit_out[whgood2, ..., j] = bandfit[whgood, ...].reshape(whgood.size, nBands)
 
 
 
@@ -804,6 +817,7 @@ class EBSDIndexer:
         indxData["quat"][0:nPhases, :, :] = q
         indxData[-1, :] = indxData[0, :]
         banddataout['band_match_index'][:,:, 0:nPhases] = bandmatchindex[:,:,:]#.squeeze()
+        banddataout['bandfit'][:,:, 0:nPhases] = bandfit_out[:,:,:]
         if nPhases > 1:
             for j in range(1, nPhases):
                 # indxData[-1, :] = np.where(

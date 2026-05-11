@@ -42,12 +42,17 @@ import matplotlib.pyplot as plt
 import numba
 import numpy as np
 
+
+import scipy.fft
 import scipy.ndimage as scipyndim #import gaussian_filter, dilation ...
+import scipy.signal as scipysignal
+
 #from scipy.ndimage #import grey_dilation as scipy_grey_dilation
 #from scipy.ndimage #import median_filter
 import scipy.optimize as scipyopt
 
 from pyebsdindex import radon_fast
+
 
 tempdir = PurePath(Path.home())
 #tempdir = PurePath("/tmp" if platform.system() == "Darwin" else tempfile.gettempdir())
@@ -105,7 +110,9 @@ class BandDetect():
     self.dataType = np.dtype([('id', np.int32), ('max', np.float32), ('normmax', np.float32),
                     ('maxloc', np.float32, (2)), ('avemax', np.float32), ('aveloc', np.float32, (2)),
                     ('pqmax', np.float32), ('width', np.float32), ('theta', np.float32), ('rho', np.float32),
-                    ('valid', np.int8),('band_match_index', np.int64, (self.nPhases, ))])
+                    ('valid', np.int8),
+                    ('band_match_index', np.int64, (self.nPhases, )),
+                    ('bandfit', np.float64,(self.nPhases,))])
 
 
     if (patterns is None) and (patDim is None):
@@ -273,7 +280,8 @@ class BandDetect():
       kernel = np.zeros(ksz, dtype=np.float32)
       kernel[(ksz[0]/2).astype(int),(ksz[1]/2).astype(int) ] = 1
       kernel = -1.0*scipyndim.gaussian_filter(kernel, [self.rSigma, self.tSigma], order=[2,0])
-      kernel *= 1.0/np.sum(kernel).clip(1e-12)
+      #kernel *= 1.0/np.sum(kernel).clip(1e-12)
+      kernel *= 1.0/np.max(kernel)
       self.kernel = kernel.reshape((1,ksz[0], ksz[1]))
       #self.peakPad = np.array(np.around([ 4*ksz[0], 20.0/self.dTheta]), dtype=np.int64)
       self.peakPad = np.array(np.around([2 * ksz[0], 2 * ksz[1]]), dtype=np.int64)
@@ -283,6 +291,8 @@ class BandDetect():
 
     if nBands is not None:
       self.nBands = nBands
+
+
 
   def collect_background(self, fileobj = None, patsIn = None, nsample = None, method = 'randomStride', sigma=None):
 
@@ -398,7 +408,9 @@ class BandDetect():
     return backfit
 
 
-  def find_bands(self, patternsIn, verbose=0, chunksize=-1,  **kwargs):
+  def find_bands(self, patternsIn, verbose=0, chunksize=512, **kwargs):
+
+    pats = patternsIn
     tic0 = timer()
     tic = timer()
     ndim = patternsIn.ndim
@@ -412,7 +424,7 @@ class BandDetect():
 
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
     bandData['band_match_index'] = -100
-    if chunksize < 0:
+    if chunksize <= 0:
       nchunks = 1
       chunksize = nPats
       chunk_start_end = [[0,nPats]]
@@ -431,15 +443,26 @@ class BandDetect():
       tic1 = timer()
       rdnNorm = self.radonPlan.radon_faster(patterns[chnk[0]:chnk[1],:,:], self.padding, fixArtifacts=False, background=self.backgroundsub)
       rdntime += timer() - tic1
+
       tic1 = timer()
-      rdnConv, imageave = self.rdn_conv(rdnNorm)
+      rdnConv, imageminavemax = self.rdn_conv(rdnNorm)
       convtime += timer()-tic1
+
       tic1 = timer()
       lMaxRdn= self.rdn_local_max(rdnConv)
       lmaxtime +=  timer()-tic1
+
       tic1 = timer()
       bandDataChunk= self.band_label(chnk[1]-chnk[0], rdnConv, rdnNorm, lMaxRdn)
-      bandDataChunk['normmax'] /= imageave.clip(1e-7).reshape(chnk[1]-chnk[0], 1)
+      bndnorm = bandDataChunk['normmax']
+      bndnorm -= imageminavemax[0].reshape(chnk[1]-chnk[0], 1)
+      bndnorm /=  (imageminavemax[1] - imageminavemax[0]).reshape(chnk[1]-chnk[0], 1).clip(1e-7)
+      bandDataChunk['normmax'] = bndnorm
+      #bandDataChunk['normmax'] /= imageave.clip(1e-7).reshape(chnk[1]-chnk[0], 1)
+
+
+
+
       bandData[chnk[0]:chnk[1]] = bandDataChunk
 
       if (verbose > 1) and (chnk[1] == nPats): # need to pull the radonconv off the gpu
@@ -493,6 +516,12 @@ class BandDetect():
       # plt.xlim(0,180)
       # plt.ylim(-self.rhoMax, self.rhoMax)
 
+    # This translation from the Radon to theta and rho assumes that the first pixel read
+    # in off the detector is in the top left corner.
+    theta = np.pi - np.interp(bandData['aveloc'][:, :, 1], np.arange(self.radonPlan.nTheta), self.radonPlan.theta) / RADEG
+    rho = -1.0 * np.interp(bandData['aveloc'][:, :, 0], np.arange(self.radonPlan.nRho), self.radonPlan.rho)
+    bandData['theta'][:] = theta
+    bandData['rho'][:] = rho
 
     return bandData
 
@@ -540,6 +569,7 @@ class BandDetect():
       radon = radonIn
     shprdn = radon.shape
     #rdnNormP = self.radonPad(radon,rPad=0,tPad=self.peakPad[1],mirrorTheta=True)
+
     if self.padding[1] > 0:
       radon[:,0:self.padding[1],:] = np.flip(radon[:,-2 * self.padding[1]:-self.padding[1],:],axis=0)
       radon[:,-self.padding[1]:,:] = np.flip(radon[:,self.padding[1]:2 * self.padding[1],:],axis=0)
@@ -549,22 +579,62 @@ class BandDetect():
       radon[0:self.padding[0], :,:] = radon[self.padding[0],:,:].reshape(1,shp[1], shp[2])
       radon[-self.padding[0]:, :,:] = radon[-self.padding[0]-1, :,:].reshape(1, shp[1],shp[2])
 
+    tic = timer()
 
-    rdnConv = np.zeros_like(radon)
+    # k = np.copy(self.kernel[0,:,:])
+    # k = k[:, :, np.newaxis]
+    # shpk = k.shape
+    # rdnpadsph = (scipy.fft.next_fast_len(shprdn[0]),scipy.fft.next_fast_len(shprdn[1]), scipy.fft.next_fast_len(shprdn[2]) )
+    # rdnpad = np.zeros(rdnpadsph)
+    # rdnpad[0:shprdn[0], 0:shprdn[1], 0:shprdn[2]] = radon
+    #
+    #
+    # with scipy.fft.set_workers(os.cpu_count()):
+    #   rdnConv = scipysignal.fftconvolve(rdnpad, k, mode='same')
 
-    for i in range(shp[2]):
-      rdnConv[:,:,i] = -1.0 * scipyndim.gaussian_filter(np.squeeze(radon[:,:,i]),[self.rSigma,self.tSigma],order=[2,0])
+
+    k = np.copy(self.kernel[0, :, :])
+    k = k[:, :, np.newaxis]
+    shpk = k.shape
+    # rdnpadsph = (scipy.fft.next_fast_len(shprdn[0]), scipy.fft.next_fast_len(shprdn[1]),
+    #              scipy.fft.next_fast_len(shprdn[2]))
+    # rdnpad = np.zeros(rdnpadsph)
+    # rdnpad[0:shprdn[0], 0:shprdn[1], 0:shprdn[2]] = radon
+    rdnConv = np.zeros(shprdn, dtype=np.float32)
+
+    with scipy.fft.set_workers(os.cpu_count()):
+      rdnConv = scipysignal.fftconvolve(radon, k, mode='same') # best 5s
+    # rdnConv = scipysignal.oaconvolve(radon, k, mode='same') # 2nd best 11 s
+
+    # rdnConv = scipysignal.fftconvolve(radon, k, mode='same') # 13 s
+    # rdnConv = scipysignal.oaconvolve(radon, k, mode='same')  # 27 s
+
+    # for i in range(shprdn[2]): # third best 28s
+    #      rdnConv[:,:,i] = scipysignal.fftconvolve(radon[:,:,i],k[:,:,0], mode='same')
+    #      rdnConv[:,:,i] = scipysignal.oaconvolve(rdnpad[:,:,i], k[:,:,0], mode='same')
+
+
+    # kpad = np.zeros(shprdn, dtype=np.float32)  # 17s
+    # kpad[0:shpk[0], 0:shpk[1], 0:shpk[2]] = k
+    # kpad = np.roll(kpad, [-shpk[0]//2, -shpk[1]//2], axis=[0,1])
+    # with scipy.fft.set_workers(os.cpu_count()):
+    # #   print(scipy.fft.get_workers())
+    #   rdnpadfft = scipy.fft.fftn(radon)
+    #   kpadfft = np.conjugate(scipy.fft.fftn(kpad))
+    #   rdnConv = (scipy.fft.ifftn(rdnpadfft*kpadfft)).real.astype(np.float32)
 
     #print(rdnConv.min(),rdnConv.max())
     mns = (rdnConv[self.padding[0]:shprdn[1]-self.padding[0],self.padding[1]:shprdn[1]-self.padding[1],:]).min(axis=0).min(axis=0)
+    max = (rdnConv[self.padding[0]:shprdn[1] - self.padding[0], self.padding[1]:shprdn[1] - self.padding[1], :]).max(
+      axis=0).max(axis=0)
     ave = np.mean(rdnConv[self.padding[0]:shprdn[1] - self.padding[0], self.padding[1]:shprdn[1] - self.padding[1],:], axis=(0,1))
 
-    ave -= mns
+    #ave -= mns
 
-    rdnConv -= mns.reshape((1,1, shp[2]))
-    rdnConv = rdnConv.clip(min=0.0)
+    #rdnConv -= mns.reshape((1,1, shp[2]))
+    #rdnConv = rdnConv.clip(min=0.0)
 
-    return rdnConv, ave
+    return rdnConv, [mns, ave, max]
 
   def rdn_local_max(self, rdn, clparams=None, rdn_gpu=None, use_gpu=False):
 
@@ -572,7 +642,11 @@ class BandDetect():
     # find the local max
     lMaxK = (self.peakPad[0],self.peakPad[1],1)
 
-    lMaxRdn = scipyndim.grey_dilation(rdn,size=lMaxK)
+    #lMaxRdn = scipyndim.grey_dilation(rdn,size=lMaxK)
+    lMaxRdn = self._grey_dilation(rdn, size=(1,lMaxK[1]))
+    lMaxRdn = self._grey_dilation(lMaxRdn, size=(lMaxK[0],1))
+
+    #plt.imshow(lMaxRdn[:,:,-1].squeeze(),cmap='gray')
     #lMaxRdn[:,:,0:self.peakPad[1]] = 0
     #lMaxRdn[:,:,-self.peakPad[1]:] = 0
     #location of the max is where the local max is equal to the original.
@@ -593,14 +667,12 @@ class BandDetect():
   def band_label(self,nPats,rdnConvIn,rdnNormIn,lMaxRdnIn):
     bandData = np.zeros((nPats,self.nBands),dtype=self.dataType)
 
-
+    rdnPad = np.copy(rdnConvIn)
     bdat = self.band_label_numba(
       np.int64(self.nBands),
       np.int64(nPats),
-      np.int64(self.nRho),
-      np.int64(self.nTheta),
       rdnConvIn,
-      rdnConvIn,
+      rdnPad,
       lMaxRdnIn
     )
 
@@ -617,8 +689,9 @@ class BandDetect():
     return bandData
 
   @staticmethod
-  @numba.jit(nopython=True,fastmath=True,cache=True,parallel=False)
-  def band_label_numba(nBands,nPats,nRho,nTheta,rdnConv,rdnPad,lMaxRdn):
+  @numba.jit(nopython=True,fastmath=True,cache=True,parallel=True)
+  def band_label_numba(nBands,nPats,rdnConv,rdnPad,lMaxRdn):
+
     nB = np.int64(nBands)
     nP = np.int64(nPats)
 
@@ -637,76 +710,146 @@ class BandDetect():
     #nnc = np.array([-2,-1,0,1,2,-2,-1,0,1,2,-2,-1,0,1,2],dtype=np.float32)
     #nnr = np.array([-1,-1,-1,-1,-1,0,0,0,0,0,1,1,1,1,1],dtype=np.float32)
     #nnN = numba.float32(15)
-    nnc = np.array([-1,0,1,-1,0,1,-1,0,1],dtype=np.float32)
-    nnr = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1], dtype=np.float32)
+    #nnc = np.array([-1,0,1,-1,0,1,-1,0,1],dtype=np.float32)
+    #nnr = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1], dtype=np.float32)
     nnN = numba.float32(9)
-    for q in range(nPats):
-      averdnpat = np.float32(np.mean(rdnConv[:,:,q]))
-      if averdnpat < np.float32(1.0e-12):
-        averdnpat = np.float32(1.0e-12)
-      # rdnConv_q = np.copy(rdnConv[:,:,q])
-      # rdnPad_q = np.copy(rdnPad[:,:,q])
-      # lMaxRdn_q = np.copy(lMaxRdn[:,:,q])
+    for q in numba.prange(nPats):
+      #averdnpat = np.float32(np.mean(rdnConv[:,:,q]))
+      #if averdnpat < np.float32(1.0e-12):
+      #  averdnpat = np.float32(1.0e-12)
+      rdnConv_q = np.copy(rdnConv[:,:,q])
+      rdnPad_q = np.copy(rdnPad[:,:,q])
+      lMaxRdn_q = lMaxRdn[:,:,q]
+      bandData_max_q = bandData_max[q,:]
+      bandData_avemax_q = bandData_avemax[q,:]
+      bandData_valid_q = bandData_valid[q,:]
+      bandData_maxloc_q = bandData_maxloc[q,:,:]
+      bandData_aveloc_q = bandData_aveloc[q,:,:]
+      bandData_width_q = bandData_width[q,:]
+
       # peakLoc = np.nonzero((lMaxRdn_q == rdnPad_q) & (rdnPad_q > 1.0e-6))
-      peakLoc = lMaxRdn[:,:,q].nonzero()
+      peakLoc = lMaxRdn_q[:,:].nonzero()
       indx1D = peakLoc[1] + peakLoc[0] * shp[1]
-      temp = (rdnConv[:,:,q].ravel())[indx1D]
+      temp = np.copy((rdnConv_q[:,:].ravel())[indx1D])
       srt = np.argsort(temp)
       nBq = nB if (len(srt) > nB) else len(srt)
-      for i in numba.prange(nBq):
+      for i in range(nBq):
         r = np.int32(peakLoc[0][srt[-1 - i]])
         c = np.int32(peakLoc[1][srt[-1 - i]])
-        bandData_maxloc[q,i,:] = np.array([r,c])
-        bandData_max[q,i] = rdnPad[r,c,q] / averdnpat
-        bandData_width[q, i] = 1.0 / (bandData_max[q,i] - 0.5* (rdnPad[r+1, c, q] + rdnPad[r-1, c, q]) + 1.0e-12)
-        #FWHM = 2 * sqrt(ln(2)) / sqrt(2*ln(y_peak) - ln(y_minus) - ln(y_plus))
+        if rdnPad_q[r,c] > 0.0:
+          bandData_maxloc_q[i, 0] = r
+          bandData_maxloc_q[i, 1] = c
+          bandData_max_q[i] = rdnPad_q[r,c]
+          # this assumed a linear peak profile/width
+          #bandData_width[q, i] = 1.0 / (bandData_max[q,i] - 0.5* (rdnPad[r+1, c, q] + rdnPad[r-1, c, q]) + 1.0e-12)
 
-        #center of mass peak localization
-        #nn = rdnConv[r - 1:r + 2,c - 2:c + 3,q].ravel()
-        #sumnn = (np.sum(nn) + 1.e-12)
-        #nn /= sumnn
-        #bandData_avemax[q,i] = sumnn / nnN
-        #rnn = np.sum(nn * (np.float32(r) + nnr))
-        #cnn = np.sum(nn * (np.float32(c) + nnc))
+          # Here we assume that the peak width is better modeled by a gaussian, and this is a FWHM.
+          #FWHM = 2 * sqrt(ln(2)) / sqrt(2*ln(y_peak) - ln(y_minus) - ln(y_plus))
+          bandData_width_q[i] = 0.0
+          mntest = np.min(rdnPad_q[r-1:r + 2, c])
+          if mntest > 0.0:
+            a = (np.log(rdnPad_q[r + 1, c]) - np.log(rdnPad_q[r - 1, c])) * 0.5 - np.log(bandData_max_q[i])
+            if a < -1.e-8:
+              bandData_width_q[i] = 2.0 * np.sqrt(np.log(2.0) / (-1.0 * a))
 
-        # taylor expansion quadratic
-        nn = rdnConv[r - 1:r + 2,c - 1:c + 2,q].copy()
-        sumnn = (np.sum(nn) + 1.e-12)
-        nn /= sumnn
-        bandData_avemax[q,i] = (sumnn / nnN)/ averdnpat
-        # rnn = np.sum(nn * (np.float32(r) + nnr))
-        # cnn = np.sum(nn * (np.float32(c) + nnc))
-        #dx = 0.125 * (2.0 * (nn[1,2] - nn[1,0]) + (nn[0,2] - nn[0,0]) + (nn[2,2] - nn[2,0]))
-        #dy = 0.125 * (2.0 * (nn[2,1] - nn[0,1]) + (nn[2,0] - nn[0,0]) + (nn[2,2] - nn[0,2]))
-        dx  = 0.5*(nn[1,2] - nn[1,0])
-        dy  = 0.5*(nn[2,1] - nn[0,1])
-        dxx = nn[1,2] + nn[1,0] - 2 * nn[1,1]
-        dyy = nn[2,1] + nn[0,1] - 2 * nn[1,1]
-        dxy = 0.25*(nn[2,2] - nn [0,2] - nn[2,0] + nn[0,0])
-        #det = 1.0 / (dxx * dyy - dxy * dxy)
-        det = (dxx * dyy - dxy * dxy)
-        det = det if np.fabs(det) > 1e-12 else 1.0e-12
-        det = 1.0/det
-        dc =  (dyy * dx - dxy * dy) * det
-        rc = (dxx * dy - dxy * dx) * det
-        # protect against a bad dxy estimate, assume dxy == 0.0 -- per suggestion of W. Lenthe
-        if (np.abs(dc) > 0.875) or (np.abs(rc) > 0.875):
-          det = (dxx * dyy)
+          #center of mass peak localization
+          #nn = rdnConv[r - 1:r + 2,c - 2:c + 3,q].ravel()
+          #sumnn = (np.sum(nn) + 1.e-12)
+          #nn /= sumnn
+          #bandData_avemax[q,i] = sumnn / nnN
+          #rnn = np.sum(nn * (np.float32(r) + nnr))
+          #cnn = np.sum(nn * (np.float32(c) + nnc))
+
+          # taylor expansion quadratic
+          nn = rdnConv_q[r - 1:r + 2,c - 1:c + 2].copy()
+          sumnn = np.sum(nn)
+          sumnn = sumnn if  sumnn > 1e-12 else 1e-12
+          nn /= sumnn
+          bandData_avemax_q[i] = (sumnn / nnN) #/ averdnpat
+          # rnn = np.sum(nn * (np.float32(r) + nnr))
+          # cnn = np.sum(nn * (np.float32(c) + nnc))
+          #dx = 0.125 * (2.0 * (nn[1,2] - nn[1,0]) + (nn[0,2] - nn[0,0]) + (nn[2,2] - nn[2,0]))
+          #dy = 0.125 * (2.0 * (nn[2,1] - nn[0,1]) + (nn[2,0] - nn[0,0]) + (nn[2,2] - nn[0,2]))
+          dx  = 0.5*(nn[1,2] - nn[1,0])
+          dy  = 0.5*(nn[2,1] - nn[0,1])
+          dxx = nn[1,2] + nn[1,0] - 2 * nn[1,1]
+          dyy = nn[2,1] + nn[0,1] - 2 * nn[1,1]
+          dxy = 0.25*(nn[2,2] - nn [0,2] - nn[2,0] + nn[0,0])
+          #det = 1.0 / (dxx * dyy - dxy * dxy)
+          det = (dxx * dyy - dxy * dxy)
           det = det if np.fabs(det) > 1e-12 else 1.0e-12
-          det = 1.0 / det
-          dc = (dyy * dx) * det
-          rc = (dxx * dy) * det
+          det = 1.0/det
+          dc =  (dyy * dx - dxy * dy) * det
+          rc = (dxx * dy - dxy * dx) * det
+          # protect against a bad dxy estimate, assume dxy == 0.0 -- per suggestion of W. Lenthe
           if (np.abs(dc) > 0.875) or (np.abs(rc) > 0.875):
-            dc = 0.0 ; rc = 0.0
-        # dc = max(-1.0, dc) ; rc = max(-1.0, rc)
-        # dc = min(1.0, dc) ;  rc = min(1.0, rc)
-        cnn = c - dc
-        rnn = r - rc
-        bandData_aveloc[q,i,:] = np.array([rnn,cnn])
+            det = (dxx * dyy)
+            det = det if np.fabs(det) > 1e-12 else 1.0e-12
+            det = 1.0 / det
+            dc = (dyy * dx) * det
+            rc = (dxx * dy) * det
+            if (np.abs(dc) > 0.875) or (np.abs(rc) > 0.875):
+              dc = 0.0 ; rc = 0.0
+          # dc = max(-1.0, dc) ; rc = max(-1.0, rc)
+          # dc = min(1.0, dc) ;  rc = min(1.0, rc)
+          cnn = c - dc
+          rnn = r - rc
+          bandData_aveloc_q[i,0] = rnn
+          bandData_aveloc_q[i, 1] = cnn
 
-        bandData_valid[q,i] = 1
+          bandData_valid_q[i] = 1
+
+      bandData_max[q, :] = bandData_max_q[:]
+      bandData_avemax[q, :] = bandData_avemax_q[:]
+      bandData_valid[q, :] = bandData_valid_q[:]
+      bandData_maxloc[q, :, :] = bandData_maxloc_q[:,:]
+      bandData_aveloc[q, :, :] = bandData_aveloc_q[:,:]
+      bandData_width[q, :] = bandData_width_q[:]
 
     return bandData_max,bandData_avemax,bandData_maxloc,bandData_aveloc, bandData_valid, bandData_width
+
+  @staticmethod
+  @numba.jit(nopython=True, fastmath=True, cache=True, parallel=True)
+  def _grey_dilation(image, size=(3,3)):
+    # brute force multithreaded grayscale dilation assuming a 3D array of images stacked along
+    # the last dimension (not-typical for python).
+    out = np.zeros_like(image)
+    ndims = len(image.shape)
+    ndimsk = len(size)
+    if ndimsk != 2:
+      k = np.zeros(2, dtype=np.uint64)+size[0]
+    else:
+      k = np.array(size, dtype=np.uint64)
+    k = k//2
+
+    for q in numba.prange(image.shape[2]):
+      im = image[:,:,q].copy()
+      outq = out[:,:,q].copy()
+
+      for j in range(image.shape[1]):
+        wnjstart = max(j-k[1], 0)
+        wmnjend = min(j+k[1], im.shape[1]-1)+1
+        for i in range(image.shape[0]):
+          wnistart = max(i-k[0], 0)
+          wniend = min(i+k[0], im.shape[0]-1)+1
+          mxval = -1*np.inf
+          for ii in range(wnistart, wniend):
+            for jj in range(wnjstart, wmnjend):
+              if im[ii,jj] > mxval:
+                mxval = im[ii,jj]
+
+          outq[i,j] = mxval
+      out[:,:,q] = outq
+    return out
+
+
+
+
+
+
+
+
+
   def _display_radon_pattern(self, rdnConvarray, bandData, patterns):
     if len(rdnConvarray.shape) == 3:
       im2show = rdnConvarray[self.padding[0]:-self.padding[0], self.padding[1]:-self.padding[1], -1]
@@ -739,7 +882,7 @@ class BandDetect():
       zorder=1,
       aspect='auto'
     )
-    width = (bandData['width'][-1, :]).clip(1e-4)
+    width = (bandData['width'][-1, :]).clip(1)
     width /= (width.min())
     
     width *= 2.0

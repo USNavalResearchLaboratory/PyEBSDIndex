@@ -19,7 +19,7 @@ works bear some notice that they are derived from it, and any modified versions 
 some notice that they have been modified.
 
 Author: David Rowenhorst; 
-The US Naval Research Laboratory Date: 21 Aug 2020
+The US Naval Research Laboratory Date: 05 Aug 2026
 */
 
 // simple program to convert a 8-bit byte to float and transpose array
@@ -402,14 +402,15 @@ __kernel void morphDilateKernelBF( __global const float16 *in,  __global float16
   out[(y*imszx + x)*nImChunk+z] = extremePxVal;
 }
 
-//find the minimum and average intensity value in each image.  This probably could be sped up by using a work group store.
-__kernel void imageMinAve( __global const float16 *im1, __global float16 *imMin, __global float16 *imAve,
+//find the minimum, maximum and average intensity value in each image.  This probably could be sped up by using a work group store.
+__kernel void imageMinAveMax( __global const float16 *im1, __global float16 *imMin, __global float16 *imMax, __global float16 *imAve,
                         const unsigned int imszx, const unsigned int imszy, const unsigned int padx, const unsigned int pady)
   {
   const unsigned long int z = get_global_id(0);
   const unsigned long int nImChunk = get_global_size(0);
   long int indx,i, j;
   float16 cmin = (float16) (1.0e12);
+  float16 cmax = (float16) (-1.0e12);
   float16 cave = (float16) (0.0); 
   float16 imVal;
 
@@ -420,18 +421,20 @@ __kernel void imageMinAve( __global const float16 *im1, __global float16 *imMin,
     for(i = padx; i<= imszx - padx-1; ++i){
         imVal = im1[(indx+i)*nImChunk+z];
         cmin = select(cmin, imVal, (imVal < cmin));
+        cmax = select(cmax, imVal, (imVal > cmax));
         cave += imVal; 
     }   
   }
 
   cave /= (float16) ( (imszy - 2*pady) * (imszx - 2*padx)); 
-  cave -= cmin;
-  cave = select(cave, (float16) (1.0f), (cave < (float16) (1.0e-8f)) );
+  //cave -= cmin;
+  //cave = select(cave, (float16) (1.0f), (cave < (float16) (1.0e-8f)) );
   imAve[z] = cave; 
   imMin[z] = cmin;
+  imMax[z] = cmax;
 }
 
-// Subtract a value from an image stack, divide by average intesnsity, with clipping at 0.0.
+// Subtract a value from an image stack, divide by average intensity, with clipping at 0.0.
 // The value to be subtracted are unique to each image, stored in an array in imMin
 __kernel void imageSubMinNormWClip( __global float16 *im1, 
   __global const float16 *imMin, __global const float16 *imAve, 
@@ -504,7 +507,7 @@ __kernel void maskrdn( __global float16 *im1, __global const uchar *mask,
   if (test < 1){
     for (i=0; i<nImChunk; ++i){
       indx_z = indx*nImChunk + i;
-      im1[indx_z] = -1.0;
+      im1[indx_z] = -1.0; // this should be an OK default value, cannot be a max
     }
     
   }
@@ -591,7 +594,7 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
   const unsigned long int nImChunk = get_global_size(0);
   uchar imVal1;
   float imVal2, imValyp1, imValym1; 
-  float dx, dy, dxx, dyy, dxy, det, w, ix, iy; 
+  float dx, dy, dxx, dyy, dxy, det, w, ix, iy, a;
   const long lnmax = (long) nmax; 
   long int indy, indxy,i, j; //,k;
   //__global long int maxloc1d[32];// = {0};
@@ -634,7 +637,8 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
   
   // now place them in the output arrays
   for (i=0; i< lnmax; ++i){
-    if (maxval[z*lnmax+i] > -1.0e6){
+    if (maxval[z*lnmax+i] > 0.0){
+    //if (maxval[z*lnmax+i] > -1.0e6){
       //maxval[z*lnmax + i] = maxval1d[lnmax-i-1];
       indxy = maxloc[z*lnmax+i];
       x =  ( indxy % imszx );
@@ -768,9 +772,18 @@ __kernel void maxlabel( __global const uchar *maxlocin,__global const float *max
       
       aveloc[z*lnmax + i] = (float2) (iy, ix); 
       aveval[z*lnmax + i] = (avetempweight/9.0);
-      // band width metric
-      width[z*lnmax + i] = 1.0 / (w - 0.5 * (imValyp1 + imValym1) + 1e-12) ;
-      //FWHM = 2 * sqrt(ln(2)) / sqrt(2*ln(y_peak) - ln(y_minus) - ln(y_plus))
+      // band width metric -- this older one assumes linear peak
+      // width[z*lnmax + i] = 1.0 / (w - 0.5 * (imValyp1 + imValym1) + 1e-12) ;
+
+      // this will assume a gaussian peak and provide FWHM
+      a = (log(imValyp1) + log(imValym1)) * 0.5 - log(w);
+      if (a < -1.e-8){
+          width[z*lnmax + i] = 2.0 * sqrt(log(2.0) / (-1.0*a));
+      } else{
+        width[z*lnmax + i] = 0.0;
+      }
+
+
     }
     else{
       break; // no more detected peaks

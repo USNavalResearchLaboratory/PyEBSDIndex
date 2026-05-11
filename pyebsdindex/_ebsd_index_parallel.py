@@ -321,7 +321,7 @@ def index_pats_distributed(
             #ncpu = max(1,min(os.cpu_count(), int(len(indexer.phaseLib)*16)))
             # this is a heuristic, and may be highly dependent on hardware
         else:
-            ncpu = max(1,os.cpu_count()//4)
+            ncpu = min(4,os.cpu_count())#max(1,os.cpu_count()//4)
     if ncpu != -1:
         n_cpu_nodes = int(ncpu)
 
@@ -361,7 +361,7 @@ def index_pats_distributed(
         ncpucpu_per_worker = 0.5 - 1.0e-3
         ncpugpu_per_wrker = 0.5 - 1.0e-3
         if chunksize <= 0:
-            chunksize = 1000
+            chunksize = 256
     ncpuwrker = n_cpu_nodes
 
     PCpat = indexer._fillPCarray(PC, npats)

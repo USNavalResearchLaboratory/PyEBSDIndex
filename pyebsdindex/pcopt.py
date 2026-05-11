@@ -31,7 +31,8 @@ import scipy.optimize as opt
 import scipy.stats.qmc as scipyqmc
 from timeit import default_timer as timer
 
-from pyebsdindex import _ray_installed
+
+#from pyebsdindex import _ray_installed
 
 
 __all__ = [
@@ -41,8 +42,64 @@ __all__ = [
 
 RADEG = 180.0 / np.pi
 
+def planarPC(PCstar, xyloc):
+    xyloc2d = np.atleast_2d(xyloc)
+    npoints = xyloc2d.shape[0]
+    PCout = np.zeros((npoints, 3))
+    #PCout[:,0] = PCstar[0] + PCstar[3]*xyloc2d[:, 0] + PCstar[4]*xyloc2d[:, 1]
+    #PCout[:,1] = PCstar[1] + PCstar[5]*xyloc2d[:, 0] + PCstar[6]*xyloc2d[:, 1]
+    #PCout[:, 2] = PCstar[2] + PCstar[7] * xyloc2d[:, 0] + PCstar[8] * xyloc2d[:, 1]
+    PCout[:, 0] = PCstar[0] + PCstar[3] * xyloc2d[:, 0]
+    PCout[:,1] = PCstar[1] + PCstar[4]*xyloc2d[:, 1]
+    PCout[:,2] = PCstar[2] + PCstar[5]*xyloc2d[:, 1] + PCstar[6]*xyloc2d[:, 0]
+    return PCout
 
-#def _optfunction(PC_i, indexer, banddat):
+def __optmetric(banddat, indexdata):
+    npoints = banddat.shape[0]
+    nbands = banddat.shape[1]
+    fit = indexdata[-1]['fit']
+    iq = np.array(indexdata[-1]['iq'])
+    cm = np.array(indexdata[-1]['cm'])
+    # if iq.max() > 1.5:
+    #    iq = np.clip(iq - 1.5, 0.0, None)
+
+    # print(iq)
+    nmatch = indexdata[-1]['nmatch']
+    average_fit = fit + 1.0 * (nbands - nmatch)
+    # average_fit = -1.0*(3.0-fit)*nmatch
+    whgood = np.nonzero(fit < 90.0)
+    # average_fit *= iq
+    n_averages = len(whgood[0])
+
+    if n_averages < 0.9:
+        average_fit = 1000
+    else:
+        cm = cm[whgood[0]]
+        iq = iq[whgood[0]]  # weight averages by the iq value
+        if iq.max() > 1.5:
+            iq -= 1.0
+            iq = np.clip(iq, 0.0001, None)
+        iq /= iq.max()
+        average_fit = np.sum(average_fit[whgood[0]] * iq)
+        average_fit /= sum(iq)
+        average_fit += (4.0 * (nbands + 1) * (npoints - n_averages)) / n_averages
+    return average_fit
+
+def _optfunction_planar(PC_i, indexer=None, banddat=None, xylocation=None):
+    PC = np.atleast_2d(PC_i)
+    result = np.zeros(PC.shape[0])
+
+    for q in range(PC.shape[0]):
+        PC_in = planarPC(PC[q,:], xylocation)
+        bandnorm = indexer.bandDetectPlan.radonPlan.radon2pole(
+            banddat, PC=PC_in, vendor=indexer.vendor
+        )
+        indexdata, banddat = indexer._indexbandsphase(banddat, bandnorm)
+        average_fit = __optmetric(banddat, indexdata)
+        result[q] = average_fit
+    return result.squeeze()
+
+
 def _optfunction(PC_i, indexer=None, banddat=None):
     tic = timer()
     PC = np.atleast_2d(PC_i)
@@ -51,47 +108,48 @@ def _optfunction(PC_i, indexer=None, banddat=None):
     #print(PC.shape)
     for q in range(PC.shape[0]):
 
+
+        banddat_g = indexer.gnomonic.applycorrection(banddat, indexer.bandDetectPlan.rSigma, PC=PC[q,:])
+
         bandnorm = indexer.bandDetectPlan.radonPlan.radon2pole(
-            banddat, PC=PC[q,:], vendor=indexer.vendor
+            banddat_g, PC=PC[q,:], vendor=indexer.vendor
         )
+        indexdata, banddat = indexer._indexbandsphase(banddat, bandnorm)
         #print(timer() - tic)
-        npoints = banddat.shape[0]
-        #n_averages = 0
-        #average_fit = 0
-        #nbands_fit = 0
-        #phase = indexer.phaseLib[0]
-        nbands = indexer.bandDetectPlan.nBands
-        indexdata, banddat = indexer._indexbandsphase( banddat, bandnorm)
+        #npoints = banddat.shape[0]
 
-
-
-        fit = indexdata[-1]['fit']
-        iq = np.array(indexdata[-1]['iq'])
-        #if iq.max() > 1.5:
-        #    iq = np.clip(iq - 1.5, 0.0, None)
-
-        #print(iq)
-        nmatch = indexdata[-1]['nmatch']
-        average_fit = fit + 1.0*(nbands - nmatch)
-        #average_fit = -1.0*(3.0-fit)*nmatch
-        whgood = np.nonzero(fit < 90.0)
-        #average_fit *= iq
-        n_averages = len(whgood[0])
-
-
-        if n_averages < 0.9:
-            average_fit = 1000
-        else:
-            iq = iq[whgood[0]] # weight averages by the iq value
-            if iq.max() > 1.5:
-                iq -= 1.0
-                iq = np.clip(iq, 0.0001, None)
-            iq /= iq.max()
-            average_fit = np.sum(average_fit[whgood[0]]*iq)
-            average_fit /= sum(iq)
-            average_fit += (4.0*(nbands+1)*(npoints - n_averages))/n_averages
-            #average_fit /=  npoints
-
+        #nbands = indexer.bandDetectPlan.nBands
+        #
+        #
+        #
+        #
+        # fit = indexdata[-1]['fit']
+        # iq = np.array(indexdata[-1]['iq'])
+        # #if iq.max() > 1.5:
+        # #    iq = np.clip(iq - 1.5, 0.0, None)
+        #
+        # #print(iq)
+        # nmatch = indexdata[-1]['nmatch']
+        # average_fit = fit + 1.0*(nbands - nmatch)
+        # #average_fit = -1.0*(3.0-fit)*nmatch
+        # whgood = np.nonzero(fit < 90.0)
+        # #average_fit *= iq
+        # n_averages = len(whgood[0])
+        #
+        #
+        # if n_averages < 0.9:
+        #     average_fit = 1000
+        # else:
+        #     iq = iq[whgood[0]] # weight averages by the iq value
+        #     if iq.max() > 1.5:
+        #         iq -= 1.0
+        #         iq = np.clip(iq, 0.0001, None)
+        #     iq /= iq.max()
+        #     average_fit = np.sum(average_fit[whgood[0]]*iq)
+        #     average_fit /= sum(iq)
+        #     average_fit += (4.0*(nbands+1)*(npoints - n_averages))/n_averages
+        #     #average_fit /=  npoints
+        average_fit =  __optmetric(banddat, indexdata)
         result[q] = average_fit
     return result.squeeze()
 
@@ -264,7 +322,10 @@ def optimize_pso(
     numpy.ndarray
         Optimized PC.
     """
-    banddat = indexer.bandDetectPlan.find_bands(pats)
+    #banddat = indexer.bandDetectPlan.find_bands(pats)
+    
+    banddat, bandnorm = indexer._detectbands(pats, indexer.PC)
+    
     npoints, nbands = banddat.shape[:2]
     if pswarmpar is None:
         #pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}
@@ -374,6 +435,141 @@ def optimize_pso(
     else:
         return PCoutRet, costout
 
+def optimize_planar_pso(
+    pats,
+    xylocations,
+    indexer =None,
+    PC0=None,
+    search_limit=[0.5, 0.5, 0.5, 2.0/30000.0],
+    early_exit = 0.0001,
+    nswarmparticles=50,
+    pswarmpar=None,
+    niter=50,
+    return_cost=False,
+    verbose=1
+):
+    """Optimize pattern center (PC) (PCx, PCy, PCz) in the convention
+    of the :attr:`indexer.vendor` with particle swarms.
+
+    Parameters
+    ----------
+    pats : numpy.ndarray
+        EBSD pattern(s), of shape
+        ``(n detector rows, n detector columns)``,
+        or ``(n patterns, n detector rows, n detector columns)``.
+    indexer : pyebsdindex.ebsd_index.EBSDIndexer
+        EBSD indexer instance storing all relevant parameters for band
+        detection.
+    PC0 : list, optional
+        Initial guess of PC. If not given, :attr:`indexer.PC` is used.
+        If :attr:`indexer.vendor` is ``"EMSOFT"``, the PC must be four
+        numbers, the final number being the pixel size.
+    search_limit : float, optional
+        Default is 0.2 for all PC values, and sets the +/- limit for the
+        optimization search.
+    early_exit: float, optional
+        Default is 0.0001 for all PC values, and sets a value for which
+        the optimum is considered converged before the number of iterations
+        is reached.  The optimiztion will exit early if the velocity and distance
+        of all the swarm particles is less than the early_exit value.
+    nswarmparticles : int, optional
+        Number of particles in a swarm. Default is 30.
+    pswarmpar : dict, optional
+        Particle swarm parameters "c1", "c2", and "w" with defaults 3.5,
+        3.5, and 0.8, respectively.
+    niter : int, optional
+        Number of iterations. Default is 50.
+    return_costs: bool, optional
+        Set to True to return the cost value as well as the optimum fit PC.
+    verbose : int, optional
+        Whether to print the parameters and progress of the
+        optimization (>= 1) or not (< 1). Default is to print.
+
+    Returns
+    -------
+    numpy.ndarray
+        Optimized PC.
+    """
+    #banddat = indexer.bandDetectPlan.find_bands(pats)
+    banddat, bandnorm = indexer._detectbands(pats, indexer.PC)
+
+    npoints, nbands = banddat.shape[:2]
+    if pswarmpar is None:
+        #pswarmpar = {"c1": 3.05, "c2": 1.05, "w": 0.8}
+        pswarmpar = {"c1": 3.5, "c2": 3.5, "w": 0.8}
+    if nswarmparticles is None:
+        #nswarmpoints = int(np.array(search_limit).max() * (10.0/0.2))
+        nswarmparticles = 50
+
+    nswarmparticles = max(5, nswarmparticles)
+
+    if PC0 is None:
+        PC0 = np.asarray(indexer.PC)
+    else:
+        PC0 = np.asarray(PC0)
+
+    emsoftflag = False
+    if indexer.vendor == "EMSOFT":  # Convert to EDAX for optimization
+        emsoftflag = True
+        indexer.vendor = "EDAX"
+        delta = indexer.PC
+        PCtemp = PC0[0:3]
+        PCtemp[0] *= -1.0
+        PCtemp[0] += 0.5 * indexer.bandDetectPlan.patDim[1]
+        PCtemp[1] += 0.5 * indexer.bandDetectPlan.patDim[0]
+        PCtemp /= indexer.bandDetectPlan.patDim[1]
+        PCtemp[2] /= delta[3]
+        PC0 = np.array(PCtemp)
+
+    PC00 = np.zeros(7)
+    PC00[0:3] = PC0
+    PC00[3] = -1./30000
+    PC00[4] = 1./30000 * 0.94
+    PC00[5] = 1./30000 * 0.34
+    search_limit00 = np.zeros(7) + search_limit[3]
+    search_limit00[6:] *=0.1
+    search_limit00[0:3] = search_limit[0:3]
+
+    optimizer = PSOOpt(dimensions=7, n_particles=nswarmparticles,
+                       c1=pswarmpar['c1'],
+                       c2 = pswarmpar['c2'], w = pswarmpar['w'], hyperparammethod='auto',
+                       early_exit=early_exit)
+
+
+    cost, PCoutRet = optimizer.optimize(_optfunction_planar, indexer=indexer, banddat=banddat, xylocation=xylocations,
+                                        start=PC00, bounds=(PC00 - np.array(search_limit00), PC00 + np.array(search_limit00)),
+                                        niter=niter, verbose=verbose)
+
+
+
+    if emsoftflag:  # Return original state for indexer
+        indexer.vendor = "EMSOFT"
+        indexer.PC = delta
+        if PCoutRet.ndim == 2:
+            newout = np.zeros((npoints, 4))
+            PCoutRet[:, 0] -= 0.5
+            PCoutRet[:, :3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[:, 1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
+            PCoutRet[:, 0] *= -1.0
+            PCoutRet[:, 2] *= delta[3]
+            newout[:, :3] = PCoutRet
+            newout[:, 3] = delta[3]
+            PCoutRet = newout
+        else:
+            newout = np.zeros(4)
+            PCoutRet[0] -= 0.5
+            PCoutRet[:3] *= indexer.bandDetectPlan.patDim[1]
+            PCoutRet[1] -= 0.5 * indexer.bandDetectPlan.patDim[0]
+            PCoutRet[0] *= -1.0
+            PCoutRet[2] *= delta[3]
+            newout[:3] = PCoutRet
+            newout[3] = delta[3]
+            PCoutRet = newout
+    if return_cost is False:
+        return PCoutRet
+    else:
+        return PCoutRet, cost
+
 def _file_opt(fobj, indexer, stride=200, groupsz = 3):
     nCols = fobj.nCols
     nRows = fobj.nRows
@@ -424,8 +620,9 @@ class PSOOpt():
         self.bounds = None # (2 , dimensions) array setting the min/max bounds of the search space.
         self.range = None # (dimensions) array that gives the size in float of each dimension bounds.
         self.niter = None # max number of interations
-        self.pos = None #(n, dimensions) array: position of the swarm
-        self.vel = None #(n, dimensions) array: velocity of the swarm
+        self.pos = None #(n, dimensions) array: position of the swarm in the optimization space
+        self.posnorm = None #(n, dimensions) array: position of the swarm in the normalized space
+        self.vel = None #(n, dimensions) array: velocity of the swarm in normalized
         self.pbest = None # array of particle personal best
         self.pbest_loc = None # array of particle personal best location
         self.gbest = None # value of swarm global best
@@ -453,35 +650,43 @@ class PSOOpt():
 
         #self.pos = np.random.uniform(low=bounds[0], high=bounds[1], size=(self.n_particles, self.dimensions))
         samppler = scipyqmc.Halton(self.dimensions)
-        self.pos = samppler.random(self.n_particles) * self.range + self.bounds[0]
+        self.posnorm = samppler.random(self.n_particles) #* self.range + self.bounds[0]
 
-        self.pos[0, :] = start
+        self.posnorm[0, :] = self._normsapcepos(pos = start).squeeze()
 
+        #print(self.posnorm)
+        #print('__________________')
+        self.pos = self._optsapcepos()
 
         self.vel = np.random.normal(size=(self.n_particles, self.dimensions), loc=0.0, scale=1.0)
-        meanv = np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
-        self.vel *= np.sqrt(np.sum(self.range**2))/(20. * meanv)
-        #self.vel *= np.sqrt(np.sum(self.range**2))/(100. * meanv)
-        self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1)))
+        meanv = np.mean(np.sqrt(np.sum(self.vel**2, axis=1))) # average velocity magnitude.
+        self.vel *= 1.0/(20. * meanv) # take an average of 20 iterations to cross the space.
+        #self.vel = np.zeros((self.n_particles, self.dimensions))
 
+        self.vellimit = 0.2 # no faster than 20% the search space.
+        # self.vellimit = 4*np.mean(np.sqrt(np.sum(self.vel**2, axis=1))) # no faster than 4x the mean velocity.
+        # print(self.vellimit)
 
         self.pbest = np.zeros(self.n_particles) + np.inf
-        self.pbest_loc = np.copy(self.pos)
+        self.pbest_loc = np.copy(self.posnorm)
         self.gbest = np.inf
-        self.gbest_loc = start
+        self.gbest_loc = self.posnorm[0, :].squeeze()
 
 
 
 
     def updateswarmbest(self, fun2opt, pool, **kwargs):
 
-        val = np.zeros(self.n_particles)
+        #val = np.zeros(self.n_particles)
 
         #tic = timer()
-        for part_i in range(self.n_particles):
-            temp = self.pos[part_i, :].squeeze()
-            val[part_i] = fun2opt(temp, **kwargs)
+
+        # for part_i in range(self.n_particles):
+        #     temp = self.pos[part_i, :].squeeze()
+        #     val[part_i] = fun2opt(temp, **kwargs)
         #print(timer()-tic)
+
+        val = fun2opt(self.pos, **kwargs)
 
         # pos = list(self.pos.copy())
         #
@@ -495,7 +700,7 @@ class PSOOpt():
         wh_newpbest = np.nonzero(val < self.pbest)[0]
         if wh_newpbest.size > 0:
             self.pbest[wh_newpbest] = val[wh_newpbest]
-            self.pbest_loc[wh_newpbest, :] = self.pos[wh_newpbest, :]
+            self.pbest_loc[wh_newpbest, :] = self.posnorm[wh_newpbest, :]
 
         wh_minpbest = np.argmin(self.pbest)
         if self.pbest[wh_minpbest] < self.gbest:
@@ -512,19 +717,27 @@ class PSOOpt():
         r2 = np.random.random((self.n_particles,1))
         nvel = self.vel.copy()
         nvel = w * nvel + \
-               c1 * r1 * (self.pbest_loc - self.pos) + \
-               c2 * r2 * (self.gbest_loc - self.pos)
+               c1 * r1 * (self.pbest_loc - self.posnorm) + \
+               c2 * r2 * (self.gbest_loc - self.posnorm)
 
         mag = np.expand_dims(np.sqrt(np.sum(nvel**2, axis=1)), axis=1)
         wh_toofast = np.nonzero(mag > self.vellimit)[0]
-        #print(nvel.shape, wh_toofast.shape, mag.shape)
+        #print( wh_toofast.shape)
         if len(wh_toofast) > 0:
-            nvel[wh_toofast, :] *= self.vellimit/(2.0*mag[wh_toofast])
+            # print(self.vellimit)
+            # print(np.hstack( (nvel[wh_toofast], mag[wh_toofast]) ))
+            #nvel[wh_toofast, :] *= self.vellimit/(2.0*mag[wh_toofast])
+            #nvel[wh_toofast, :] *= 0.5 * self.vellimit / (mag[wh_toofast])
+            nvel[wh_toofast, :] *=  0.9 * self.vellimit / (mag[wh_toofast])
 
         self.vel = nvel
-        self.pos += nvel
-
+        self.posnorm += nvel
         self.boundarycheck()
+        self.pos = self._optsapcepos()
+        # print('********************')
+        # print(np.min(self.pos, axis=0), np.max(self.pos, axis=0))
+        # print('____________________')
+
 
 
 
@@ -538,15 +751,18 @@ class PSOOpt():
 
     def boundarybounce(self):
         # implementation of the boundary bounce edge check.
-        lb,ub = self.bounds
+        #lb,ub = self.bounds
+        lb = np.zeros(self.dimensions)
+        ub = np.ones(self.dimensions)
         for d in range(self.dimensions):
-            wh_under = np.nonzero(self.pos[:,d] < lb[d])[0]
-            self.pos[wh_under,d] = lb[d]
+            wh_under = np.nonzero(self.posnorm[:,d] < lb[d])[0]
+            self.posnorm[wh_under,d] = lb[d]
             self.vel[wh_under,d] = np.abs(self.vel[wh_under,d])
 
-            wh_over = np.nonzero(self.pos[:, d] > ub[d])[0]
-            self.pos[wh_over, d] = ub[d]
+            wh_over = np.nonzero(self.posnorm[:, d] > ub[d])[0]
+            self.posnorm[wh_over, d] = ub[d]
             self.vel[wh_over, d] = -1*np.abs(self.vel[wh_over, d])
+        self.pos = self._optsapcepos()
 
     def updatehyperparam(self, iter):
         # Function that selects and implements evolution of hyperparameters.
@@ -558,6 +774,11 @@ class PSOOpt():
             self.c2i = (self.c2 - self.c2 / 7) * (iter) / N + self.c2 / 7.0
             self.wi = self.w/2 * ((N - iter)/N)**2 + self.w/2
 
+            # automatic max velocity too
+            partrange = np.max(self.posnorm, axis=0) - np.min(self.posnorm, axis=0)
+            self.vellimit = 0.2*np.max(partrange)
+
+
         else:
             self.c1i = self.c1
             self.c2i = self.c2
@@ -567,13 +788,19 @@ class PSOOpt():
         pass
     def printprogress(self, iter):
         # progress printing function.
+        # return
+        gbest = self.gbest_loc.copy()
+        gbest = self._optsapcepos(pos=gbest).squeeze()
         progress = int(round(10*float(iter)/self.niter))
         print('',end='\r' )
         print('Progress [',
               '*' * progress, ' '*(10-progress),'] ', iter+1 , '/', self.niter,
               '  global best:', "{0:.3g}".format(self.gbest),
-              '  best loc:', np.array_str(self.gbest_loc, precision=4, suppress_small=True),
+              '  best loc:', np.array_str(gbest, precision=4, suppress_small=True),
               sep='', end='')
+
+
+
     def optimize(self, function, start=None, bounds=None, niter=50, verbose = 1, **kwargs):
         # actual optimization method.  Will initialize the swarm.
         # strongly suggested that start and bounds are set.
@@ -609,7 +836,7 @@ class PSOOpt():
             self.updateswarmvelpos()
 
             if np.abs(self.vel).max() < early_exit:
-                d = abs(self.gbest_loc - self.pos)
+                d = abs(self.gbest_loc - self.posnorm)
                     #print(d.max())
                 if d.max() < early_exit:
                     break
@@ -620,7 +847,7 @@ class PSOOpt():
         #pool.close()
         #pool.terminate()
         final_best = self.gbest
-        final_loc = self.gbest_loc
+        final_loc = self._optsapcepos(self.gbest_loc).squeeze()
         if verbose >= 1:
             print('', end='\n')
             print("Optimization finished | best cost: {}, best pos: {}".format(
@@ -628,5 +855,28 @@ class PSOOpt():
             print(' ')
         return final_best, final_loc
 
+    def _optsapcepos(self, pos = None):
+        if pos is None:
+            npos = self.n_particles
+            posout = self.posnorm.copy()
+        else:
+            posout = np.atleast_2d(pos.copy())
+            npos = posout.shape[0]
 
+        posout *= self.range.reshape(1, self.dimensions)
+        posout += self.bounds[0].reshape(1, self.dimensions)
 
+        return posout
+
+    def _normsapcepos(self, pos=None):
+        if pos is None:
+            npos = self.n_particles
+            posout = self.pos.copy()
+        else:
+            posout = np.atleast_2d(pos.copy())
+            npos = posout.shape[0]
+
+        posout -= self.bounds[0].reshape(1, self.dimensions)
+        posout /= self.range.reshape(1, self.dimensions)
+
+        return posout

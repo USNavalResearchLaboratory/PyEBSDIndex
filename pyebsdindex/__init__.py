@@ -1,3 +1,5 @@
+from pyebsdindex.__version import __version__
+
 __author__ = "Dave Rowenhorst"
 __author_email__ = ""
 # Initial committer first, then sorted by line contributions
@@ -7,7 +9,6 @@ __credits__ = [
 ]
 __description__ = "Python based tool for Radon based EBSD indexing"
 __name__ = "pyebsdindex"
-__version__ = "0.3.9.2"
 
 
 # Try to import only once - also will perform check that at least one GPU is found.

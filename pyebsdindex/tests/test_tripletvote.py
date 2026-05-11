@@ -20,6 +20,7 @@
 # Author: David Rowenhorst;
 # The US Naval Research Laboratory Date: 21 Aug 2020
 
+import gc
 from itertools import product
 
 import numpy as np
@@ -37,6 +38,7 @@ class TestAddPhase:
         assert angles.size == 21
         assert np.unique(angles).size == 17
 
+
     def test_add_phase_bcc(self):
         phase = tripletvote.addphase("BCC")
         assert np.allclose(
@@ -45,6 +47,7 @@ class TestAddPhase:
         angles = phase.angpairs["angles"]
         assert angles.size == 34
         assert np.unique(angles).size == 28
+
 
     def test_add_phase_hcp(self):
         phase = tripletvote.addphase("HCP")
@@ -64,6 +67,7 @@ class TestAddPhase:
         angles = phase.angpairs["angles"]
         assert angles.size == 82
         assert np.unique(angles).size == 74
+
 
     def test_add_phase_triclinic(self):
         # Build our own reflector list
@@ -89,3 +93,4 @@ class TestAddPhase:
         angles = phase.angpairs["angles"]
         assert angles.size == 78
         assert np.unique(angles).size == 77
+

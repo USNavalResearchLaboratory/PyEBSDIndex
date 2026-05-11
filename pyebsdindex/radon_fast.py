@@ -279,7 +279,7 @@ class Radon:
     return radon#, counter
 
   @staticmethod
-  @jit(nopython=True, fastmath=True, cache=True, parallel=False)
+  @jit(nopython=True, fastmath=True, cache=True, parallel=True)
   def rdn_loops(images,index,nIm,nPx,indxdim,radon, padding, norm):
     nRho = indxdim[0]
     nTheta = indxdim[1]
@@ -327,10 +327,13 @@ class Radon:
     #theta = np.pi - self.radonPlan.theta[np.array(bandData['aveloc'][:,:,1],dtype=np.int64)] / RADEG
     #rho = -1.0 * self.radonPlan.rho[np.array(bandData['aveloc'][:,:,0],dtype=np.int64)]
 
-    theta =  np.pi - np.interp(bandData['aveloc'][:,:,1], np.arange(self.nTheta), self.theta) / RADEG
-    rho = -1.0 * np.interp(bandData['aveloc'][:,:,0], np.arange(self.nRho), self.rho)
-    bandData['theta'][:] = theta
-    bandData['rho'][:] = rho
+    # theta =  np.pi - np.interp(bandData['aveloc'][:,:,1], np.arange(self.nTheta), self.theta) / RADEG
+    # rho = -1.0 * np.interp(bandData['aveloc'][:,:,0], np.arange(self.nRho), self.rho)
+    # bandData['theta'][:] = theta
+    # bandData['rho'][:] = rho
+
+    theta = bandData['theta'][:]
+    rho = bandData['rho'][:]
 
     # from this point on, we will assume the image origin and t-vector (aka pattern center) is described
     # at the bottom left of the pattern
@@ -388,7 +391,7 @@ class Radon:
     #n2 = p - t.reshape(1,1,3)
     n2 = p - t
     n = np.cross(r.reshape(nPats*nBands, 3), n2.reshape(nPats*nBands, 3) )
-    norm = np.linalg.norm(n, axis=1)
+    norm = np.linalg.norm(n, axis=1).clip(1e-12)
     n /= norm.reshape(nPats*nBands, 1)
     n = n.reshape(nPats, nBands, 3)
     return n

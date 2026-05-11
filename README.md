@@ -28,5 +28,5 @@ and contributing guide is available at https://pyebsdindex.readthedocs.io.
 
 ## Installation
 
-See [the documentation](https://pyebsdindex.readthedocs.io/en/stable/installation.html)
+See [the documentation](https://pyebsdindex.readthedocs.io/en/stable/index.html)
 for installation instructions.

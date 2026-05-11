@@ -100,6 +100,8 @@ def get_pattern_file_obj(path,file_type=str('')):
         ebsdfileobj = EDAXOH5(path)
       if vendor.upper() == 'BRUKER NANO':
         ebsdfileobj = BRUKERH5(path)
+      if vendor.upper() == 'EMSOFT':
+        ebsdfileobj = EMSOFTH5(path)
     if 'manufacturer' in f.keys():
       vendor = f['manufacturer'][()]
       if type(vendor) is np.ndarray:
@@ -479,9 +481,9 @@ class UPFile(EBSDPatternFile):
       if self.yStep is None:
         self.yStep = 0.0
       if self.nCols is None:
-        self.nCols = np.uint64(1)
+        self.nCols = np.uint64(self.nPatterns)
       if self.nCols == 0:
-        self.nCols = np.uint64(1)
+        self.nCols = np.uint64(self.nPatterns)
       if self.nRows is None:
         self.nRows = np.uint64(np.floor(self.nPatterns/self.nCols))
 
@@ -514,10 +516,23 @@ class UPFile(EBSDPatternFile):
     typeread = self.filedatatype
     typebyte = self.filedatatype(0).nbytes
 
+    f.seek(np.int64(np.int64(nPerPat) * np.int64(patStart) * typebyte), 1)
+    # chunksize = 1024
+    # nPats = nPatToRead
+    # nchunks = (np.ceil(nPats / chunksize)).astype(np.int64)
+    # chunk_start_end = [[i * chunksize, (i + 1) * chunksize] for i in range(nchunks)]
+    # chunk_start_end[-1][1] = nPats
 
-    f.seek(np.int64(np.int64(nPerPat) * np.int64(patStart) * typebyte),1)
+
+    # readpats = np.zeros((nPatToRead,self.patternH,self.patternW), dtype = typeread)
+    #
+    # for chnk in chunk_start_end:
+    #   nchnk = int(chnk[1] - chnk[0])
+    #   readpatstemp = np.fromfile(f, dtype=typeread, count=np.int64(np.int64(nchnk) * np.int64(nPerPat)))
+    #   readpatstemp = readpatstemp.reshape(nchnk, self.patternH, self.patternW)
+    #   readpats[chnk[0]:chnk[1],:,:] = readpatstemp
+
     readpats = np.fromfile(f,dtype=typeread,count=np.int64(np.int64(nPatToRead) * np.int64(nPerPat)))
-
     readpats = readpats.reshape(nPatToRead,self.patternH,self.patternW)
     f.close()
     yx = np.unravel_index(np.arange(np.int64(patStart), np.int64(patStart+nPatToRead), dtype = np.uint64),
@@ -1666,6 +1681,90 @@ class KIKUCHIPYH5(HDF5PatFile):
 
       self.xStep = np.float32(headerpath['step_x'][()][0])
       self.yStep = np.float32(headerpath['step_y'][()][0])
+
+    return 0 #note this function uses multiple returns
+
+class EMSOFTH5(HDF5PatFile):
+  def __init__(self, path=None):
+    HDF5PatFile.__init__(self, path)
+    self.vendor = 'EMsoft'
+    self.version = '0.0'
+    #EDAXOH5 only attributes
+    self.filedatatype = None # np.uint8
+    self.patternh5id = 'EBSDPatterns'
+    if self.filepath is not None:
+      self.get_data_paths()
+
+  def get_data_paths(self, verbose=0):
+    '''Based on the H5EBSD spec this will search for viable Pattern Datasets '''
+    ''' Slightly altered for standard EMsoft output'''
+    try:
+      f = h5py.File(self.filepath,'r')
+    except:
+      print("File Not Found:",str(Path(self.filepath)))
+      return -1
+    self.h5datagroups = []
+    self.h5othergrps = []
+    groupsets = list(f.keys())
+    for grpset in groupsets:
+      if isinstance(f[grpset],h5py.Group):
+        if 'EBSD' in f[grpset]:
+          if self.patternh5id in f[grpset + '/EBSD/']:
+            if (grpset  not in self.h5datagroups):
+              self.h5datagroups.append(grpset)
+      else:
+        self.h5othergrps.append(grpset)
+    f.close()
+    if len(self.h5datagroups) < 1:
+      print("No viable EBSD patterns found:",str(Path(self.filepath)))
+      return -2
+    else:
+      if verbose > 0:
+        print(self.h5datagroups)
+    return len(self.h5datagroups)
+
+  def set_data_path(self, datapath=None, pathindex=0): #overloaded from parent - will default to first group.
+    if datapath is not None:
+      self.h5patdatpth = datapath
+    else:
+      if len(self.h5datagroups) > 0:
+        #self.activegroupid = pathindex
+        self.h5patdatpth = self.h5datagroups[pathindex] + '/EBSD/' + self.patternh5id
+
+
+  def read_header(self, path=None):
+    if path is not None:
+      self.filepath = path
+
+    try:
+      f = h5py.File(Path(self.filepath).expanduser(),'r')
+    except:
+      print("File Not Found:",str(Path(self.filepath)))
+      return -1
+
+    #self.version = str((f['version'][()][0]).decode('UTF-8'))
+
+    if self.version  >= '0.0':
+      ngrp = self.get_data_paths()
+      if ngrp <= 0:
+        f.close()
+        return -2 # no data groups with patterns found.
+      if self.h5patdatpth is None: # default to the first datagroup
+        self.set_data_path(pathindex=0)
+
+      dset = f[self.h5patdatpth]
+      shp = np.array(dset.shape)
+      self.patternW = shp[-1]
+      self.patternH = shp[-2]
+      self.nPatterns = shp[-3]
+      self.filedatatype = dset.dtype.type
+
+      self.nCols = np.uint32(shp[-3])
+      self.nRows = np.uint32(1)
+      self.hexflag = np.uint32(0)
+
+      self.xStep = np.float32(1.0)
+      self.yStep = np.float32(1.0)
 
     return 0 #note this function uses multiple returns
 
