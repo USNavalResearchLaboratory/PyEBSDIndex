@@ -64,7 +64,7 @@ gpu = [
     "pyopencl",
 ]
 parallel = [
-    "ray[default]",#                   <= 2.53",
+    "ray[default]",
 ]
 dev = [
     "nbsphinx                       >= 0.7",
@@ -79,11 +79,11 @@ dev = [
     "pytest                         >= 5.4",
     "pytest-cov                     >= 2.8.1",
     "pyopencl",
-    "ray[default]",#                   <= 2.53",
+    "ray[default]",
 ]
 all = [
     "pyopencl",
-    "ray[default]", #                   <= 2.53",
+    "ray[default]",
 ]
 
 [project.urls]
