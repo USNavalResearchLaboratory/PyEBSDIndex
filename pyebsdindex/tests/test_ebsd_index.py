@@ -66,8 +66,7 @@ class TestEBSDIndexer:
         # Expected rotation
         euler = np.rad2deg(qu2eu(data[0]["quat"]))
         assert np.isclose(euler, self._possible_euler, atol=2).any()
-        del indexer2
-        del indexer
+
 
     @pytest.mark.skipif(not _ray_installed, reason="ray is not installed")
     def test_index_pats_multi(self, pattern_al_sim_20kv):
@@ -79,8 +78,6 @@ class TestEBSDIndexer:
         # os.environ['TF_NUM_INTRAOP_THREADS'] = '1'
         # os.environ['RAY_kill_child_processes_on_worker_exit'] = 'true'
 
-
-
         from pyebsdindex.ebsd_index import index_pats_distributed
 
         patterns = np.repeat(pattern_al_sim_20kv[None, ...], 4, axis=0)
@@ -91,5 +88,4 @@ class TestEBSDIndexer:
 
         assert np.isclose(euler[0], self._possible_euler, atol=2).any()
         assert np.allclose(euler[0], euler[1:])
-        del indexer
-        gc.collect()
+
