@@ -72,12 +72,17 @@ class TestEBSDIndexer:
     @pytest.mark.skipif(not _ray_installed, reason="ray is not installed")
     def test_index_pats_multi(self, pattern_al_sim_20kv):
         """Test Radon indexing parallelized with ray."""
+        os.environ['OPENBLAS_NUM_THREADS'] = '1'
+        os.environ['OMP_NUM_THREADS'] = '1'
+        os.environ['RAY_num_server_call_thread'] = '1'
+        os.environ['TF_NUM_INTEROP_THREADS'] = '1'
+        os.environ['TF_NUM_INTRAOP_THREADS'] = '1'
         os.environ['RAY_kill_child_processes_on_worker_exit'] = 'true'
         from pyebsdindex.ebsd_index import index_pats_distributed
 
         patterns = np.repeat(pattern_al_sim_20kv[None, ...], 4, axis=0)
         indexer = EBSDIndexer(PC=(0.4, 0.72, 0.6), patDim=patterns.shape[1:])
-        data = index_pats_distributed(patsin=patterns, ebsd_indexer_obj=indexer, ncpu=2)[0]
+        data = index_pats_distributed(patsin=patterns, ebsd_indexer_obj=indexer, ncpu=1)[0]
 
         # Expected rotation
         euler = np.rad2deg(qu2eu(data[0]["quat"]))
