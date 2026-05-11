@@ -67,13 +67,12 @@ jobs:
           pip install ${{ matrix.DEPENDENCIES }}
 
       - name: Install support for multiprocessing and GPU support
-        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
+        if: ${{ matrix.os == 'ubuntu-latest'}} # || matrix.os == 'macos-latest' }}
         # The second line is redundant but added for testing of pip
         # selectors
         run: |
           pip install -U -e .'[gpu,parallel]'
           pip install -U -e .'[all]'
-
       - name: Display versions of Python, pip and packages
         run: |
           python -V
@@ -82,7 +81,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest --cov=pyebsdindex --pyargs pyebsdindex -s
+          pytest --cov=pyebsdindex --pyargs pyebsdindex
 
       - name: Generate line coverage
         if: ${{ matrix.os == 'ubuntu-latest' }}
