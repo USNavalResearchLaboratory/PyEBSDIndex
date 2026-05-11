@@ -82,11 +82,7 @@ jobs:
 
       - name: Run tests
         run: |
-          echo "Memory usage before step:"
-          free -h
-          pytest --cov=pyebsdindex --pyargs pyebsdindex
-          echo "Memory usage after step:"
-          free -h
+          pytest --cov=pyebsdindex --pyargs pyebsdindex -s
 
       - name: Generate line coverage
         if: ${{ matrix.os == 'ubuntu-latest' }}

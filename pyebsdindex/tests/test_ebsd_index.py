@@ -29,6 +29,18 @@ from pyebsdindex import _ray_installed
 from pyebsdindex.ebsd_index import EBSDIndexer
 from pyebsdindex.rotlib import qu2eu
 
+import resource
+import platform
+from contextlib import contextmanager
+
+@contextmanager
+def monitor_memory():
+    yield
+    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    peak = usage / (1024 * 1024) if platform.system() == 'Darwin' else usage / 1024
+    print(f"\n--- 📊 Memory Report ---")
+    print(f"Peak Memory: {peak:.2f} MB")
+    print(f"------------------------\n")
 
 class TestEBSDIndexer:
     # Pattern used in test is simulated with an identity rotation, but
@@ -72,22 +84,24 @@ class TestEBSDIndexer:
     @pytest.mark.skipif(not _ray_installed, reason="ray is not installed")
     def test_index_pats_multi(self, pattern_al_sim_20kv):
         """Test Radon indexing parallelized with ray."""
-        os.environ['OPENBLAS_NUM_THREADS'] = '1'
-        os.environ['OMP_NUM_THREADS'] = '1'
-        os.environ['RAY_num_server_call_thread'] = '1'
-        os.environ['TF_NUM_INTEROP_THREADS'] = '1'
-        os.environ['TF_NUM_INTRAOP_THREADS'] = '1'
-        os.environ['RAY_kill_child_processes_on_worker_exit'] = 'true'
-        from pyebsdindex.ebsd_index import index_pats_distributed
+        # os.environ['OPENBLAS_NUM_THREADS'] = '1'
+        # os.environ['OMP_NUM_THREADS'] = '1'
+        # os.environ['RAY_num_server_call_thread'] = '1'
+        # os.environ['TF_NUM_INTEROP_THREADS'] = '1'
+        # os.environ['TF_NUM_INTRAOP_THREADS'] = '1'
+        # os.environ['RAY_kill_child_processes_on_worker_exit'] = 'true'
 
-        patterns = np.repeat(pattern_al_sim_20kv[None, ...], 4, axis=0)
-        indexer = EBSDIndexer(PC=(0.4, 0.72, 0.6), patDim=patterns.shape[1:])
-        data = index_pats_distributed(patsin=patterns, ebsd_indexer_obj=indexer, ncpu=1)[0]
 
-        # Expected rotation
-        euler = np.rad2deg(qu2eu(data[0]["quat"]))
+        with monitor_memory():
+            from pyebsdindex.ebsd_index import index_pats_distributed
 
-        assert np.isclose(euler[0], self._possible_euler, atol=2).any()
-        assert np.allclose(euler[0], euler[1:])
-        del indexer
-        gc.collect()
+            patterns = np.repeat(pattern_al_sim_20kv[None, ...], 4, axis=0)
+            indexer = EBSDIndexer(PC=(0.4, 0.72, 0.6), patDim=patterns.shape[1:])
+            data = index_pats_distributed(patsin=patterns, ebsd_indexer_obj=indexer, ncpu=1)[0]
+            # Expected rotation
+            euler = np.rad2deg(qu2eu(data[0]["quat"]))
+
+            assert np.isclose(euler[0], self._possible_euler, atol=2).any()
+            assert np.allclose(euler[0], euler[1:])
+            del indexer
+            gc.collect()
