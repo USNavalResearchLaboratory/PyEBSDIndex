@@ -93,7 +93,7 @@ Documentation = "https://pyebsdindex.readthedocs.io"
 Homepage = "https://pyebsdindex.readthedocs.io"
 
 [tool.hatch.version]
-path = "pyebsdindex/_version.py"
+path = "pyebsdindex/__version.py"
 
 [tool.hatch.build.targets.sdist]
 include = [

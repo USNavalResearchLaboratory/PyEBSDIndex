@@ -1,4 +1,4 @@
-from pyebsdindex._version import __version__
+from pyebsdindex.__version import __version__
 
 __author__ = "Dave Rowenhorst"
 __author_email__ = ""

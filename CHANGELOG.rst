@@ -5,6 +5,24 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
+0.3.10 (2026-05-11)
+==================
+ Added
+-----
+
+Changed
+-------
+- Updated CPU band detection to use more numba-based multi threading.
+- Changed default values for ``ebsd_index.index_pats_distributed()`` for using CPU only indexing.
+- Converted the project from ``setup.py`` to ``pyproject.toml`` and build backend now is hatchling.
+- Package version now located in __version.py to avoid issues with building with hatchling.
+
+
+Fixed
+-----
+- Removed multiprocess (with Ray) testing for macOS on GitHub due to hitting RAM limits. Unclear as to root cause.
+  This was the former root cause of tests failing with Ray versions ``>0.53.1``; however these versions of Ray work
+  perfectly well on local machines.
 
 0.3.9.2 (2026-03-06)
 ==================
@@ -179,7 +197,7 @@ Changed
 
 Removed
 -------
-- Removed ``band_vote`` modual as that is now wrapped into triplevote.
+- Removed ``band_vote`` module as that is now wrapped into triplevote.
 
 Fixed
 -----
