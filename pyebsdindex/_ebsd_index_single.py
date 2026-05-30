@@ -410,7 +410,7 @@ class EBSDIndexer:
 
         self.nband_earlyexit = nband_earlyexit
 
-        self.gnomonic = gnomonic_correction.GnomonicCorrection(radonPlan=self.bandDetectPlan.radonPlan, PC=self.PC)
+        self.gnomonic = gnomonic_correction.GnomonicCorrection(radonPlan=self.bandDetectPlan.radonPlan, PC=self.PC, vendor=vendor)
 
         self.dataTemplate = np.dtype(
             [
