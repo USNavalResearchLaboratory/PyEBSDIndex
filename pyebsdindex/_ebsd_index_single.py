@@ -347,7 +347,7 @@ class EBSDIndexer:
         if isinstance(filename, ebsd_pattern.EBSDPatternFile):
             self.filein = filename.filepath
             self.fID = filename
-        else:     
+        else:
             self.filein = filename
             if self.filein is not None:
                 self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
@@ -410,7 +410,7 @@ class EBSDIndexer:
 
         self.nband_earlyexit = nband_earlyexit
 
-        self.gnomonic = gnomonic_correction.GnomoicCorrection(radonPlan=self.bandDetectPlan.radonPlan, PC=self.PC)
+        self.gnomonic = gnomonic_correction.GnomonicCorrection(radonPlan=self.bandDetectPlan.radonPlan, PC=self.PC)
 
         self.dataTemplate = np.dtype(
             [
@@ -446,7 +446,7 @@ class EBSDIndexer:
                 self.fID.read_header()
             patDim[0:] = np.array([self.fID.patternH, self.fID.patternW])
 
-            self.filein = filename.filepath   
+            self.filein = filename.filepath
         else:
             self.filein = filename
             self.fID = ebsd_pattern.get_pattern_file_obj(self.filein)
@@ -753,7 +753,7 @@ class EBSDIndexer:
 
         # the adj_intensity is used to weight the peaks in the quest fit.
         #adj_intensity =  banddata["max"].copy()
-       
+
         adj_intensity = (-1 * np.abs(banddata["rho"]) * 0.5 / rhomax + 1) * banddata["max"]
         adj_intensity *= ((banddata["theta"] > (2 * np.pi / 180)).astype(np.float32) + 0.5) / 2
         adj_intensity *= ((banddata["theta"] < (178.0 * np.pi / 180)).astype(np.float32) + 0.5) / 2
