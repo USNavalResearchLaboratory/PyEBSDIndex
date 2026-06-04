@@ -55,7 +55,7 @@ os.environ["NUMBA_CACHE_DIR"] = str(tempdir)+str(os.sep)
 
 RADEG = 180.0/np.pi
 
-class GnomoicCorrection():
+class GnomonicCorrection():
   def __init__(
     self,
     radonPlan=None,
@@ -188,7 +188,7 @@ class GnomoicCorrection():
     #rdncorrect = self.rdncorrect
     #print(PCpx)
     bdndata_out = bnddata.copy()
-    
+
     rho_new = self.__correction_loops_nb( npat, nband,
                             valid, width, maxloc, theta, rho, PCpx, patdim,
                             convolfactor, rsigma)
@@ -280,6 +280,6 @@ class GnomoicCorrection():
             else:
               rho_1 = rho_ji
             rho[j,i] = rho_1
-            
+
 
       return rho
