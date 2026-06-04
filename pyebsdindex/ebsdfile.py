@@ -279,7 +279,15 @@ def writeoh5(filename, indexer, data,
       f.create_dataset(datasetname + '/EBSD/Data/X Position', data=x)
       f.create_dataset(datasetname + '/EBSD/Data/Y Position', data=y)
       f.create_dataset(datasetname + '/EBSD/Data/Valid', data=np.zeros(npoints, dtype=np.int8))
-      f.create_dataset(datasetname + '/EBSD/Data/SEM Signal', data=np.zeros(npoints, dtype=np.int32))
+      semsig = (data[-1]['pq']).copy()
+      semsig -= semsig.min()
+      semsig *= float(int(2**8 - 1))/semsig.max()
+
+      semsig = (np.round(semsig)-int(2**7-1)).astype(np.int8)
+
+      f.create_dataset(datasetname + '/EBSD/Data/SEM Signal', data=semsig)
+      f.create_dataset(datasetname + '/EBSD/Data/Grain ID', data=data[-1]['grainid'])
+
 
       if version == '8.6':
         versiontxt = 'OIM Analysis 8.6.103 x64 [29 Sep 2022]'
