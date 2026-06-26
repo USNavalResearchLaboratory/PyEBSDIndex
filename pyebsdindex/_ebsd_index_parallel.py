@@ -493,7 +493,7 @@ def index_pats_distributed(
                                                )
             )
         gtaskindex.append(gjob)
-
+        time.sleep(1)
         #gpu_launched += 1
 
     gpuwrker_cycles = -1000
@@ -524,7 +524,8 @@ def index_pats_distributed(
 
             gpuwrker_cycles +=1
 
-            donewrker, busy = ray.wait(gputask,num_returns=len(gputask),  timeout=0.1)
+            #donewrker, busy = ray.wait(gputask,num_returns=len(gputask),  timeout=0.1)
+            donewrker, busy = ray.wait(gputask, num_returns=min(1,len(gputask)), timeout=0.1)
 
             #print(len(donewrker), nret)
             #print()
