@@ -48,6 +48,7 @@ else:
     from pyebsdindex import band_detect as band_detect
 
 os.environ["GRPC_VERBOSITY"] = "ERROR"
+os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
 RAYIPADDRESS = '127.0.0.1'
 #RAYIPADDRESS = '0.0.0.0'

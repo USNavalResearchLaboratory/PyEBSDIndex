@@ -239,6 +239,9 @@ class NLPAR:
     ndone = 0
     nchunks = int(chunks[1] * chunks[0])
 
+    if stem_scale is True: # need to get the file min (and might as well get the max)
+      dmin, dmax = self._getdatamaxmin(chunks, patternfile)
+
     for rowchunk in range(chunks[1]):
         rstart = chunks[3][rowchunk, 0]
         rend = chunks[3][rowchunk, 1]
@@ -254,7 +257,7 @@ class NLPAR:
             if stem_scale is True:
                 #data = data - data.min() + 1
                 #data = np.log(data)
-                data = data - data.min()
+                data = data - patternfile.datamin
                 data = np.sqrt(data)
             shp = data.shape
             data = data.reshape(data.shape[0], phw)
@@ -264,7 +267,7 @@ class NLPAR:
                                                        np.array([0,nrowchunk ], dtype=np.uint64),
                                                                     np.array([0,ncolchunk],dtype=np.uint64),
                                                                     indices,saturation_protect)
-
+           
             sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigchunk)
             # temp = (d2 > thresh).choose(dthresh, d2)
             n2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  0], [n2chunk], default=n2[rstart:rend, cstart:cend,:])
@@ -273,7 +276,8 @@ class NLPAR:
             ndone += 1
             if verbose >= 2:
                 print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
-
+    print()
+    print(sigma.min(), sigma.max())
     return sigma, d2, n2
 
   def calcnlpar_cpu(self, chunksize=0, searchradius=None, lam = None, dthresh = None,
@@ -392,7 +396,8 @@ class NLPAR:
       else: # not int, so no rescale.
         rescale = False
 
-
+    if stem_scale is True: # need to get the file min (and might as well get the max)
+      dmin, dmax = self._getdatamaxmin(chunks, patternfile)
 
     nthreadpos = numba.get_num_threads()
     #numba.set_num_threads(18)
@@ -464,7 +469,7 @@ class NLPAR:
         data, xyloc = patternfile.read_data(patStartCount=[[ cstart, rstart], [ncolchunk, nrowchunk]],
                                           convertToFloat=True, returnArrayOnly=True)
         if stem_scale is True:
-            datamin = data.min()
+            datamin = patternfile.datamin
             # data = data - datamin + 1
             # data = np.log(data)
             data = data - datamin
@@ -990,17 +995,46 @@ class NLPAR:
   def calcnlpar(self, **kwargs):  # helper function
     return self.calcnlpar_cpu(**kwargs)
 
+  def _getdatamaxmin(self, chunks, patternfile):
+    patternfile.read_datamaxmin()
+    if (patternfile.datamax is None) or (patternfile.datamin is None):
+      patternfile.datamax = -np.inf
+      patternfile.datamin = np.inf
+      for rowchunk in range(chunks[1]):
+        rstart = chunks[3][rowchunk, 0]
+        rend = chunks[3][rowchunk, 1]
+        nrowchunk = rend - rstart
+
+        for colchunk in range(chunks[0]):
+          cstart = chunks[2][colchunk, 0]
+          cend = chunks[2][colchunk, 1]
+          ncolchunk = cend - cstart
+          data, xyloc = patternfile.read_data(patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
+                                              convertToFloat=True, returnArrayOnly=True)
+          patternfile.datamax = max(patternfile.datamax, data.max())
+          patternfile.datamin = min(patternfile.datamin, data.min())
+      patternfile.write_datamaxmin()
+    dmax = patternfile.datamax
+    dmin = patternfile.datamin
+    return dmin, dmax
+
+
 
   def _calcchunks(self, patdim, ncol, nrow, target_bytes=2e9, col_overlap=0, row_overlap=0, col_offset=0, row_offset=0):
 
     col_overlap = min(col_overlap, ncol - 1)
     row_overlap = min(row_overlap, nrow - 1)
 
+
+    mincolchunk = 2 if ncol >= nrow else 1
+    minrowchunk = 2 if nrow > ncol else 1
+
+
     byteperpat = patdim[-1] * patdim[-2] * 4 * 2  # assume a 4 byte float input and output array
     byteperdataset = byteperpat * ncol * nrow
     nchunks = int(np.ceil(byteperdataset / target_bytes))
 
-    ncolchunks = (max(np.round(np.sqrt(nchunks * float(ncol) / nrow)), 1))
+    ncolchunks = (max(np.round(np.sqrt(nchunks * float(ncol) / nrow)), mincolchunk))
     colstep = max((ncol / ncolchunks), 1)
     ncolchunks = max(ncol / colstep, 1)
     colstepov = min(colstep + 2 * col_overlap, ncol)
@@ -1008,7 +1042,7 @@ class NLPAR:
     colstep = max(int(np.round(colstep)), 1)
     colstepov = min(colstep + 2 * col_overlap, ncol)
 
-    nrowchunks = max(np.ceil(nchunks / ncolchunks), 1)
+    nrowchunks = max(np.ceil(nchunks / ncolchunks), minrowchunk)
     rowstep = max((nrow / nrowchunks), 1)
     nrowchunks = max(nrow / rowstep, 1)
     rowstepov = min(rowstep + 2 * row_overlap, nrow)

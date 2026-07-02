@@ -218,6 +218,8 @@ class EBSDPatternFile():
     self.xStep = None  # assumming square grid data, with constant step size
     self.yStep = None
     self.xyCenter = np.array([0.0, 0.0])
+    self.datamax = None
+    self.datamin = None
     # This is the location of the center of the scan relative to center of SEM field-of-view
     self.hexflag = False
     self.filetype = filetype
@@ -422,6 +424,12 @@ class EBSDPatternFile():
     self.nCols = np.uint64(rc[1])
     self.nRows = np.uint64(rc[0])
     self.nPatterns = np.uint64(self.nCols * self.nRows)
+
+  def write_datamaxmin(self): # placeholder for non-HDF5 files
+    pass
+
+  def read_datamaxmin(self): # placeholder for non-HDF5 files
+    pass
 
 
 class UPFile(EBSDPatternFile):
@@ -1547,6 +1555,37 @@ class HDF5PatFile(EBSDPatternFile):
     patterndset[patStart:patStart+nPatToWrite, :, :] = pat2write[0:nPatToWrite,:,:]
     f.close()
 
+  def write_datamaxmin(self):
+    try:
+      f = h5py.File(Path(self.filepath).expanduser(), 'r+')
+    except:
+      print("File Not Found:", str(Path(self.filepath)))
+      return -1
+
+    patterndset = f[self.h5patdatpth]
+
+    if self.datamax is not None:
+      patterndset.attrs["DataMax"] = np.float32(self.datamax)
+    if self.datamin is not None:
+      patterndset.attrs["DataMin"] = np.float32(self.datamin)
+    f.close()
+
+  def read_datamaxmin(self):
+    try:
+      f = h5py.File(Path(self.filepath).expanduser(), 'r+')
+
+    except:
+      print("File Not Found:", str(Path(self.filepath)))
+      return -1
+
+    patterndset = f[self.h5patdatpth]
+
+    if 'DataMax' in patterndset.attrs:
+      self.datamax = np.float32(patterndset.attrs["DataMax"])
+    if 'DataMin' in patterndset.attrs:
+      self.datamin = np.float32(patterndset.attrs["DataMin"])
+    f.close()
+
   def read_header(self, path=None):
     if path is not None:
       self.filepath = path
@@ -1931,10 +1970,9 @@ class DM5(HDF5PatFile):
   def __init__(self, path=None):
     HDF5PatFile.__init__(self, path)
     self.vendor = 'GATAN'
-    # OXFORDOINA only attributes
-    self.filedatatype = None  # np.uint8
-    self.patternh5id = 'Data'  # Could also be 'Raw Patterns'
 
+    self.filedatatype = None  # np.uint8
+    self.patternh5id = 'Data'
     if self.filepath is not None:
       self.get_data_paths()
 
@@ -2012,7 +2050,8 @@ class DM5(HDF5PatFile):
       #self.yStep = 1.0 #np.float32(headerpath['Y Step'][()][0])
       self.xStep = ((f[self.h5patdatpth].parent)["Calibrations/Dimension/[2]"]).attrs['Scale'] #np.float32(headerpath['X Step'][()][0])
       self.yStep = ((f[self.h5patdatpth].parent)["Calibrations/Dimension/[3]"]).attrs['Scale']
-
+    f.close()
+    self.read_datamaxmin()
     return 0  # note this function uses multiple returns
 
   def read_data(self, path=None, convertToFloat=False, patStartCount=[0, -1], returnArrayOnly=False):
@@ -2216,3 +2255,4 @@ class DM5(HDF5PatFile):
         patterndset[int(rowstart):int(rowstart + nrowwrite),
                             int(colstart):int(colstart + ncolwrite), :, :] = pat2write
     f.close()
+

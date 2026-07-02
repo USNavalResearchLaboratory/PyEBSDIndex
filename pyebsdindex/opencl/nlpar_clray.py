@@ -29,6 +29,7 @@
 
 import os, sys, platform
 import logging
+import time
 from timeit import default_timer as timer
 import numpy as np
 import pyopencl as cl
@@ -45,6 +46,7 @@ OSPLATFORM  = platform.system()
 #    RAYIPADDRESS = '0.0.0.0'  # the localhost address does not work on macOS when on a VPN
 
 os.environ["GRPC_VERBOSITY"] = "ERROR"
+os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
 
 class NLPAR(nlpar_cl.NLPAR):
@@ -133,7 +135,8 @@ class NLPAR(nlpar_cl.NLPAR):
     #                                      stem_scale=stem_scale,
     #                                      gpu_id=gpu_id, **kwargs)
 
-    target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 2
+    #target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 2
+    target_mem = min(clparams.queue.device.max_mem_alloc_size // 2, np.int64(64e9))
     max_mem = clparams.gpu[gpu_id].global_mem_size * 0.5
     if target_mem * ngpuwrker > max_mem:
       #print('revisemem:')
@@ -159,6 +162,10 @@ class NLPAR(nlpar_cl.NLPAR):
                               col_overlap=nn, row_overlap=nn)
 
 
+    if stem_scale is True: # need to get the file min (and might as well get the max)
+      dmin, dmax = self._getdatamaxmin(chunks, self.patternfile)
+
+
     jobqueue = []
 
     for rowchunk in range(chunks[1]):
@@ -182,7 +189,6 @@ class NLPAR(nlpar_cl.NLPAR):
         jobqueue.append(NLPARGPUJob([colchunk, rowchunk], \
                                     [cstart, cend, rstart, rend], \
                                     [cstartcalc, cendcalc, rstartcalc, rendcalc]))
-
 
     # wrker = NLPARGPUWorker(actorid=1, gpu_id=gpu_id, cudavis=cudavis)
     # job = jobqueue[0]
@@ -282,11 +288,13 @@ class NLPAR(nlpar_cl.NLPAR):
 
 
     if stem_scale == True:
+
       # data = data - data.min() + 1
       # data = np.log(data)
-      dmin = data.min()
+      dmin = self.patternfile.datamin
       data = data - dmin
       data = np.sqrt(data).astype(np.float32)
+
 
     ctx = clparams.ctx
     prg = clparams.prg
@@ -378,7 +386,7 @@ class NLPAR(nlpar_cl.NLPAR):
                     sigmachunk_gpu,
                     count_local, dist_local,
                     np.int64(nn))
-    clparams.queue.finish()
+
 
     cl.enqueue_copy(clparams.queue, distchunk, dist_local, is_blocking=False)
     cl.enqueue_copy(clparams.queue, countchunk, count_local,  is_blocking=False)
@@ -386,14 +394,12 @@ class NLPAR(nlpar_cl.NLPAR):
 
     #sigmachunk_gpu.release()
 
-    clparams.queue.finish()
-
     dist_local.release()
     count_local.release()
     datapad_gpu.release()
     clparams.queue.flush()
     clparams.queue = None
-    #self.sigma = sigma
+
     return sigmachunk, distchunk, countchunk
 
 
@@ -526,7 +532,7 @@ class NLPAR(nlpar_cl.NLPAR):
     #                                      gpu_id= gpu_id,
     #                                      diff_offset=diff_offset)
 
-    target_mem = clparams.gpu[gpu_id].max_mem_alloc_size//6
+    target_mem = min(clparams.gpu[gpu_id].max_mem_alloc_size// 6, np.int64(4e9)) #clparams.gpu[gpu_id].max_mem_alloc_size//6
     max_mem = clparams.gpu[gpu_id].global_mem_size*0.4
     if target_mem*ngpuwrker > max_mem:
       target_mem = max_mem/ngpuwrker
@@ -534,6 +540,9 @@ class NLPAR(nlpar_cl.NLPAR):
 
     chunks = self._calcchunks([pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
+
+    if stem_scale is True:  # need to get the file min (and might as well get the max)
+      dmin, dmax = self._getdatamaxmin(chunks, self.patternfile)
 
     nnn = int((2 * sr + 1) ** 2)
     jobqueue = []
@@ -660,9 +669,15 @@ class NLPAR(nlpar_cl.NLPAR):
     if stem_scale == True:
       # data = data - data.min() + 1
       # data = np.log(data)
-      mndat = data.min()
-      data = data - mndat
+      data = data - self.patternfile.datamin
       data = np.sqrt(data).astype(np.float32)
+
+    mxval0 = data.max()
+    mnval0 = data.min()
+    mxval = mxval0
+    if mnval0 < 0:
+      data -= mnval0
+      mxval = mxval - mnval0
 
     #print(chunks[2], chunks[3])
     #print(lam, sr, dthresh)
@@ -728,18 +743,22 @@ class NLPAR(nlpar_cl.NLPAR):
                   np.float32(dthresh),
                   np.float32(diff_offset))
 
+
     data = data.astype(np.float32)  # prepare to receive data back from GPU
     data.reshape(-1)[:] = 0.0
     data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
     cl.enqueue_copy(clparams.queue, data, datapadout_gpu,  is_blocking=True)
     sigmachunk_gpu.release()
+    datapadout_gpu.release()
     clparams.queue.finish()
+
+    if mnval0 < 0:
+      data += mnval0
 
     if stem_scale == True:
       # data = data - data.min() + 1
       # data = np.log(data)
-      data = data**2
-      data += mndat
+      data = data**2 + self.patternfile.datamin
 
 
     if self.rescale == True:
@@ -791,8 +810,6 @@ class NLPARGPUWorker:
         data, xyloc = nlparobj.patternfile.read_data(patStartCount=[[gpujob.cstart, gpujob.rstart],
                                                                     [gpujob.ncolchunk, gpujob.nrowchunk]],
                                                                     convertToFloat=False, returnArrayOnly=True)
-
-
 
 
         newdata = nlparobj._sigmachunkcalc_cl(data, gpujob, clparams=self.openCLParams, **kwargs)
