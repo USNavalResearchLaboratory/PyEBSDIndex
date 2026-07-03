@@ -257,8 +257,8 @@ class NLPAR:
             if stem_scale is True:
                 #data = data - data.min() + 1
                 #data = np.log(data)
-                data = data - patternfile.datamin
-                data = np.sqrt(data)
+                data = data.astype(np.float32) - patternfile.datamin
+                data = np.sqrt(data).astype(np.float32)
             shp = data.shape
             data = data.reshape(data.shape[0], phw)
 
@@ -281,7 +281,7 @@ class NLPAR:
     return sigma, d2, n2
 
   def calcnlpar_cpu(self, chunksize=0, searchradius=None, lam = None, dthresh = None,
-               saturation_protect=None, automask=None, stem_scale = None, # see NLPAR __init__ for default values
+               saturation_protect= None, automask=None, stem_scale = None, # see NLPAR __init__ for default values
                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,verbose=2,
                diff_offset=None,
                **kwargs):
@@ -473,8 +473,8 @@ class NLPAR:
             datamin = patternfile.datamin
             # data = data - datamin + 1
             # data = np.log(data)
-            data = data - datamin
-            data = np.sqrt(data)
+            data = data.astype(np.float32) - datamin
+            data = np.sqrt(data).astype(np.float32)
 
         shpdata = data.shape
 
@@ -485,7 +485,8 @@ class NLPAR:
 
         if calcsigma is True:
             sigchunk = self.sigma_numba(data, 1, nrowchunk, ncolchunk,
-                                             [0,nrowchunk], [0,ncolchunk],
+                                             np.array([0,nrowchunk], dtype=np.int64),
+                                             np.array([0,ncolchunk],dtype=np.int64),
                                              indices, saturation_protect)[0]
 
             sigchunk = np.minimum(sigma[rstart:rend,cstart:cend], sigchunk)

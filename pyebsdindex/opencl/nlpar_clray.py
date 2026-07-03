@@ -292,7 +292,7 @@ class NLPAR(nlpar_cl.NLPAR):
       # data = data - data.min() + 1
       # data = np.log(data)
       dmin = self.patternfile.datamin
-      data = data - dmin
+      data = data.astype(np.float32) - dmin
       data = np.sqrt(data).astype(np.float32)
 
 
@@ -684,7 +684,7 @@ class NLPAR(nlpar_cl.NLPAR):
     if stem_scale == True:
       # data = data - data.min() + 1
       # data = np.log(data)
-      data = data - self.patternfile.datamin
+      data = data.astype(np.float32) - self.patternfile.datamin
       data = np.sqrt(data).astype(np.float32)
 
     mxval0 = data.max()

@@ -581,7 +581,7 @@ class NLPAR(nlpar_cpu.NLPAR):
 
 
         if stem_scale is True:
-          data -= patternfile.datamin
+          data = data - patternfile.datamin
           data = np.sqrt(data).astype(np.float32)
 
         mxval0 = data.max()
