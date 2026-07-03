@@ -607,12 +607,17 @@ class NLPAR(nlpar_cl.NLPAR):
                 tasks.append(wrker.runnlpar_chunk.remote(job, nlparobj=nlpar_remote))
                 busywrker.append(wrker)
         if len(tasks) > 0:
-            donetasks, stillbusy = ray.wait(tasks, num_returns=len(busywrker), timeout=0.1)
-
+            #donetasks, stillbusy = ray.wait(tasks, num_returns=len(busywrker), timeout=0.1)
+            donetasks, stillbusy = ray.wait(tasks, num_returns=1, timeout=0.1)
             for tsk in donetasks:
                 indx = tasks.index(tsk)
-                message, job, newdata = ray.get(tsk)
+                message, gpujob, newdata = ray.get(tsk)
                 if message == 'Done':
+                  self.patternfileout.write_data(newpatterns=newdata,
+                                                     patStartCount=[[gpujob.cstart + gpujob.cstartcalc,
+                                                                     gpujob.rstart + gpujob.rstartcalc],
+                                                                    [gpujob.ncolcalc, gpujob.nrowcalc]],
+                                                     flt2int='clip', scalevalue=1.0)
                   idlewrker.append(busywrker.pop(indx))
                   tasks.remove(tsk)
                   ndone += 1
@@ -744,9 +749,10 @@ class NLPAR(nlpar_cl.NLPAR):
                   np.float32(diff_offset))
 
 
-    data = data.astype(np.float32)  # prepare to receive data back from GPU
-    data.reshape(-1)[:] = 0.0
+    data = np.zeros(int(npadmx), dtype=np.float32) #data.astype(np.float32)  # prepare to receive data back from GPU
+    #data.reshape(-1)[:] = 0.0
     data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
+    #print(data.min(), data.max())
     cl.enqueue_copy(clparams.queue, data, datapadout_gpu,  is_blocking=True)
     sigmachunk_gpu.release()
     datapadout_gpu.release()
@@ -799,7 +805,7 @@ class NLPARGPUWorker:
   def runsigma_chunk(self,gpujob, nlparobj=None,  **kwargs):
     if gpujob is None:
         #time.sleep(0.001)
-        return 'Bored', (None, None, None)
+        return 'Bored', None, None
     try:
         # print(type(self.openCLParams.ctx))
         gpujob._starttime()
@@ -831,7 +837,7 @@ class NLPARGPUWorker:
 
     if gpujob is None:
         #time.sleep(0.001)
-        return 'Bored', (None, None, None)
+        return 'Bored', None, None
     try:
         # print(type(self.openCLParams.ctx))
         gpujob._starttime()
@@ -839,28 +845,29 @@ class NLPARGPUWorker:
 
         #if self.openCLParams is not None:
         #    self.openCLParams.get_queue()
+
         data, xyloc = nlparobj.patternfile.read_data(patStartCount=[[gpujob.cstart, gpujob.rstart],
                                                                     [gpujob.ncolchunk, gpujob.nrowchunk]],
                                                                     convertToFloat=False, returnArrayOnly=True)
 
 
-
+        #print(data.min(), data.max())
         newdata = nlparobj._nlparchunkcalc_cl(data, gpujob, clparams=self.openCLParams)
-
+        #print(newdata.min(), newdata.max())
         if self.openCLParams.queue is not None:
             print("queue still here")
             self.openCLParams.queue.finish()
             self.openCLParams.queue = None
 
 
-        nlparobj.patternfileout.write_data(newpatterns=newdata,
-                                       patStartCount=[[gpujob.cstart + gpujob.cstartcalc,
-                                                       gpujob.rstart + gpujob.rstartcalc],
-                                                      [gpujob.ncolcalc, gpujob.nrowcalc]],
-                                       flt2int='clip', scalevalue=1.0)
+        # nlparobj.patternfileout.write_data(newpatterns=newdata,
+        #                                patStartCount=[[gpujob.cstart + gpujob.cstartcalc,
+        #                                                gpujob.rstart + gpujob.rstartcalc],
+        #                                               [gpujob.ncolcalc, gpujob.nrowcalc]],
+        #                                flt2int='clip', scalevalue=1.0)
 
         gpujob._endtime()
-        return 'Done', gpujob, None
+        return 'Done', gpujob, newdata
     except Exception as e:
         print(e)
         gpujob.rate = None
