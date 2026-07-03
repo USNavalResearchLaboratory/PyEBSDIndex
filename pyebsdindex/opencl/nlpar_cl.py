@@ -557,7 +557,8 @@ class NLPAR(nlpar_cpu.NLPAR):
         jobid += 1
         jqueue.append(job)
 
-
+    newdatamax = -np.inf
+    newdatamin = np.inf
     while len(jqueue) > 0:
         j = jqueue.pop(0)
         j["nattempts"] += 1
@@ -673,7 +674,8 @@ class NLPAR(nlpar_cpu.NLPAR):
                 temp *= np.float32(mxval) / temp.max()
                 data[i, :, :] = temp
 
-
+            newdatamax = max(newdatamax, np.max(data))
+            newdatamin = min(newdatamin, np.min(data))
             patternfileout.write_data(newpatterns=data,
                                       patStartCount=[[np.int64(cstart + cstartcalc), np.int64(rstart + rstartcalc)],
                                                      [ncolcalc, nrowcalc]],
@@ -705,6 +707,9 @@ class NLPAR(nlpar_cpu.NLPAR):
       print('', end='')
     queue.finish()
     queue = None
+    patternfileout.datamin = newdatamin
+    patternfileout.datamax = newdatamax
+    patternfileout.write_datamaxmin()
     return str(patternfileout.filepath)
 
 

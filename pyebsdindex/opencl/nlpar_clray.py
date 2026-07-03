@@ -596,6 +596,9 @@ class NLPAR(nlpar_cl.NLPAR):
         idlewrker.append(NLPARGPUWorker.options(num_cpus=float(0.99), num_gpus=ngpu_per_wrker).remote(
                 actorid=w, gpu_id=gpu_id, cudavis=cudavis))
 
+    newdatamax = -np.inf
+    newdatamin = np.inf
+
     njobs = len(jobqueue)
     ndone = 0
     while ndone < njobs:
@@ -613,6 +616,9 @@ class NLPAR(nlpar_cl.NLPAR):
                 indx = tasks.index(tsk)
                 message, gpujob, newdata = ray.get(tsk)
                 if message == 'Done':
+                  newdatamax = max(newdatamax, np.max(newdata))
+                  newdatamin = min(newdatamin, np.min(newdata))
+
                   self.patternfileout.write_data(newpatterns=newdata,
                                                      patStartCount=[[gpujob.cstart + gpujob.cstartcalc,
                                                                      gpujob.rstart + gpujob.rstartcalc],
@@ -629,6 +635,10 @@ class NLPAR(nlpar_cl.NLPAR):
 
     if verbose >= 2:
       print('\n', end='')
+    self.patternfileout.datamin = newdatamin
+    self.patternfileout.datamax = newdatamax
+    self.patternfileout.write_datamaxmin()
+
     return str(self.patternfileout.filepath)
 
   def _nlparchunkcalc_cl(self, data, calclim, clparams=None):

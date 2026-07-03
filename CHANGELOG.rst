@@ -5,6 +5,39 @@ Changelog
 All notable changes to PyEBSDIndex will be documented in this file. The format is based
 on `Keep a Changelog <https://keepachangelog.com/en/1.1.0>`_.
 
+
+0.3.10.1 (2026-07-03)
+==================
+BUG/ERROR FIX RELEASE
+---------------------
+There was an error when attempting to multi-process GPU calculations in NLPAR/NLSTEM
+that caused new patterns to not be written to the NLPAR/NLSTEM files when using HDF5 as output.
+With the GPU enabled calculations, non-parallel diskIO ends up being the rate limiting step, and
+thus the multiprocess NLPAR is no longer the default method for discrete GPUs, and a single process
+GPU is now the default.  Overall safer, even if it does take longer to process files.
+
+The NLPAR calculations are still done in parallel, either with GPU or multithreaded CPU calculations.
+
+This should require no changes from the examples behaviors outlined in the tutorials.
+
+A thanks to Dan Pennachio for alerting me to this issue and useful example data.
+
+Added
+-----
+
+Changed
+-------
+
+Fixed
+-----
+- Properly send in the vendor keyword to gnomonic correction setup
+  (currently no correction is applied).
+- Removed multi-process NLPAR as default for discrete GPUs as it mostly was fasteer due-to
+  slightly risky multi-process file writes, which are not compatible with standard HDF5.
+- Fixed region-to-region minimum scaling for ``stem_scale=True`` in NLPAR, now using the file
+  global minimum.
+
+
 0.3.10 (2026-05-11)
 ==================
  Added

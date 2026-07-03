@@ -447,7 +447,8 @@ class NLPAR:
             jobid += 1
             jqueue.append(job)
 
-
+    newdatamax = -np.inf
+    newdatamin = np.inf
 
     while len(jqueue) > 0:
         j = jqueue.pop(0)
@@ -505,6 +506,7 @@ class NLPAR:
         dataout = dataout.reshape(nrowchunk, ncolchunk, -1)
         dataout = dataout[rstartcalc: rstartcalc + nrowcalc,
                             cstartcalc:cstartcalc + ncolcalc, :]
+
         if stem_scale is True:
             #dataout = np.exp(dataout) - 1 + datamin
             dataout = dataout**2 + datamin
@@ -517,6 +519,8 @@ class NLPAR:
                 temp *= np.float32(mxval) / temp.max()
                 dataout[i, :, :] = temp
 
+        newdatamax = max(newdatamax, np.max(dataout))
+        newdatamin = min(newdatamin, np.min(dataout))
         patternfileout.write_data(newpatterns=dataout,
                                   patStartCount=[[np.int64(cstart + cstartcalc), np.int64(rstart + rstartcalc)],
                                                  [ncolcalc, nrowcalc]],
@@ -525,67 +529,12 @@ class NLPAR:
         if verbose >= 2:
             print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
 
-
-    # for j in range(0,nrows,chunksize):
-    #   #print('Row start', j)
-    #   if verbose >= 2:
-    #     print("begin row: ", j, "/", nrows, sep='', end='\r')
-    #
-    #   rowstartread = np.int64(max(0, j-sr))
-    #   rowend = min(j + chunksize+sr,nrows)
-    #
-    #   if (rowend - rowstartread) < (2*sr+1):
-    #     rowstartread = np.int64(max(0, rowend - (2*sr+1)))
-    #   rowcountread = np.int64(rowend-rowstartread)
-    #   data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
-    #                                     convertToFloat=True,returnArrayOnly=True)
-    #
-    #   shpdata = data.shape
-    #
-    #   if backsub is True:
-    #     data = self.backsub(data)
-    #
-    #
-    #   data = data.reshape(shpdata[0], phw)
-    #
-    #   rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
-    #   if calcsigma is True:
-    #     sigchunk, tmp = self.sigma_numba(data,1,rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
-    #     del tmp
-    #     tmp = (sigma[rowstartread:rowend,:] < sigchunk).choose(sigchunk,sigma[rowstartread:rowend,:])
-    #     sigma[rowstartread:rowend,:] = tmp
-    #   else:
-    #     sigchunk = sigma[rowstartread:rowend,:]
-    #
-    #   #dataout = data
-    #
-    #   dataout = self.nlpar_nb(data,lam, sr, dthresh, sigchunk,
-    #                           rowcountread,ncols,indices,saturation_protect, diff_offset=diff_offset)
-    #
-    #
-    #   dataout = dataout.reshape(rowcountread, ncols, phw)
-    #   dataout = dataout[j-rowstartread:, :, : ]
-    #   shpout = dataout.shape
-    #   dataout = dataout.reshape(shpout[0]*shpout[1], pheight, pwidth)
-    #   if rescale == True:
-    #     for i in range(dataout.shape[0]):
-    #       temp = dataout[i,:,:]
-    #       temp -= temp.min()
-    #       temp *= np.float32(mxval)/temp.max()
-    #       dataout[i,:,:] = temp
-    #
-    #   patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
-    #                                  flt2int='clip',scalevalue=1.0 )
-    #   #self.patternfileout.write_data(newpatterns=dataout,patStartCount=[j*ncols,shpout[0]*shpout[1]],
-    #   #                               flt2int='clip',scalevalue=1.0 )
-    #   #return dataout
-    #   #sigma[j:j+rowstartcount[1],:] += \
-    #   #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
-
-
     if verbose >= 2:
       print('', end='')
 
+    patternfileout.datamin = newdatamin
+    patternfileout.datamax = newdatamax
+    patternfileout.write_datamaxmin()
     numba.set_num_threads(nthreadpos)
     return str(patternfileout.filepath)
 
