@@ -247,6 +247,10 @@ class NLPAR(nlpar_cpu.NLPAR):
     countchunk = np.zeros((mxchunk, nnn), dtype=np.float32)
     ndone = 0
     nchunks = int(chunks[1] * chunks[0])
+
+    if stem_scale is True:  # need to get the file min (and might as well get the max)
+      dmin, dmax = self._getdatamaxmin(chunks, patternfile)
+
     for rowchunk in range(chunks[1]):
       rstart = chunks[3][rowchunk, 0]
       rend = chunks[3][rowchunk, 1]
@@ -262,7 +266,7 @@ class NLPAR(nlpar_cpu.NLPAR):
         if stem_scale is True:
           #data = data - data.min() + 1
           #data = np.log(data)
-          dmin = data.min()
+          dmin = patternfile.datamin
           data = data - dmin
           data = np.sqrt(data).astype(np.float32)
 
@@ -478,6 +482,10 @@ class NLPAR(nlpar_cpu.NLPAR):
     #print("target mem:", target_mem)
     chunks = self._calcchunks( [pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
+
+    if stem_scale is True:  # need to get the file min (and might as well get the max)
+      dmin, dmax = self._getdatamaxmin(chunks, patternfile)
+
     #print(chunks[2], chunks[3])
     if verbose >=1:
       print("lambda:", lam, "search radius:", sr, "dthresh:", dthresh)
@@ -549,7 +557,8 @@ class NLPAR(nlpar_cpu.NLPAR):
         jobid += 1
         jqueue.append(job)
 
-
+    newdatamax = -np.inf
+    newdatamin = np.inf
     while len(jqueue) > 0:
         j = jqueue.pop(0)
         j["nattempts"] += 1
@@ -569,15 +578,18 @@ class NLPAR(nlpar_cpu.NLPAR):
                                           convertToFloat=False, returnArrayOnly=True)
 
 
+
+
+        if stem_scale is True:
+          data = data - patternfile.datamin
+          data = np.sqrt(data).astype(np.float32)
+
         mxval0 = data.max()
         mnval0 = data.min()
         mxval = mxval0
         if mnval0 < 0:
           data -= mnval0
           mxval = mxval - mnval0
-
-        if stem_scale is True:
-          data = np.sqrt(data).astype(np.float32)
 
         if saturation_protect == False:
           mxval += 1.0
@@ -646,11 +658,13 @@ class NLPAR(nlpar_cpu.NLPAR):
           # nothing.  It will attempt to reprocess the data 3 times before just writing out
           # whatever it has.
           if (mxval0 < np.float32(1.e-8)) or ( mxtest < 0.5 ) or (j["nattempts"] >= 3):
-            if stem_scale is True:
-              data = data ** 2
+
 
             if mnval0 < 0:
               data += mnval0
+
+            if stem_scale is True:
+              data = (data ** 2) + patternfile.datamin
 
             data = data.reshape(nrowcalc * ncolcalc, pheight, pwidth)
             if rescale == True:
@@ -660,7 +674,8 @@ class NLPAR(nlpar_cpu.NLPAR):
                 temp *= np.float32(mxval) / temp.max()
                 data[i, :, :] = temp
 
-
+            newdatamax = max(newdatamax, np.max(data))
+            newdatamin = min(newdatamin, np.min(data))
             patternfileout.write_data(newpatterns=data,
                                       patStartCount=[[np.int64(cstart + cstartcalc), np.int64(rstart + rstartcalc)],
                                                      [ncolcalc, nrowcalc]],
@@ -692,6 +707,9 @@ class NLPAR(nlpar_cpu.NLPAR):
       print('', end='')
     queue.finish()
     queue = None
+    patternfileout.datamin = newdatamin
+    patternfileout.datamax = newdatamax
+    patternfileout.write_datamaxmin()
     return str(patternfileout.filepath)
 
 

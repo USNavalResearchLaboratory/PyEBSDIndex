@@ -29,6 +29,7 @@
 
 import os, sys, platform
 import logging
+import time
 from timeit import default_timer as timer
 import numpy as np
 import pyopencl as cl
@@ -45,6 +46,7 @@ OSPLATFORM  = platform.system()
 #    RAYIPADDRESS = '0.0.0.0'  # the localhost address does not work on macOS when on a VPN
 
 os.environ["GRPC_VERBOSITY"] = "ERROR"
+os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
 
 class NLPAR(nlpar_cl.NLPAR):
@@ -133,7 +135,8 @@ class NLPAR(nlpar_cl.NLPAR):
     #                                      stem_scale=stem_scale,
     #                                      gpu_id=gpu_id, **kwargs)
 
-    target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 2
+    #target_mem = clparams.gpu[gpu_id].max_mem_alloc_size // 2
+    target_mem = min(clparams.queue.device.max_mem_alloc_size // 2, np.int64(64e9))
     max_mem = clparams.gpu[gpu_id].global_mem_size * 0.5
     if target_mem * ngpuwrker > max_mem:
       #print('revisemem:')
@@ -159,6 +162,10 @@ class NLPAR(nlpar_cl.NLPAR):
                               col_overlap=nn, row_overlap=nn)
 
 
+    if stem_scale is True: # need to get the file min (and might as well get the max)
+      dmin, dmax = self._getdatamaxmin(chunks, self.patternfile)
+
+
     jobqueue = []
 
     for rowchunk in range(chunks[1]):
@@ -182,7 +189,6 @@ class NLPAR(nlpar_cl.NLPAR):
         jobqueue.append(NLPARGPUJob([colchunk, rowchunk], \
                                     [cstart, cend, rstart, rend], \
                                     [cstartcalc, cendcalc, rstartcalc, rendcalc]))
-
 
     # wrker = NLPARGPUWorker(actorid=1, gpu_id=gpu_id, cudavis=cudavis)
     # job = jobqueue[0]
@@ -282,11 +288,13 @@ class NLPAR(nlpar_cl.NLPAR):
 
 
     if stem_scale == True:
+
       # data = data - data.min() + 1
       # data = np.log(data)
-      dmin = data.min()
-      data = data - dmin
+      dmin = self.patternfile.datamin
+      data = data.astype(np.float32) - dmin
       data = np.sqrt(data).astype(np.float32)
+
 
     ctx = clparams.ctx
     prg = clparams.prg
@@ -378,7 +386,7 @@ class NLPAR(nlpar_cl.NLPAR):
                     sigmachunk_gpu,
                     count_local, dist_local,
                     np.int64(nn))
-    clparams.queue.finish()
+
 
     cl.enqueue_copy(clparams.queue, distchunk, dist_local, is_blocking=False)
     cl.enqueue_copy(clparams.queue, countchunk, count_local,  is_blocking=False)
@@ -386,14 +394,12 @@ class NLPAR(nlpar_cl.NLPAR):
 
     #sigmachunk_gpu.release()
 
-    clparams.queue.finish()
-
     dist_local.release()
     count_local.release()
     datapad_gpu.release()
     clparams.queue.flush()
     clparams.queue = None
-    #self.sigma = sigma
+
     return sigmachunk, distchunk, countchunk
 
 
@@ -526,7 +532,7 @@ class NLPAR(nlpar_cl.NLPAR):
     #                                      gpu_id= gpu_id,
     #                                      diff_offset=diff_offset)
 
-    target_mem = clparams.gpu[gpu_id].max_mem_alloc_size//6
+    target_mem = min(clparams.gpu[gpu_id].max_mem_alloc_size// 6, np.int64(4e9)) #clparams.gpu[gpu_id].max_mem_alloc_size//6
     max_mem = clparams.gpu[gpu_id].global_mem_size*0.4
     if target_mem*ngpuwrker > max_mem:
       target_mem = max_mem/ngpuwrker
@@ -534,6 +540,9 @@ class NLPAR(nlpar_cl.NLPAR):
 
     chunks = self._calcchunks([pwidth, pheight], ncols, nrows, target_bytes=target_mem,
                               col_overlap=sr, row_overlap=sr)
+
+    if stem_scale is True:  # need to get the file min (and might as well get the max)
+      dmin, dmax = self._getdatamaxmin(chunks, self.patternfile)
 
     nnn = int((2 * sr + 1) ** 2)
     jobqueue = []
@@ -587,6 +596,9 @@ class NLPAR(nlpar_cl.NLPAR):
         idlewrker.append(NLPARGPUWorker.options(num_cpus=float(0.99), num_gpus=ngpu_per_wrker).remote(
                 actorid=w, gpu_id=gpu_id, cudavis=cudavis))
 
+    newdatamax = -np.inf
+    newdatamin = np.inf
+
     njobs = len(jobqueue)
     ndone = 0
     while ndone < njobs:
@@ -598,12 +610,20 @@ class NLPAR(nlpar_cl.NLPAR):
                 tasks.append(wrker.runnlpar_chunk.remote(job, nlparobj=nlpar_remote))
                 busywrker.append(wrker)
         if len(tasks) > 0:
-            donetasks, stillbusy = ray.wait(tasks, num_returns=len(busywrker), timeout=0.1)
-
+            #donetasks, stillbusy = ray.wait(tasks, num_returns=len(busywrker), timeout=0.1)
+            donetasks, stillbusy = ray.wait(tasks, num_returns=1, timeout=0.1)
             for tsk in donetasks:
                 indx = tasks.index(tsk)
-                message, job, newdata = ray.get(tsk)
+                message, gpujob, newdata = ray.get(tsk)
                 if message == 'Done':
+                  newdatamax = max(newdatamax, np.max(newdata))
+                  newdatamin = min(newdatamin, np.min(newdata))
+
+                  self.patternfileout.write_data(newpatterns=newdata,
+                                                     patStartCount=[[gpujob.cstart + gpujob.cstartcalc,
+                                                                     gpujob.rstart + gpujob.rstartcalc],
+                                                                    [gpujob.ncolcalc, gpujob.nrowcalc]],
+                                                     flt2int='clip', scalevalue=1.0)
                   idlewrker.append(busywrker.pop(indx))
                   tasks.remove(tsk)
                   ndone += 1
@@ -615,6 +635,10 @@ class NLPAR(nlpar_cl.NLPAR):
 
     if verbose >= 2:
       print('\n', end='')
+    self.patternfileout.datamin = newdatamin
+    self.patternfileout.datamax = newdatamax
+    self.patternfileout.write_datamaxmin()
+
     return str(self.patternfileout.filepath)
 
   def _nlparchunkcalc_cl(self, data, calclim, clparams=None):
@@ -660,9 +684,15 @@ class NLPAR(nlpar_cl.NLPAR):
     if stem_scale == True:
       # data = data - data.min() + 1
       # data = np.log(data)
-      mndat = data.min()
-      data = data - mndat
+      data = data.astype(np.float32) - self.patternfile.datamin
       data = np.sqrt(data).astype(np.float32)
+
+    mxval0 = data.max()
+    mnval0 = data.min()
+    mxval = mxval0
+    if mnval0 < 0:
+      data -= mnval0
+      mxval = mxval - mnval0
 
     #print(chunks[2], chunks[3])
     #print(lam, sr, dthresh)
@@ -728,18 +758,23 @@ class NLPAR(nlpar_cl.NLPAR):
                   np.float32(dthresh),
                   np.float32(diff_offset))
 
-    data = data.astype(np.float32)  # prepare to receive data back from GPU
-    data.reshape(-1)[:] = 0.0
+
+    data = np.zeros(int(npadmx), dtype=np.float32) #data.astype(np.float32)  # prepare to receive data back from GPU
+    #data.reshape(-1)[:] = 0.0
     data = data.reshape(nrowchunk, ncolchunk, pheight, pwidth)
+    #print(data.min(), data.max())
     cl.enqueue_copy(clparams.queue, data, datapadout_gpu,  is_blocking=True)
     sigmachunk_gpu.release()
+    datapadout_gpu.release()
     clparams.queue.finish()
+
+    if mnval0 < 0:
+      data += mnval0
 
     if stem_scale == True:
       # data = data - data.min() + 1
       # data = np.log(data)
-      data = data**2
-      data += mndat
+      data = data**2 + self.patternfile.datamin
 
 
     if self.rescale == True:
@@ -780,7 +815,7 @@ class NLPARGPUWorker:
   def runsigma_chunk(self,gpujob, nlparobj=None,  **kwargs):
     if gpujob is None:
         #time.sleep(0.001)
-        return 'Bored', (None, None, None)
+        return 'Bored', None, None
     try:
         # print(type(self.openCLParams.ctx))
         gpujob._starttime()
@@ -791,8 +826,6 @@ class NLPARGPUWorker:
         data, xyloc = nlparobj.patternfile.read_data(patStartCount=[[gpujob.cstart, gpujob.rstart],
                                                                     [gpujob.ncolchunk, gpujob.nrowchunk]],
                                                                     convertToFloat=False, returnArrayOnly=True)
-
-
 
 
         newdata = nlparobj._sigmachunkcalc_cl(data, gpujob, clparams=self.openCLParams, **kwargs)
@@ -814,7 +847,7 @@ class NLPARGPUWorker:
 
     if gpujob is None:
         #time.sleep(0.001)
-        return 'Bored', (None, None, None)
+        return 'Bored', None, None
     try:
         # print(type(self.openCLParams.ctx))
         gpujob._starttime()
@@ -822,28 +855,29 @@ class NLPARGPUWorker:
 
         #if self.openCLParams is not None:
         #    self.openCLParams.get_queue()
+
         data, xyloc = nlparobj.patternfile.read_data(patStartCount=[[gpujob.cstart, gpujob.rstart],
                                                                     [gpujob.ncolchunk, gpujob.nrowchunk]],
                                                                     convertToFloat=False, returnArrayOnly=True)
 
 
-
+        #print(data.min(), data.max())
         newdata = nlparobj._nlparchunkcalc_cl(data, gpujob, clparams=self.openCLParams)
-
+        #print(newdata.min(), newdata.max())
         if self.openCLParams.queue is not None:
             print("queue still here")
             self.openCLParams.queue.finish()
             self.openCLParams.queue = None
 
 
-        nlparobj.patternfileout.write_data(newpatterns=newdata,
-                                       patStartCount=[[gpujob.cstart + gpujob.cstartcalc,
-                                                       gpujob.rstart + gpujob.rstartcalc],
-                                                      [gpujob.ncolcalc, gpujob.nrowcalc]],
-                                       flt2int='clip', scalevalue=1.0)
+        # nlparobj.patternfileout.write_data(newpatterns=newdata,
+        #                                patStartCount=[[gpujob.cstart + gpujob.cstartcalc,
+        #                                                gpujob.rstart + gpujob.rstartcalc],
+        #                                               [gpujob.ncolcalc, gpujob.nrowcalc]],
+        #                                flt2int='clip', scalevalue=1.0)
 
         gpujob._endtime()
-        return 'Done', gpujob, None
+        return 'Done', gpujob, newdata
     except Exception as e:
         print(e)
         gpujob.rate = None

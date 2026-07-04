@@ -60,7 +60,8 @@ if _ray_installed and gpuisthere:
   if gpusharedmem:
     from pyebsdindex.opencl.nlpar_cl import NLPAR
   else:
-    from pyebsdindex.opencl.nlpar_clray import NLPAR
+    #from pyebsdindex.opencl.nlpar_clray import NLPAR
+    from pyebsdindex.opencl.nlpar_cl import NLPAR
 
 elif gpuisthere and not _ray_installed:
   from pyebsdindex.opencl.nlpar_cl import NLPAR

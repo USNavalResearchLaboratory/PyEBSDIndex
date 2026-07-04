@@ -423,6 +423,7 @@ class EBSDIndexer:
                 ("nmatch", np.int32),
                 ("matchattempts", np.int32, 4),
                 ("totvotes", np.int32),
+                ("grainid", np.int64),
             ]
         )
 
@@ -560,7 +561,7 @@ class EBSDIndexer:
         except:
             pass
 
-        self.gnomonic.calccorrection(PCpat)
+        #self.gnomonic.calccorrection(PCpat)
         banddata, bandnorm = self._detectbands(pats, PCpat, xyloc=xyloc, clparams=clparams, verbose=verbose,
                                                chunksize=chunksize, gpu_id=gpuid)
         tic = timer()

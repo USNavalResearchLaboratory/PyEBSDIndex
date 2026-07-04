@@ -48,6 +48,7 @@ else:
     from pyebsdindex import band_detect as band_detect
 
 os.environ["GRPC_VERBOSITY"] = "ERROR"
+os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
 RAYIPADDRESS = '127.0.0.1'
 #RAYIPADDRESS = '0.0.0.0'
@@ -493,7 +494,7 @@ def index_pats_distributed(
                                                )
             )
         gtaskindex.append(gjob)
-
+        time.sleep(1)
         #gpu_launched += 1
 
     gpuwrker_cycles = -1000
@@ -524,7 +525,8 @@ def index_pats_distributed(
 
             gpuwrker_cycles +=1
 
-            donewrker, busy = ray.wait(gputask,num_returns=len(gputask),  timeout=0.1)
+            #donewrker, busy = ray.wait(gputask,num_returns=len(gputask),  timeout=0.1)
+            donewrker, busy = ray.wait(gputask, num_returns=min(1,len(gputask)), timeout=0.1)
 
             #print(len(donewrker), nret)
             #print()

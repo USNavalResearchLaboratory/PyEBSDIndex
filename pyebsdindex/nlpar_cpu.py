@@ -239,6 +239,9 @@ class NLPAR:
     ndone = 0
     nchunks = int(chunks[1] * chunks[0])
 
+    if stem_scale is True: # need to get the file min (and might as well get the max)
+      dmin, dmax = self._getdatamaxmin(chunks, patternfile)
+
     for rowchunk in range(chunks[1]):
         rstart = chunks[3][rowchunk, 0]
         rend = chunks[3][rowchunk, 1]
@@ -254,8 +257,8 @@ class NLPAR:
             if stem_scale is True:
                 #data = data - data.min() + 1
                 #data = np.log(data)
-                data = data - data.min()
-                data = np.sqrt(data)
+                data = data.astype(np.float32) - patternfile.datamin
+                data = np.sqrt(data).astype(np.float32)
             shp = data.shape
             data = data.reshape(data.shape[0], phw)
 
@@ -264,7 +267,7 @@ class NLPAR:
                                                        np.array([0,nrowchunk ], dtype=np.uint64),
                                                                     np.array([0,ncolchunk],dtype=np.uint64),
                                                                     indices,saturation_protect)
-
+           
             sigma[rstart:rend, cstart:cend] = np.minimum(sigma[rstart:rend, cstart:cend], sigchunk)
             # temp = (d2 > thresh).choose(dthresh, d2)
             n2[rstart:rend, cstart:cend,:] = np.select( [n2chunk >  0], [n2chunk], default=n2[rstart:rend, cstart:cend,:])
@@ -273,11 +276,12 @@ class NLPAR:
             ndone += 1
             if verbose >= 2:
                 print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
-
+    print()
+    print(sigma.min(), sigma.max())
     return sigma, d2, n2
 
   def calcnlpar_cpu(self, chunksize=0, searchradius=None, lam = None, dthresh = None,
-               saturation_protect=None, automask=None, stem_scale = None, # see NLPAR __init__ for default values
+               saturation_protect= None, automask=None, stem_scale = None, # see NLPAR __init__ for default values
                filename=None, fileout=None, reset_sigma=False, backsub = False, rescale = False,verbose=2,
                diff_offset=None,
                **kwargs):
@@ -392,7 +396,8 @@ class NLPAR:
       else: # not int, so no rescale.
         rescale = False
 
-
+    if stem_scale is True: # need to get the file min (and might as well get the max)
+      dmin, dmax = self._getdatamaxmin(chunks, patternfile)
 
     nthreadpos = numba.get_num_threads()
     #numba.set_num_threads(18)
@@ -442,7 +447,8 @@ class NLPAR:
             jobid += 1
             jqueue.append(job)
 
-
+    newdatamax = -np.inf
+    newdatamin = np.inf
 
     while len(jqueue) > 0:
         j = jqueue.pop(0)
@@ -464,11 +470,11 @@ class NLPAR:
         data, xyloc = patternfile.read_data(patStartCount=[[ cstart, rstart], [ncolchunk, nrowchunk]],
                                           convertToFloat=True, returnArrayOnly=True)
         if stem_scale is True:
-            datamin = data.min()
+            datamin = patternfile.datamin
             # data = data - datamin + 1
             # data = np.log(data)
-            data = data - datamin
-            data = np.sqrt(data)
+            data = data.astype(np.float32) - datamin
+            data = np.sqrt(data).astype(np.float32)
 
         shpdata = data.shape
 
@@ -479,7 +485,8 @@ class NLPAR:
 
         if calcsigma is True:
             sigchunk = self.sigma_numba(data, 1, nrowchunk, ncolchunk,
-                                             [0,nrowchunk], [0,ncolchunk],
+                                             np.array([0,nrowchunk], dtype=np.int64),
+                                             np.array([0,ncolchunk],dtype=np.int64),
                                              indices, saturation_protect)[0]
 
             sigchunk = np.minimum(sigma[rstart:rend,cstart:cend], sigchunk)
@@ -500,6 +507,7 @@ class NLPAR:
         dataout = dataout.reshape(nrowchunk, ncolchunk, -1)
         dataout = dataout[rstartcalc: rstartcalc + nrowcalc,
                             cstartcalc:cstartcalc + ncolcalc, :]
+
         if stem_scale is True:
             #dataout = np.exp(dataout) - 1 + datamin
             dataout = dataout**2 + datamin
@@ -512,6 +520,8 @@ class NLPAR:
                 temp *= np.float32(mxval) / temp.max()
                 dataout[i, :, :] = temp
 
+        newdatamax = max(newdatamax, np.max(dataout))
+        newdatamin = min(newdatamin, np.min(dataout))
         patternfileout.write_data(newpatterns=dataout,
                                   patStartCount=[[np.int64(cstart + cstartcalc), np.int64(rstart + rstartcalc)],
                                                  [ncolcalc, nrowcalc]],
@@ -520,67 +530,12 @@ class NLPAR:
         if verbose >= 2:
             print("tiles complete: ", ndone, "/", nchunks, sep='', end='\r')
 
-
-    # for j in range(0,nrows,chunksize):
-    #   #print('Row start', j)
-    #   if verbose >= 2:
-    #     print("begin row: ", j, "/", nrows, sep='', end='\r')
-    #
-    #   rowstartread = np.int64(max(0, j-sr))
-    #   rowend = min(j + chunksize+sr,nrows)
-    #
-    #   if (rowend - rowstartread) < (2*sr+1):
-    #     rowstartread = np.int64(max(0, rowend - (2*sr+1)))
-    #   rowcountread = np.int64(rowend-rowstartread)
-    #   data, xyloc = patternfile.read_data(patStartCount = [[0,rowstartread], [ncols,rowcountread]],
-    #                                     convertToFloat=True,returnArrayOnly=True)
-    #
-    #   shpdata = data.shape
-    #
-    #   if backsub is True:
-    #     data = self.backsub(data)
-    #
-    #
-    #   data = data.reshape(shpdata[0], phw)
-    #
-    #   rowstartcount = np.asarray([0,rowcountread],dtype=np.int64)
-    #   if calcsigma is True:
-    #     sigchunk, tmp = self.sigma_numba(data,1,rowcountread,ncols,rowstartcount,colstartcount,indices,saturation_protect)
-    #     del tmp
-    #     tmp = (sigma[rowstartread:rowend,:] < sigchunk).choose(sigchunk,sigma[rowstartread:rowend,:])
-    #     sigma[rowstartread:rowend,:] = tmp
-    #   else:
-    #     sigchunk = sigma[rowstartread:rowend,:]
-    #
-    #   #dataout = data
-    #
-    #   dataout = self.nlpar_nb(data,lam, sr, dthresh, sigchunk,
-    #                           rowcountread,ncols,indices,saturation_protect, diff_offset=diff_offset)
-    #
-    #
-    #   dataout = dataout.reshape(rowcountread, ncols, phw)
-    #   dataout = dataout[j-rowstartread:, :, : ]
-    #   shpout = dataout.shape
-    #   dataout = dataout.reshape(shpout[0]*shpout[1], pheight, pwidth)
-    #   if rescale == True:
-    #     for i in range(dataout.shape[0]):
-    #       temp = dataout[i,:,:]
-    #       temp -= temp.min()
-    #       temp *= np.float32(mxval)/temp.max()
-    #       dataout[i,:,:] = temp
-    #
-    #   patternfileout.write_data(newpatterns=dataout,patStartCount = [[0,j], [ncols, shpout[0]]],
-    #                                  flt2int='clip',scalevalue=1.0 )
-    #   #self.patternfileout.write_data(newpatterns=dataout,patStartCount=[j*ncols,shpout[0]*shpout[1]],
-    #   #                               flt2int='clip',scalevalue=1.0 )
-    #   #return dataout
-    #   #sigma[j:j+rowstartcount[1],:] += \
-    #   #  sigchunk[rowstartcount[0]:rowstartcount[0]+rowstartcount[1],:]
-
-
     if verbose >= 2:
       print('', end='')
 
+    patternfileout.datamin = newdatamin
+    patternfileout.datamax = newdatamax
+    patternfileout.write_datamaxmin()
     numba.set_num_threads(nthreadpos)
     return str(patternfileout.filepath)
 
@@ -990,17 +945,46 @@ class NLPAR:
   def calcnlpar(self, **kwargs):  # helper function
     return self.calcnlpar_cpu(**kwargs)
 
+  def _getdatamaxmin(self, chunks, patternfile):
+    patternfile.read_datamaxmin()
+    if (patternfile.datamax is None) or (patternfile.datamin is None):
+      patternfile.datamax = -np.inf
+      patternfile.datamin = np.inf
+      for rowchunk in range(chunks[1]):
+        rstart = chunks[3][rowchunk, 0]
+        rend = chunks[3][rowchunk, 1]
+        nrowchunk = rend - rstart
+
+        for colchunk in range(chunks[0]):
+          cstart = chunks[2][colchunk, 0]
+          cend = chunks[2][colchunk, 1]
+          ncolchunk = cend - cstart
+          data, xyloc = patternfile.read_data(patStartCount=[[cstart, rstart], [ncolchunk, nrowchunk]],
+                                              convertToFloat=True, returnArrayOnly=True)
+          patternfile.datamax = max(patternfile.datamax, data.max())
+          patternfile.datamin = min(patternfile.datamin, data.min())
+      patternfile.write_datamaxmin()
+    dmax = patternfile.datamax
+    dmin = patternfile.datamin
+    return dmin, dmax
+
+
 
   def _calcchunks(self, patdim, ncol, nrow, target_bytes=2e9, col_overlap=0, row_overlap=0, col_offset=0, row_offset=0):
 
     col_overlap = min(col_overlap, ncol - 1)
     row_overlap = min(row_overlap, nrow - 1)
 
+
+    mincolchunk = 2 if ncol >= nrow else 1
+    minrowchunk = 2 if nrow > ncol else 1
+
+
     byteperpat = patdim[-1] * patdim[-2] * 4 * 2  # assume a 4 byte float input and output array
     byteperdataset = byteperpat * ncol * nrow
     nchunks = int(np.ceil(byteperdataset / target_bytes))
 
-    ncolchunks = (max(np.round(np.sqrt(nchunks * float(ncol) / nrow)), 1))
+    ncolchunks = (max(np.round(np.sqrt(nchunks * float(ncol) / nrow)), mincolchunk))
     colstep = max((ncol / ncolchunks), 1)
     ncolchunks = max(ncol / colstep, 1)
     colstepov = min(colstep + 2 * col_overlap, ncol)
@@ -1008,7 +992,7 @@ class NLPAR:
     colstep = max(int(np.round(colstep)), 1)
     colstepov = min(colstep + 2 * col_overlap, ncol)
 
-    nrowchunks = max(np.ceil(nchunks / ncolchunks), 1)
+    nrowchunks = max(np.ceil(nchunks / ncolchunks), minrowchunk)
     rowstep = max((nrow / nrowchunks), 1)
     nrowchunks = max(nrow / rowstep, 1)
     rowstepov = min(rowstep + 2 * row_overlap, nrow)
