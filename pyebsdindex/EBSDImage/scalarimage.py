@@ -1,25 +1,26 @@
-'''This software was developed by employees of the US Naval Research Laboratory (NRL), an
-agency of the Federal Government. Pursuant to title 17 section 105 of the United States
-Code, works of NRL employees are not subject to copyright protection, and this software
-is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
-responsibility whatsoever for its use by other parties, and makes no guarantees,
-expressed or implied, about its quality, reliability, or any other characteristic. We
-would appreciate acknowledgment if the software is used. To the extent that NRL may hold
-copyright in countries other than the United States, you are hereby granted the
-non-exclusive irrevocable and unconditional right to print, publish, prepare derivative
-works and distribute this software, in any medium, or authorize others to do so on your
-behalf, on a royalty-free basis throughout the world. You may improve, modify, and
-create derivative works of the software or any portion of the software, and you may copy
-and distribute such modifications or works. Modified works should carry a notice stating
-that you changed the software and should note the date and nature of any such change.
-Please explicitly acknowledge the US Naval Research Laboratory as the original source.
-This software can be redistributed and/or modified freely provided that any derivative
-works bear some notice that they are derived from it, and any modified versions bear
-some notice that they have been modified.
+# This software was developed by employees of the US Naval Research Laboratory (NRL), an
+# agency of the Federal Government. Pursuant to title 17 section 105 of the United States
+# Code, works of NRL employees are not subject to copyright protection, and this software
+# is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
+# responsibility whatsoever for its use by other parties, and makes no guarantees,
+# expressed or implied, about its quality, reliability, or any other characteristic. We
+# would appreciate acknowledgment if the software is used. To the extent that NRL may hold
+# copyright in countries other than the United States, you are hereby granted the
+# non-exclusive irrevocable and unconditional right to print, publish, prepare derivative
+# works and distribute this software, in any medium, or authorize others to do so on your
+# behalf, on a royalty-free basis throughout the world. You may improve, modify, and
+# create derivative works of the software or any portion of the software, and you may copy
+# and distribute such modifications or works. Modified works should carry a notice stating
+# that you changed the software and should note the date and nature of any such change.
+# Please explicitly acknowledge the US Naval Research Laboratory as the original source.
+# This software can be redistributed and/or modified freely provided that any derivative
+# works bear some notice that they are derived from it, and any modified versions bear
+# some notice that they have been modified.
 
-Author: David Rowenhorst;
-The US Naval Research Laboratory Date: 29 Oct 2024'''
+# Author: David Rowenhorst;
+# The US Naval Research Laboratory Date: 29 Oct 2024
 
+"""Generate a 2D map from a scalar field in the indexed EBSD data."""
 
 import os
 
@@ -43,6 +44,48 @@ def scalarimage(ebsddata, indexer,
                 xsize=None,  # these are kept for backwards compatibility.
                 ysize=None,
                 **kwargs):
+  """Generate a 2D map from a scalar field in the indexed EBSD data.
+
+  Parameters
+  ----------
+  ebsddata : numpy.ndarray
+      Structured array of EBSD indexing results returned by ``EBSDIndexer.index_pats``.
+  indexer : pyebsdindex.ebsd_index.EBSDIndexer
+      The indexer instance containing scan dimensions and step size in ``indexer.fID``.
+  datafield : str, optional
+      Scalar field name in ``ebsddata`` to plot (e.g., ``'pq'``, ``'iq'``, ``'fit'``,
+      ``'fitinv'``, ``'phase'``, ``'nmatch'``). Default is ``'pq'``.
+  ncols : int, optional
+      Number of columns in the scan grid. If ``None``, read from ``indexer.fID.nCols``.
+  nrows : int, optional
+      Number of rows in the scan grid. If ``None``, calculated from total points and ``ncols``.
+  addmicronbar : bool, optional
+      If ``True``, appends a calibrated micron scale bar to the bottom of the image using
+      ``indexer.fID.xStep`` via :func:`~pyebsdindex.EBSDImage.micronbar.addmicronbar`.
+      Default is ``False``.
+  cmap : str, optional
+      Matplotlib colormap name. Default is ``'viridis'``.
+  norescalegray : bool, optional
+      If ``True`` when ``cmap='gray'`` or ``addmicronbar=False``, skips normalization.
+      Default is ``False``.
+  rescalenice : bool, optional
+      If ``True``, normalizes intensity limits to ``[mean - 4*std, mean + 3*std]``.
+      Default is ``False``.
+  datafieldindex : int, optional
+      Column index if the target ``datafield`` is 2D. Default is ``0``.
+  gamma : float, optional
+      Gamma exponent applied to the output image values. Default is ``1.0``.
+  **kwargs
+      Additional keyword arguments passed to
+      :func:`~pyebsdindex.EBSDImage.micronbar.addmicronbar` (such as ``addminor=True``
+      or ``zoom_xsize``).
+
+  Returns
+  -------
+  numpy.ndarray
+      2D grayscale or 3D RGB float32 array representing the scalar map.
+  """
+
 
   # kept around for backwards compatability.
   if xsize is not None:

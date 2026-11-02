@@ -1,32 +1,33 @@
-'''This software was developed by employees of the US Naval Research Laboratory (NRL), an
-agency of the Federal Government. Pursuant to title 17 section 105 of the United States
-Code, works of NRL employees are not subject to copyright protection, and this software
-is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
-responsibility whatsoever for its use by other parties, and makes no guarantees,
-expressed or implied, about its quality, reliability, or any other characteristic. We
-would appreciate acknowledgment if the software is used. To the extent that NRL may hold
-copyright in countries other than the United States, you are hereby granted the
-non-exclusive irrevocable and unconditional right to print, publish, prepare derivative
-works and distribute this software, in any medium, or authorize others to do so on your
-behalf, on a royalty-free basis throughout the world. You may improve, modify, and
-create derivative works of the software or any portion of the software, and you may copy
-and distribute such modifications or works. Modified works should carry a notice stating
-that you changed the software and should note the date and nature of any such change.
-Please explicitly acknowledge the US Naval Research Laboratory as the original source.
-This software can be redistributed and/or modified freely provided that any derivative
-works bear some notice that they are derived from it, and any modified versions bear
-some notice that they have been modified.
+# This software was developed by employees of the US Naval Research Laboratory (NRL), an
+# agency of the Federal Government. Pursuant to title 17 section 105 of the United States
+# Code, works of NRL employees are not subject to copyright protection, and this software
+# is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
+# responsibility whatsoever for its use by other parties, and makes no guarantees,
+# expressed or implied, about its quality, reliability, or any other characteristic. We
+# would appreciate acknowledgment if the software is used. To the extent that NRL may hold
+# copyright in countries other than the United States, you are hereby granted the
+# non-exclusive irrevocable and unconditional right to print, publish, prepare derivative
+# works and distribute this software, in any medium, or authorize others to do so on your
+# behalf, on a royalty-free basis throughout the world. You may improve, modify, and
+# create derivative works of the software or any portion of the software, and you may copy
+# and distribute such modifications or works. Modified works should carry a notice stating
+# that you changed the software and should note the date and nature of any such change.
+# Please explicitly acknowledge the US Naval Research Laboratory as the original source.
+# This software can be redistributed and/or modified freely provided that any derivative
+# works bear some notice that they are derived from it, and any modified versions bear
+# some notice that they have been modified.
 
-Author: David Rowenhorst;
-The US Naval Research Laboratory Date: 21 Aug 2020'''
+# Author: David Rowenhorst;
+# The US Naval Research Laboratory Date: 29 Oct 2024
 
 
-'''This package uses the Google Font Open Sans.  
-Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)
-This Font Software is licensed under the SIL Open Font License, Version 1.1 . 
-This license available with a FAQ at: https://openfontlicense.org
-SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
-'''
+# This package uses the Google Font Open Sans.  
+# Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)
+# This Font Software is licensed under the SIL Open Font License, Version 1.1 . 
+# This license available with a FAQ at: https://openfontlicense.org
+# SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+
+'''Generate an Inverse Pole Figure (IPF) RGB color map from indexed EBSD data.'''
 
 import matplotlib.colors as pltcolors
 import matplotlib.pyplot as plt
@@ -41,6 +42,41 @@ def makeipf(ebsddata, indexer, vector=np.array([0,0,1.0]), ncols = None, nrows =
             addmicronbar=False, graychannel=None, gamma=1.0,
             xsize = None, ysize = None,  # these are kept for backwards compatability.
             **kwargs):
+  """Generate an Inverse Pole Figure (IPF) RGB color map from indexed EBSD data.
+
+  Parameters
+  ----------
+  ebsddata : numpy.ndarray
+      Structured array of EBSD indexing results returned by ``EBSDIndexer.index_pats``.
+  indexer : pyebsdindex.ebsd_index.EBSDIndexer
+      The indexer instance containing phase symmetry (``phaseLib``) and scan dimensions (``fID``).
+  vector : numpy.ndarray, optional
+      Sample reference direction vector ``[x, y, z]`` for the IPF projection.
+      Default is ``np.array([0, 0, 1.0])`` (out-of-plane / ND).
+  ncols : int, optional
+      Number of columns in the scan grid. If ``None``, read from ``indexer.fID.nCols``.
+  nrows : int, optional
+      Number of rows in the scan grid. If ``None``, calculated from total points and ``ncols``.
+  addmicronbar : bool, optional
+      If ``True``, appends a calibrated micron scale bar to the bottom of the map using
+      ``indexer.fID.xStep`` via :func:`~pyebsdindex.EBSDImage.micronbar.addmicronbar`.
+      Default is ``False``.
+  graychannel : str, optional
+      Field name from ``ebsddata`` (e.g., ``'pq'``, ``'iq'``, ``'fit'``) to multiply as a
+      grayscale intensity overlay. Default is ``None``.
+  gamma : float, optional
+      Gamma correction exponent applied to the ``graychannel`` overlay. Default is ``1.0``.
+  **kwargs
+      Additional keyword arguments passed to ``scalarimage`` and
+      :func:`~pyebsdindex.EBSDImage.micronbar.addmicronbar` (such as ``addminor=True``
+      or ``zoom_xsize``).
+
+  Returns
+  -------
+  numpy.ndarray
+      RGB float32 image array of shape ``(nrows, ncols, 3)`` (or taller if ``addmicronbar=True``).
+  """
+
 
   # kept around for backwards compatability.
   if xsize is not None:
