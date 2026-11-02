@@ -1,34 +1,33 @@
-'''This software was developed by employees of the US Naval Research Laboratory (NRL), an
-agency of the Federal Government. Pursuant to title 17 section 105 of the United States
-Code, works of NRL employees are not subject to copyright protection, and this software
-is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
-responsibility whatsoever for its use by other parties, and makes no guarantees,
-expressed or implied, about its quality, reliability, or any other characteristic. We
-would appreciate acknowledgment if the software is used. To the extent that NRL may hold
-copyright in countries other than the United States, you are hereby granted the
-non-exclusive irrevocable and unconditional right to print, publish, prepare derivative
-works and distribute this software, in any medium, or authorize others to do so on your
-behalf, on a royalty-free basis throughout the world. You may improve, modify, and
-create derivative works of the software or any portion of the software, and you may copy
-and distribute such modifications or works. Modified works should carry a notice stating
-that you changed the software and should note the date and nature of any such change.
-Please explicitly acknowledge the US Naval Research Laboratory as the original source.
-This software can be redistributed and/or modified freely provided that any derivative
-works bear some notice that they are derived from it, and any modified versions bear
-some notice that they have been modified.
+# This software was developed by employees of the US Naval Research Laboratory (NRL), an
+# agency of the Federal Government. Pursuant to title 17 section 105 of the United States
+# Code, works of NRL employees are not subject to copyright protection, and this software
+# is in the public domain. PyEBSDIndex is an experimental system. NRL assumes no
+# responsibility whatsoever for its use by other parties, and makes no guarantees,
+# expressed or implied, about its quality, reliability, or any other characteristic. We
+# would appreciate acknowledgment if the software is used. To the extent that NRL may hold
+# copyright in countries other than the United States, you are hereby granted the
+# non-exclusive irrevocable and unconditional right to print, publish, prepare derivative
+# works and distribute this software, in any medium, or authorize others to do so on your
+# behalf, on a royalty-free basis throughout the world. You may improve, modify, and
+# create derivative works of the software or any portion of the software, and you may copy
+# and distribute such modifications or works. Modified works should carry a notice stating
+# that you changed the software and should note the date and nature of any such change.
+# Please explicitly acknowledge the US Naval Research Laboratory as the original source.
+# This software can be redistributed and/or modified freely provided that any derivative
+# works bear some notice that they are derived from it, and any modified versions bear
+# some notice that they have been modified.
 
-Author: David Rowenhorst;
-The US Naval Research Laboratory Date: 29 Oct 2024'''
-
-
-'''This package uses the Google Font Open Sans.  
-Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)
-This Font Software is licensed under the SIL Open Font License, Version 1.1 . 
-This license available with a FAQ at: https://openfontlicense.org
-SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
-'''
+# Author: David Rowenhorst;
+# The US Naval Research Laboratory Date: 29 Oct 2024
 
 
+# This package uses the Google Font Open Sans.  
+# Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)
+# This Font Software is licensed under the SIL Open Font License, Version 1.1 . 
+# This license available with a FAQ at: https://openfontlicense.org
+# SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+
+'''Automatically add a scale bar to the bottom of a micrograph.'''
 
 from PIL import  Image, ImageDraw, ImageFont
 import os
@@ -44,6 +43,8 @@ if FONT !=  'OpenSans-Bold':
   FONTPATH = findfont(FontProperties(family='sans-serif', weight='bold'), fontext='ttf', )
 else:
   FONTPATH = os.path.join(os.path.dirname(__file__), 'OpenSans-Bold.ttf')
+
+  __all__ = ["addmicronbar"]
 
 def addmicronbar(image,
                  stepsize=1.0,
@@ -66,39 +67,39 @@ def addmicronbar(image,
 
 
   Parameters
-      ----------
-      image : numpy.ndarray
-          numpy array, of shape
-          ``(n image rows, n image columns)``,
-          or ``(n image rows, n image columns, n image channels)``.
-          If no channel dimension is given, it is assumed that the image
-          is a gray-scale image.
-      stepsize : float
-          The width of one pixel in microns.  Default is ``1.0``.
-      addminor: bool, optional [``False``]
-          Set equal to ``True`` if you want to automatically add minor tick lines
-          to the scale bar. Default is ``False``
-      rescale: bool, optional [``False``]
-          Set to ``True`` to scale the output image values between
-          ``[0,1.0]``.  If set to ``False`` the background of the scale
-          bar area will be set to the maximum data value, and the bar/text
-          will be set to the minumum value.
-      zoom_xsize: int, optional
-          Set this to be the output array number of columns in pixels.  This can be useful
-          for small images, with < 500 pixels across the image.  In these cases the text
-          for the scalebar can become pixelated. The image will be interpolated
-          (using bi-cubic interpolation) to the entered xsize (keeping the aspect ratio
-          the same).  We're not going to tell you how to live your life
-          but this will only use nearest-neighbor interpolation for the resizing,
-           thus even muliples of the original image size (2x, 3x, ...) is ideal for up-sizing.
-          Note: setting ``upscale_xsize`` to a value that is smaller
-          than the input image number of columns will provide a down-sized image,
-          and obviously data points will be removed.
-      zoom_kwargs: dict, optional
-          Optional set of kwargs that are compatible with scipy.ndimage.zoom function. The
-          deafult value is ``zoom_kwargs = {'order':0, 'grid_mode':True, 'mode':'mirror'}``
-          which sets the output image to be a nearest-neighbor interpolation.  Changing order
-          to > 0 (int) will use bicubic interpolation for the output image.
+  ----------
+  image : numpy.ndarray
+      numpy array, of shape
+      ``(n image rows, n image columns)``,
+      or ``(n image rows, n image columns, n image channels)``.
+      If no channel dimension is given, it is assumed that the image
+      is a gray-scale image.
+  stepsize : float
+      The width of one pixel in microns.  Default is ``1.0``.
+  addminor: bool, optional [``False``]
+      Set equal to ``True`` if you want to automatically add minor tick lines
+      to the scale bar. Default is ``False``
+  rescale: bool, optional [``False``]
+      Set to ``True`` to scale the output image values between
+      ``[0,1.0]``.  If set to ``False`` the background of the scale
+      bar area will be set to the maximum data value, and the bar/text
+      will be set to the minumum value.
+  zoom_xsize: int, optional
+      Set this to be the output array number of columns in pixels.  This can be useful
+      for small images, with < 500 pixels across the image.  In these cases the text
+      for the scalebar can become pixelated. The image will be interpolated
+      (using bi-cubic interpolation) to the entered xsize (keeping the aspect ratio
+      the same).  We're not going to tell you how to live your life
+      but this will only use nearest-neighbor interpolation for the resizing,
+        thus even muliples of the original image size (2x, 3x, ...) is ideal for up-sizing.
+      Note: setting ``upscale_xsize`` to a value that is smaller
+      than the input image number of columns will provide a down-sized image,
+      and obviously data points will be removed.
+  zoom_kwargs: dict, optional
+      Optional set of kwargs that are compatible with scipy.ndimage.zoom function. The
+      deafult value is ``zoom_kwargs = {'order':0, 'grid_mode':True, 'mode':'mirror'}``
+      which sets the output image to be a nearest-neighbor interpolation.  Changing order
+      to > 0 (int) will use bicubic interpolation for the output image.
 
   Returns
   -------
@@ -108,10 +109,11 @@ def addmicronbar(image,
        ``(round(1.04*image.shape[0], image.shape[1], {image.shape[2]})``, depending on if
        the original image had multiple channels.
 
-  Example:
-  -------
+  Examples
+  --------
   Make a random micrograph that has a stepsize of 0.15 microns, add a scale bar,
   and write it out to a png and show it.
+
   >>> import os
   >>> import numpy as np
   >>> import matplotlib.pyplot as plt
@@ -121,14 +123,14 @@ def addmicronbar(image,
   >>> plt.imsave(os.path.expanduser('~/random_image.png'), abar, cmap='gray')
   >>> plt.imshow(abar)
 
-  Notes:
-  -------
-
+  Notes
+  -----
   If the input image has four channels, with the notion that the channels
   represnet ``[R,G,B,A]`` where ``A`` is the alpha channel, the current behavior of
   ```addscalebar``` will output the bar/text as ``[0.0,0.0,0.0,0.0]`` (black, transparent)
   and the background as ``[1.0,1.0,1.0,1.0]`` (white, opaque).  Currently, this is seen as a
   feature and not a bug.  The behavior can easily be altered as in this example:
+
   >>> import os
   >>> import numpy as np
   >>> import matplotlib.pyplot as plt

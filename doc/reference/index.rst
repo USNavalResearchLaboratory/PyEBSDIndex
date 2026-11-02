@@ -33,3 +33,10 @@ Functionality is inteded to be imported like this:
     nlpar
     pcopt
     tripletvote
+
+.. autosummary::
+    :toctree: generated
+    :template: custom-module-template.rst
+    :recursive:
+
+    EBSDImage

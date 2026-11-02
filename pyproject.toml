@@ -42,6 +42,7 @@ dependencies = [
     "numba>=0.55.1",
     "scipy",
     "psutil",
+    "pillow",
 ]
 
 [project.optional-dependencies]
